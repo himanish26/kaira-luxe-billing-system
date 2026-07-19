@@ -1,0 +1,19 @@
+{
+  "name": "kaira-luxe-billing",
+  "version": "1.0.0",
+  "description": "Kaira Luxe Billing System",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": [],
+  "author": "Kaira Luxe",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "electron": "^42.5.0",
+    "electron-store": "^11.0.2",
+    "sqlite3": "^6.0.1",
+    "xlsx": "^0.18.5"
+  }
+}

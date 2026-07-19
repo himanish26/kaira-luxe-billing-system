@@ -1,0 +1,2503 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #f5f5f5;
+    color: #222;
+    padding: 40px;
+}
+
+/* =========================
+   HEADINGS
+========================= */
+
+h1 {
+    font-size: 64px;
+    font-weight: 800;
+    color: #7a002c;
+    margin-bottom: 10px;
+}
+
+h2 {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 40px;
+    color: #444;
+}
+
+h3 {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 20px;
+}
+
+/* =========================
+   DASHBOARD
+========================= */
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+    margin-bottom: 40px;
+}
+
+.dashboard-grid button {
+    height: 110px;
+    border: none;
+    border-radius: 16px;
+    background: white;
+    font-size: 34px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.10);
+    transition: 0.2s;
+}
+
+.dashboard-grid button:hover {
+    transform: translateY(-2px);
+}
+
+
+.summary-card p {
+    font-size: 24px;
+    margin-top: 18px;
+    font-weight: 600;
+}
+
+/* =========================
+   NEW BILL PAGE
+========================= */
+
+.bill-top-bar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+
+    width:100%;
+
+    margin-bottom:30px;
+}
+
+.page-top-bar{
+
+    display:flex;
+
+    justify-content:flex-start;
+
+    align-items:center;
+
+    margin-bottom:30px;
+
+}
+
+.back-btn{
+    background:#8b0035;
+    color:white;
+    border:none;
+    padding:16px 30px;
+    font-size:22px;
+    font-weight:700;
+    border-radius:12px;
+    cursor:pointer;
+}
+
+.settings-home .back-btn{
+
+    margin-bottom:30px;
+
+}
+
+.bill-number{
+    font-size:28px;
+    font-weight:700;
+}
+
+.page-title{
+    font-size:72px;
+    font-weight:900;
+    color:#8b0035;
+    margin-bottom:30px;
+}
+
+.customer-section{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:20px;
+    margin-bottom:20px;
+}
+
+.customer-section input{
+    height:70px;
+    font-size:28px;
+    font-weight:600;
+    padding:0 20px;
+    border-radius:12px;
+    border:2px solid #ddd;
+}
+
+.gst-section{
+    margin-bottom:25px;
+    font-size:24px;
+    font-weight:700;
+}
+
+#gstFields{
+    display:flex;
+    gap:20px;
+    margin-top:15px;
+}
+
+#gstFields input{
+    flex:1;
+    height:65px;
+    font-size:24px;
+    padding-left:15px;
+}
+
+.billing-layout{
+
+    display:grid;
+
+    grid-template-columns:
+        minmax(0, 1fr)
+        450px;
+
+    gap:30px;
+
+    align-items:start;
+
+}
+
+.billing-right{
+
+    position:sticky;
+
+    top:20px;
+
+    align-self:start;
+
+}
+
+.billing-left{
+
+    min-width:0;
+
+}
+
+#barcodeInput{
+
+    width:100%;
+
+    height:90px;
+
+    font-size:38px;
+
+    font-weight:700;
+
+    border:3px solid #8b0035;
+
+    border-radius:15px;
+
+    padding-left:20px;
+
+    margin-bottom:30px;
+
+}
+
+.bill-items-card h2{
+    font-size:40px;
+    margin-bottom:10px;
+    margin-top:10px;
+    margin-left:10px;
+
+}
+
+.bill-items-card{
+
+    width:100%;
+
+    background:#fff;
+
+    border-radius:16px;
+
+    box-shadow:0 8px 20px rgba(0,0,0,.08);
+
+    overflow:hidden;
+
+}
+
+.table-scroll{
+
+    height:420px;
+
+    overflow:auto;
+
+}
+
+.bill-items-card thead th{
+
+    position:sticky;
+
+    top:0;
+
+    background:#8B004B;
+
+    color:#fff;
+
+    z-index:20;
+
+}
+
+.bill-items-card tbody tr:nth-child(even){
+
+    background:#f8f8f8;
+
+}
+
+.bill-items-card tbody tr:hover{
+
+    background:#e8f2ff;
+
+}
+
+#billTable{
+
+    width:max-content;
+
+    min-width:1250px;
+
+    border-collapse:collapse;
+
+}
+
+
+#billTable th{
+    background:#8b0035;
+    color:white;
+    padding:20px;
+    font-size:26px;
+}
+
+#billTable td{
+    padding:20px 18px;
+    font-size:24px;
+    vertical-align:middle;
+    text-align:center;
+}
+
+#billTable thead th{
+
+    padding:20px 18px;
+
+    font-size:24px;
+
+}
+
+#billTable th,
+#billTable td {
+
+    white-space: nowrap;
+
+}
+
+.table-title{
+
+    padding:20px 24px;
+
+}
+
+.bill-items-card tbody tr:nth-child(even){
+
+    background:#f8f8f8;
+
+}
+
+.bill-items-card tbody tr:nth-child(odd){
+
+    background:#ffffff;
+
+}
+
+.bill-items-card tbody tr:hover{
+
+    background:#e8f2ff;
+
+}
+
+/* Product */
+
+#billTable th:nth-child(2),
+#billTable td:nth-child(2){
+
+    min-width:220px;
+
+    text-align:left;
+
+    font-weight:600;
+
+}
+
+/* Size */
+
+#billTable th:nth-child(3),
+#billTable td:nth-child(3){
+
+    min-width:90px;
+
+    text-align:center;
+
+}
+
+/* Brand */
+
+#billTable th:nth-child(4),
+#billTable td:nth-child(4){
+
+    min-width:120px;
+
+    text-align:left;
+
+    Font-weight:600;
+
+}
+
+/* Qty */
+
+#billTable th:nth-child(5),
+#billTable td:nth-child(5){
+
+    width:70px;
+
+}
+
+/* MRP */
+
+#billTable th:nth-child(6),
+#billTable td:nth-child(6){
+
+    width:120px;
+
+}
+
+/* Discount */
+
+#billTable th:nth-child(7),
+#billTable td:nth-child(7){
+
+    width:100px;
+
+}
+
+/* Net */
+
+#billTable th:nth-child(8),
+#billTable td:nth-child(8){
+
+    width:120px;
+
+    font-weight:bold;
+
+}
+
+/* Barcode */
+
+#billTable th:nth-child(1),
+#billTable td:nth-child(1){
+
+    min-width:180px;
+
+}
+
+/* Product */
+
+#viewBillItems td,
+#viewBillItems th{
+    vertical-align:middle;
+    text-align:center;
+    padding:18px;
+}
+
+#viewBillItems td:nth-child(2),
+#viewBillItems th:nth-child(2){
+    text-align:left;
+}
+.summary-card{
+    background:white;
+    padding:25px;
+    border-radius:16px;
+    box-shadow:0 5px 15px rgba(0,0,0,0.1);
+}
+
+.summary-card h2{
+    font-size:40px;
+    margin-bottom:20px;
+}
+
+.summary-line{
+    font-size:28px;
+    margin-bottom:15px;
+    font-weight:700;
+}
+
+.payable-card{
+    margin-top:20px;
+    background:#8b0035;
+    color:white;
+    border-radius:20px;
+    text-align:center;
+    padding:30px;
+}
+
+.payable-label{
+    font-size:30px;
+    font-weight:800;
+}
+
+.payable-amount{
+    font-size:72px;
+    font-weight:900;
+    margin-top:15px;
+}
+
+.payment-btn{
+
+    width:100%;
+
+    height:90px;
+
+    margin-top:20px;
+
+    background:#0f7b0f;
+
+    color:white;
+
+    border:none;
+
+    border-radius:15px;
+
+    font-size:30px;
+
+    font-weight:900;
+
+    cursor:pointer;
+
+}
+
+
+/* =========================
+   TABLE
+========================= */
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.10);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+th {
+    background: #7a002c;
+    color: white;
+    font-size: 22px;
+    padding: 18px;
+}
+
+td {
+    padding: 18px;
+    font-size: 22px;
+    border-bottom: 1px solid #eee;
+}
+
+tbody tr {
+    height: 60px;
+}
+.delete-btn{
+
+    width:50px;
+
+    height:50px;
+
+    border:none;
+
+    border-radius:10px;
+
+    cursor:pointer;
+
+    font-size:24px;
+
+    background:#ffe5e5;
+
+}
+
+.delete-btn:hover{
+
+    background:#ffcccc;
+
+}
+/* =========================
+   BILL SUMMARY
+========================= */
+
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 18px;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.total-row{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    padding:12px 0;
+
+    border-bottom:1px solid #ddd;
+
+    font-size:22px;
+
+    color:#333;
+
+    font-weight:600;
+
+
+}
+.gst-summary .total-row:last-child{
+
+    border-bottom:none;
+
+}
+
+/* =========================
+   PAYMENT
+========================= */
+
+.payment-card input {
+    width: 100%;
+    height: 65px;
+    margin-bottom: 15px;
+    font-size: 24px;
+    padding: 12px;
+    border: 2px solid #ddd;
+    border-radius: 10px;
+}
+
+.save-btn {
+    width: 100%;
+    height: 75px;
+    border: none;
+    border-radius: 12px;
+    background: #7a002c;
+    color: white;
+    font-size: 28px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* =========================
+   HISTORY PAGE
+========================= */
+
+.history-table {
+    margin-top: 25px;
+}
+
+.history-table th,
+.history-table td {
+    font-size: 22px;
+}
+
+#historyTable{
+
+    width:100%;
+
+    border-collapse:collapse;
+
+}
+
+#historyTable th{
+
+    padding:18px;
+
+    font-size:20px;
+
+    font-weight:700;
+
+}
+
+#historyTable td{
+
+    padding:18px;
+
+    font-size:18px;
+
+    text-align:center;
+
+    border-bottom:1px solid #eee;
+
+}
+
+#historyTable td:nth-child(2),
+#historyTable td:nth-child(3){
+
+    text-align:left;
+
+}
+
+
+/* ==========================
+   DASHBOARD HEADER
+========================== */
+
+.dashboard-header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:flex-start;
+
+    margin-bottom:30px;
+
+}
+
+.datetime-box{
+
+    text-align:right;
+
+}
+
+#currentDate{
+
+    font-size:22px;
+
+    font-weight:700;
+
+    color:#555;
+
+}
+
+#currentTime{
+
+    font-size:48px;
+
+    font-weight:900;
+
+    color:#8b0035;
+
+    margin-top:5px;
+
+}
+.discount-input{
+
+    width:60px;
+
+    height:42px;
+
+    font-size:20px;
+
+    text-align:center;
+
+    border:2px solid #ddd;
+
+    border-radius:8px;
+
+}
+/* ===========================
+   PAYMENT SCREEN
+=========================== */
+
+.payment-layout{
+
+    display:grid;
+
+    grid-template-columns:1fr 1fr;
+
+    gap:40px;
+
+}
+
+.payment-layout input{
+
+    width:100%;
+
+    height:60px;
+
+    margin-top:10px;
+
+    margin-bottom:25px;
+
+    padding:15px;
+
+    font-size:26px;
+
+    border:2px solid #ddd;
+
+    border-radius:10px;
+
+}
+
+.payment-layout label{
+
+    font-size:24px;
+
+    font-weight:bold;
+
+}
+.view-btn,
+.print-btn{
+
+    border:none;
+
+    padding:8px 14px;
+
+    border-radius:8px;
+
+    cursor:pointer;
+
+    font-weight:600;
+
+}
+
+.view-btn{
+
+    background:#0d6efd;
+
+    color:white;
+
+}
+
+.print-btn{
+
+    background:#198754;
+
+    color:white;
+
+}
+
+.status-paid{
+
+    color:#198754;
+
+    font-weight:bold;
+
+}
+.invoice-header{
+
+    text-align:center;
+
+    margin-bottom:30px;
+
+}
+
+#invoiceLogo{
+
+    width:180px;
+
+    height:auto;
+
+    margin-bottom:8px;
+
+}
+
+.invoice-header h1{
+
+    font-size:42px;
+
+    font-weight:800;
+
+    letter-spacing:2px;
+
+    margin-top:10px;
+
+}
+
+.invoice-header h2{
+
+    font-size:42px;
+
+    font-weight:900;
+
+    margin-top:10px;
+
+    margin-bottom:10px;
+
+}
+.invoice-info-card{
+
+    border-top:1px solid #000;
+
+    border-bottom:1px solid #000;
+
+    padding:20px 0;
+
+    margin-bottom:25px;
+
+}
+
+.invoice-row{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    gap:40px;
+
+    margin-bottom:15px;
+
+}
+
+.invoice-row div{
+
+    flex:1;
+
+}
+
+.invoice-info-card hr{
+
+    border:none;
+
+    border-top:1px solid #000;
+
+    margin:15px 0;
+
+}
+/* ==========================
+   VIEW INVOICE
+========================== */
+
+.invoice-footer{
+
+    display:grid;
+
+    grid-template-columns:1fr 1fr;
+
+    gap:40px;
+
+    align-items:start;
+
+}
+
+.invoice-totals,
+.invoice-payment h3{
+
+    text-align:center;
+
+    font-size:34px;
+
+    font-weight:800;
+
+    margin:10px 0 20px;
+
+    padding:0;
+
+}
+
+.grand-total{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    margin-top:20px;
+
+    background:#8b0035;
+
+    color:#fff;
+
+    padding:22px 24px;
+
+    border-radius:10px;
+
+    font-size:30px;
+
+    font-weight:bold;
+
+}
+
+.gst-summary h3,
+.invoice-payment h3{
+
+    text-align:center;
+
+}
+
+.invoice-payment{
+
+    flex:1;
+
+    display:flex;
+
+    flex-direction:column;
+
+    justify-content:flex-start;
+
+    padding:20px 35px;
+
+}
+
+.invoice-totals{
+
+    padding:20px 35px;
+
+}
+
+.invoice-policy{
+
+    margin-top:30px;
+
+    background:#fafafa;
+
+    border:1px solid #ddd;
+
+    border-radius:10px;
+
+    padding:35px;
+
+    text-align:center;
+
+}
+
+.invoice-policy p{
+
+    margin-top:10px;
+
+    line-height:1.6;
+
+}
+
+.invoice-thanks{
+
+    text-align:center;
+
+    margin-top:25px;
+
+    font-size:22px;
+
+    font-weight:bold;
+
+}
+
+.invoice-actions{
+
+    display:flex;
+
+    gap:15px;
+
+    margin-top:25px;
+
+}
+
+.invoice-actions button{
+
+    flex:1;
+
+    height:60px;
+
+    border:none;
+
+    border-radius:8px;
+
+    background:#8b0035;
+
+    color:white;
+
+    font-size:20px;
+
+    font-weight:bold;
+
+    cursor:pointer;
+
+}
+
+.invoice-actions button:hover{
+
+    background:#680026;
+
+}
+#viewBillScreen{
+
+    max-width:1200px;
+
+    margin:auto;
+
+}
+@media print{
+
+    .back-btn,
+    .invoice-actions{
+
+        display:none;
+
+    }
+
+    body{
+
+        background:#fff;
+
+        padding:0;
+
+    }
+
+    #viewBillScreen{
+
+        max-width:none;
+
+    }
+
+}
+.invoice-tagline{
+
+    font-size:22px;
+
+    font-weight:600;
+
+    margin-top:8px;
+
+    color:#444;
+
+}
+
+.invoice-address{
+
+    font-size:20px;
+
+    line-height:1.5;
+
+    margin-top:10px;
+
+    color:#555;
+
+}
+
+.invoice-gstin{
+
+    font-size:18px;
+
+    font-weight:600;
+
+    margin-top:10px;
+
+    color:#444;
+
+}
+.invoice-tagline{
+
+    font-size:22px;
+
+    font-weight:600;
+
+    margin-top:8px;
+
+    color:#444;
+
+}
+
+.invoice-address{
+
+    font-size:19px;
+
+    line-height:1.5;
+
+    margin-top:10px;
+
+    color:#555;
+
+}
+
+.invoice-contact{
+
+    font-size:18px;
+
+    font-weight:600;
+
+    margin-top:10px;
+
+    color:#444;
+
+}
+
+.invoice-gstin{
+
+    font-size:18px;
+
+    font-weight:700;
+
+    margin-top:6px;
+
+    color:#444;
+
+}
+.payment-heading{
+
+    margin:40px 0 30px;
+
+    padding-top:18px;
+
+    border-top:1px solid #ddd;
+
+    font-size:30px;
+
+    font-weight:700;
+
+}
+#viewBillItems td{
+
+    text-align:center;
+    vertical-align:middle;
+
+}
+
+/* Brand */
+
+#viewBillItems td:nth-child(2){
+
+    text-align:left;
+
+    font-weight:600;
+
+}
+
+/* View Bill Table */
+
+#viewBillItems td:nth-child(3){
+
+    text-align:left;
+
+    font-weight:600;
+
+}
+.gst-summary{
+
+    border-bottom:1px solid #ddd;
+
+    padding-bottom:18px;
+
+    margin-bottom:25px;
+
+}
+
+.payment-heading{
+
+    margin:0 0 25px;
+
+    padding:0;
+
+    text-align:center;
+
+    font-size:34px;
+
+    font-weight:800;
+
+    border:none;
+
+}
+/* ===========================
+   BILL HISTORY SEARCH
+=========================== */
+
+#billSearch{
+
+    width:550px;
+
+    height:65px;
+
+    padding:0 20px;
+
+    margin-bottom:25px;
+
+    font-size:24px;
+
+    font-weight:600;
+
+    border:2px solid #8b0035;
+
+    border-radius:12px;
+
+    outline:none;
+
+}
+
+#billSearch:focus{
+
+    box-shadow:0 0 10px rgba(122,0,44,0.25);
+
+}
+
+/* =====================================
+   SETTINGS HOME
+===================================== */
+
+.settings-home{
+
+width:100%;
+
+max-width:1200px;
+
+margin:40px auto;
+
+padding:20px;
+
+}
+
+.settings-home h1{
+
+    font-size:72px;
+
+    font-weight:800;
+
+    color:#8B004B;
+
+    text-align:center;
+
+    margin-bottom:10px;
+
+}
+
+.settings-subtitle{
+
+    font-size:28px;
+
+    color:#666;
+
+    text-align:center;
+
+    margin-bottom:50px;
+
+}
+
+.settings-grid{
+
+display:grid;
+
+grid-template-columns:repeat(3,1fr);
+
+gap:30px;
+
+margin-bottom:50px;
+
+}
+
+.settings-card{
+
+    background:#fff;
+
+    border-radius:24px;
+
+    padding:40px 30px;
+
+    box-shadow:0 10px 30px rgba(0,0,0,.08);
+
+    cursor:pointer;
+
+    transition:.25s;
+
+    text-align:center;
+
+}
+
+.settings-card:hover{
+
+    transform:translateY(-8px);
+
+    box-shadow:0 20px 40px rgba(0,0,0,.15);
+
+}
+
+.settings-icon{
+
+font-size:60px;
+
+margin-bottom:20px;
+
+}
+
+.settings-icon{
+
+    font-size:70px;
+
+    margin-bottom:25px;
+
+    text-align:center;
+
+}
+
+.settings-card p{
+
+    font-size:30px;
+
+    line-height:1.6;
+
+    color:#666;
+
+    text-align:center;
+
+}
+
+.dashboard-btn{
+
+    display:block;
+
+    width:360px;
+
+    height:62px;
+
+    margin:40px auto 0;
+
+    border:none;
+
+    border-radius:14px;
+
+    background:#7a003c;
+
+    color:#fff;
+
+    font-size:28px;
+
+    font-weight:700;
+
+    cursor:pointer;
+
+    transition:.2s;
+
+}
+
+.receipt-actions .dashboard-btn{
+
+width:140px;
+
+height:48px;
+
+font-size:18px;
+
+margin:0;
+
+}
+
+.dashboard-btn:hover{
+
+background:#940046;
+
+transform:translateY(-2px);
+
+}
+.settings-info-card{
+
+max-width:900px;
+
+margin:40px auto;
+
+background:white;
+
+padding:40px;
+
+border-radius:20px;
+
+box-shadow:0 10px 30px rgba(0,0,0,.08);
+
+}
+
+.info-row{
+
+display:flex;
+
+justify-content:space-between;
+
+padding:18px 0;
+
+border-bottom:1px solid #eee;
+
+}
+
+.info-row label{
+
+font-size:20px;
+
+font-weight:700;
+
+color:#444;
+
+}
+
+.info-row span{
+
+font-size:20px;
+
+color:#666;
+
+text-align:right;
+
+}
+.store-info-card{
+
+max-width:900px;
+
+margin:40px auto;
+
+background:#fff;
+
+padding:40px;
+
+border-radius:18px;
+
+box-shadow:0 8px 25px rgba(0,0,0,.08);
+
+}
+
+.store-row{
+
+display:flex;
+
+justify-content:space-between;
+
+align-items:flex-start;
+
+padding:18px 0;
+
+border-bottom:1px solid #ececec;
+
+}
+
+.store-label{
+
+font-size:20px;
+
+font-weight:700;
+
+color:#444;
+
+}
+
+.store-value{
+
+font-size:20px;
+
+color:#666;
+
+text-align:right;
+
+line-height:1.6;
+
+}
+
+#unlockSettingsBtn{
+
+margin-top:40px;
+
+}
+/* =====================================
+   ADMIN LOGIN DIALOG
+===================================== */
+
+.modal{
+
+position:fixed;
+
+top:0;
+
+left:0;
+
+width:100%;
+
+height:100%;
+
+background:rgba(0,0,0,.45);
+
+display:flex;
+
+justify-content:center;
+
+align-items:center;
+
+z-index:9999;
+
+}
+
+.modal-content{
+
+width:420px;
+
+background:white;
+
+padding:35px;
+
+border-radius:18px;
+
+box-shadow:0 20px 60px rgba(0,0,0,.25);
+
+text-align:center;
+
+}
+
+.modal-content h2{
+
+margin-bottom:6px;
+
+color:#7a003c;
+
+font-size:30px;
+
+}
+
+.modal-content p{
+
+margin-bottom:10px;
+
+font-size:18px;
+
+color:#666;
+
+}
+
+.modal-content input{
+
+width:100%;
+
+height:55px;
+
+padding:12px;
+
+font-size:20px;
+
+border:2px solid #ddd;
+
+border-radius:10px;
+
+margin-bottom:25px;
+
+}
+
+.modal-buttons{
+
+display:flex;
+
+justify-content:space-between;
+
+gap:15px;
+
+}
+
+.modal-buttons button{
+
+flex:1;
+
+height:50px;
+
+border:none;
+
+border-radius:10px;
+
+font-size:18px;
+
+font-weight:700;
+
+cursor:pointer;
+
+}
+
+#adminCancelBtn{
+
+background:#ddd;
+
+}
+
+#adminUnlockBtn{
+
+background:#7a003c;
+
+color:white;
+
+}
+.admin-lock{
+
+font-size:64px;
+
+margin-bottom:10px;
+
+}
+
+.admin-error{
+
+height:22px;
+
+margin-bottom:12px;
+
+color:#d32f2f;
+
+font-weight:600;
+
+font-size:15px;
+
+}
+
+.modal-buttons button{
+
+border-radius:16px;
+
+transition:.2s;
+
+}
+
+.modal-buttons button:hover{
+
+transform:translateY(-2px);
+
+}
+.password-box{
+
+display:flex;
+
+align-items:center;
+
+border:2px solid #ddd;
+
+border-radius:14px;
+
+padding:0 15px;
+
+height:60px;
+
+margin-top:-5px;
+
+margin-bottom:20px;
+
+}
+
+.password-box span{
+
+font-size:22px;
+
+margin-right:10px;
+
+}
+
+.password-box input{
+
+border:none;
+
+outline:none;
+
+width:100%;
+
+font-size:20px;
+
+margin:0;
+
+height:100%;
+
+}
+/* Shake Animation */
+
+@keyframes shake{
+
+0%{transform:translateX(0);}
+
+20%{transform:translateX(-10px);}
+
+40%{transform:translateX(10px);}
+
+60%{transform:translateX(-8px);}
+
+80%{transform:translateX(8px);}
+
+100%{transform:translateX(0);}
+
+}
+
+.shake{
+
+animation:shake .35s ease;
+}
+.success{
+
+background:#2e7d32 !important;
+
+color:white;
+
+}
+
+.settings-title{
+
+text-align:center;
+
+font-size:72px;
+
+font-weight:700;
+
+margin-bottom:35px;
+
+color:#7a003c;
+
+}
+
+
+.store-update-log{
+
+    margin-top:35px;
+
+    margin-bottom:30px;
+
+    text-align:center;
+
+    border-top:1px solid #eee;
+
+    padding-top:25px;
+
+}
+
+.update-title{
+
+    font-size:18px;
+
+    font-weight:700;
+
+    color:#555;
+
+}
+
+.update-time{
+
+    margin-top:8px;
+
+    font-size:20px;
+
+    font-weight:600;
+
+    color:#7a003c;
+
+}
+
+.receipt-message-editor{
+
+    width:100%;
+
+    min-height:80px;
+
+    padding:12px 15px;
+
+    font-size:18px;
+
+    border:2px solid #ddd;
+
+    border-radius:10px;
+
+    resize:none;
+
+    line-height:1.5;
+
+    outline:none;
+
+}
+
+.receipt-message-editor:focus{
+
+    border-color:#8a0046;
+
+    box-shadow:0 0 10px rgba(138,0,70,.18);
+
+}
+
+.receipt-row{
+
+    padding-top:30px;
+
+    padding-bottom:30px;
+
+}
+.receipt-value-area{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:12px;
+
+}
+
+.edit-receipt-btn{
+
+display:none;
+
+padding:8px 18px;
+
+border:none;
+
+border-radius:8px;
+
+background:#8a0046;
+
+color:#fff;
+
+font-size:15px;
+
+font-weight:600;
+
+cursor:pointer;
+
+transition:.2s;
+
+}
+
+.edit-receipt-btn:hover{
+
+    background:#a00054;
+
+}
+.receipt-message-editor{
+
+    width:100%;
+
+    min-height:90px;
+
+    padding:12px;
+
+    font-size:17px;
+
+    border:2px solid #ddd;
+
+    border-radius:10px;
+
+    resize:none;
+
+}
+
+.receipt-message-editor:focus{
+
+    outline:none;
+
+    border-color:#8a0046;
+
+}
+
+.receipt-actions{
+
+    display:flex;
+
+    justify-content:flex-end;
+
+    gap:12px;
+
+    margin-top:15px;
+
+}
+/* ==========================
+   INVENTORY
+========================== */
+
+.inventory-screen{
+
+padding:25px;
+
+background:#f8f9fb;
+
+min-height:100vh;
+
+}
+
+.product-master-search{
+
+margin-top:20px;
+
+font-size:34px;
+
+font-weight:700;
+
+color:#7a003c;
+
+}
+
+.inventory-subtitle{
+
+margin-top:5px;
+
+margin-bottom:25px;
+
+font-size:16px;
+
+color:#777;
+
+}
+
+.product-master-card{
+
+    width:100%;
+
+    background:#fff;
+
+    border-radius:20px;
+
+    padding:40px;
+
+    box-shadow:0 12px 35px rgba(0,0,0,.08);
+
+    margin-bottom:35px;
+
+}
+
+.summary-card{
+
+flex:1;
+
+background:white;
+
+border-radius:14px;
+
+padding:18px;
+
+box-shadow:0 2px 10px rgba(0,0,0,.08);
+
+text-align:center;
+
+}
+
+.summary-value{
+
+font-size:30px;
+
+font-weight:700;
+
+color:#7a003c;
+
+}
+
+.summary-label{
+
+margin-top:6px;
+
+font-size:14px;
+
+color:#666;
+
+}
+
+.product-master-summary{
+
+width:100%;
+
+padding:14px;
+
+font-size:16px;
+
+border-radius:10px;
+
+border:1px solid #ddd;
+
+margin-bottom:20px;
+
+}
+
+.inventory-table{
+
+    width:100%;
+
+    height:430px;
+
+    overflow-y:scroll;
+
+    overflow-x:hidden;
+
+    background:#fff;
+
+    border-radius:16px;
+
+    box-shadow:0 8px 20px rgba(0,0,0,.08);
+
+}
+
+.inventory-table table{
+
+    width:100%;
+
+    border-collapse:collapse;
+
+}
+
+.inventory-table thead th{
+
+    position:sticky;
+
+    top:0;
+
+    background:#8B004B;
+
+    color:white;
+
+    z-index:100;
+
+}
+
+.inventory-table td{
+
+padding:12px;
+
+border-bottom:1px solid #eee;
+
+}
+
+.inventory-actions{
+
+display:flex;
+
+gap:15px;
+
+margin-top:25px;
+
+}
+
+.product-master-title{
+
+margin-top:30px;
+
+padding:18px;
+
+background:white;
+
+border-radius:12px;
+
+box-shadow:0 2px 8px rgba(0,0,0,.08);
+
+}
+
+.inventory-table tbody tr:nth-child(even){
+
+    background:#f8f8f8;
+
+}
+
+.inventory-table tbody tr:nth-child(odd){
+
+    background:#ffffff;
+
+}
+
+/* =====================================================
+   PRODUCT MASTER
+===================================================== */
+
+.page-title{
+
+    font-size:64px;
+    font-weight:800;
+    color:#8B004B;
+
+    margin-top:20px;
+    margin-bottom:10px;
+
+}
+
+.page-subtitle{
+
+    font-size:24px;
+    color:#666;
+
+    margin-bottom:35px;
+
+}
+
+
+/* ------------------------------ */
+
+.product-master-card{
+
+    width:100%;
+
+    background:#fff;
+
+    border-radius:18px;
+
+    padding:35px;
+
+    box-shadow:0 8px 25px rgba(0,0,0,.08);
+
+    margin-bottom:35px;
+
+}
+
+.product-master-card h2{
+
+    font-size:34px;
+
+    color:#8B004B;
+
+    margin-bottom:25px;
+
+}
+
+.master-stats{
+
+    display:grid;
+
+    grid-template-columns:repeat(3,1fr);
+
+    gap:25px;
+
+    margin-top:25px;
+
+    margin-bottom:35px;
+
+}
+
+.master-stats div{
+
+    background:#fafafa;
+
+    border-radius:14px;
+
+    padding:25px;
+
+    text-align:center;
+
+    font-size:22px;
+
+    font-weight:600;
+
+}
+
+.master-stats span{
+
+    color:#8B004B;
+
+    font-size:34px;
+
+    font-weight:800;
+
+}
+
+
+/* ------------------------------ */
+
+.product-master-card hr{
+
+    margin:30px 0;
+
+    border:none;
+
+    border-top:1px solid #ddd;
+
+}
+
+.product-master-card h3{
+
+    font-size:28px;
+
+    margin-bottom:20px;
+
+}
+
+.product-master-card p{
+
+    font-size:22px;
+
+    margin:10px 0;
+
+}
+
+
+/* ------------------------------ */
+
+.inventory-search{
+
+    width:100%;
+
+    height:70px;
+
+    border-radius:14px;
+
+    border:2px solid #ddd;
+
+    padding:0 22px;
+
+    font-size:22px;
+
+    margin-bottom:30px;
+
+}
+
+.inventory-search:focus{
+
+    outline:none;
+
+    border-color:#8B004B;
+
+}
+
+
+/* ------------------------------ */
+
+/* ------------------------------ */
+
+.inventory-actions{
+
+    display:flex;
+
+    justify-content:center;
+
+    gap:25px;
+
+    margin-top:35px;
+
+}
+
+#settingsPageContent{
+
+    max-width:1400px;
+
+    margin:auto;
+
+    padding:30px 40px;
+
+}
+
+#importInventoryBtn{
+
+    width:100%;
+
+    height:65px;
+
+    font-size:22px;
+
+    font-weight:700;
+
+    margin-top:30px;
+
+}
+
+.table-container{
+
+    width:100%;
+
+    height:430px;
+
+    overflow-y:scroll;
+
+    overflow-x:hidden;
+
+    background:#fff;
+
+    border-radius:16px;
+
+    box-shadow:0 8px 20px rgba(0,0,0,.08);
+
+}
+
+.table-container thead th{
+
+    position:sticky;
+
+    top:0;
+
+    background:#8B004B;
+
+    color:#fff;
+
+    z-index:20;
+
+}
+
+.table-container tbody tr:nth-child(even){
+
+    background:#f8f8f8;
+
+}
+
+.table-container tbody tr:hover{
+
+    background:#e8f2ff;
+
+}
+
+.table-container{
+
+    width:100%;
+
+    height:430px;
+
+    overflow-y:auto;
+
+    overflow-x:auto;
+
+    background:#fff;
+
+    border-radius:16px;
+
+    box-shadow:0 8px 20px rgba(0,0,0,.08);
+
+}
+
+.table-container table{
+
+    width:100%;
+
+    border-collapse:collapse;
+
+}
+
+.table-container thead th{
+
+    position:sticky;
+
+    top:0;
+
+    background:#8B004B;
+
+    color:#fff;
+
+    z-index:20;
+
+}
+
+.table-container tbody tr:nth-child(even){
+
+    background:#f8f8f8;
+
+}
+
+.table-container tbody tr:hover{
+
+    background:#e8f2ff;
+
+}
+
+.table-title{
+
+    padding:24px 30px;
+
+    font-size:34px;
+
+    font-weight:700;
+
+    color:#333;
+
+    border-bottom:1px solid #eee;
+
+    background:#fff;
+
+}
+
+.invoice-table-container{
+
+    width:100%;
+
+    background:#fff;
+
+    border-radius:16px;
+
+    box-shadow:0 8px 20px rgba(0,0,0,.08);
+
+    overflow:hidden;
+
+    margin-bottom:30px;
+
+}
+
+.invoice-table-container table{
+
+    width:100%;
+
+    border-collapse:collapse;
+
+}
+
+.invoice-table-container thead th{
+
+    background:#8B004B;
+
+    color:#fff;
+
+    padding:16px;
+
+}
+
+.invoice-table-container tbody td{
+
+    padding:16px;
+
+    text-align:center;
+
+    border-bottom:1px solid #eee;
+
+}
+
+/* ==========================================
+   DANGER ZONE
+========================================== */
+
+.danger-zone{
+
+    margin-top:40px;
+
+    padding:25px;
+
+    border:2px solid #dc3545;
+
+    border-radius:12px;
+
+    background:#fff5f5;
+
+}
+
+.danger-zone h2{
+
+    color:#dc3545;
+
+    margin-bottom:15px;
+
+}
+
+.danger-zone p{
+
+    margin:8px 0;
+
+}
+
+.danger-warning{
+
+    color:#b30000;
+
+    font-weight:bold;
+
+}
+
+.danger-btn{
+
+    margin-top:20px;
+
+    padding:12px 28px;
+
+    background:#dc3545;
+
+    color:white;
+
+    border:none;
+
+    border-radius:8px;
+
+    font-size:15px;
+
+    font-weight:bold;
+
+    cursor:pointer;
+
+    transition:.2s;
+
+}
+
+.danger-btn:hover{
+
+    background:#bb2d3b;
+
+}

@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Kaira Luxe Billing System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+
+    <!-- DASHBOARD -->
+
+    <div id="dashboardScreen">
+
+        <div class="dashboard-header">
+
+            <div>
+
+                <h1>KAIRA LUXE</h1>
+
+                <h2>Billing System</h2>
+
+            </div>
+
+            <div class="datetime-box">
+
+                <div id="currentDate"></div>
+
+                <div id="currentTime"></div>
+
+            </div>
+
+        </div>
+
+        <div class="dashboard-grid">
+
+            <button id="newBillBtn">
+                NEW BILL
+            </button>
+
+            <button id="billHistoryBtn">
+                BILL HISTORY
+            </button>
+
+            <button id="importProductsBtn">
+                REPORTS
+            </button>
+
+            <button id="settingsBtn">
+                SETTINGS
+            </button>
+
+        </div>
+
+        <div class="summary-card">
+
+            <h3>System Summary</h3>
+
+            <p>Total Products: 0</p>
+
+            <p>Total Bills: 0</p>
+
+        </div>
+
+    </div>
+
+    
+<!-- =====================================
+     SETTINGS SCREEN
+===================================== -->
+
+<div class="screen" id="settingsScreen" style="display:none;">
+
+    <div class="page-top-bar">
+
+    <button
+        id="settingsDashboardBtn"
+        class="back-btn">
+
+        ← Dashboard
+
+    </button>
+
+</div>
+
+    <div class="settings-home">
+
+        <h1>⚙ SETTINGS</h1>
+
+        <p class="settings-subtitle">
+            Configure your Kaira Luxe Billing System
+        </p>
+
+        <div class="settings-grid">
+
+            <div class="settings-card" id="storeCard">
+
+                <div class="settings-icon">🏪</div>
+
+                <h2>Store Management</h2>
+
+                <p>
+                    Store Information<br>
+                    GST & Receipt
+                </p>
+
+            </div>
+
+            <div class="settings-card" id="inventoryCard">
+
+                <div class="settings-icon">📦</div>
+
+                <h2>Inventory</h2>
+
+                <p>
+                    Import Products<br>
+                    Product Master
+                </p>
+
+            </div>
+
+            <div class="settings-card" id="deviceCard">
+
+                <div class="settings-icon">🖨</div>
+
+                <h2>Device Settings</h2>
+
+                <p>
+                    Printer<br>
+                    Scanner
+                </p>
+
+            </div>
+
+            <div class="settings-card" id="systemCard">
+
+                <div class="settings-icon">🛠</div>
+
+                <h2>System</h2>
+
+                <p>
+                    Backup<br>
+                    Activity Log
+                </p>
+
+            </div>
+
+            <div class="settings-card" id="aboutCard">
+
+                <div class="settings-icon">ℹ</div>
+
+                <h2>About</h2>
+
+                <p>
+                    Version<br>
+                    License
+                </p>
+
+            </div>
+
+            <div class="settings-card" id="adminCard">
+
+                <div class="settings-icon">🔒</div>
+
+                <h2>Administrator</h2>
+
+                <p>
+                    Unlock Settings<br>
+                    Change Password
+                </p>
+
+            </div>
+
+        </div>
+
+
+
+    </div>
+
+</div>
+<div
+id="settingsPage"
+class="screen"
+style="display:none;">
+
+    <div class="bill-top-bar">
+
+        <button
+        id="settingsPageBackBtn"
+        class="back-btn">
+
+            ← Settings
+
+        </button>
+
+    </div>
+
+    <div id="settingsPageContent">
+
+    </div>
+
+</div>
+
+<!-- =====================================
+     ADMIN LOGIN DIALOG
+===================================== -->
+
+<div
+id="adminDialog"
+class="modal"
+style="display:none;">
+
+    <div class="modal-content">
+
+        <div class="admin-lock">
+
+    🔐
+
+</div>
+
+<h2>
+
+    Administrator Access
+
+</h2> 
+
+<div
+id="adminError"
+class="admin-error">
+
+</div>
+
+<div class="password-box">
+
+<input
+type="password"
+id="adminPassword"
+placeholder=" Enter Administrator Password"
+maxlength="11">
+
+</div>
+
+        <div class="modal-buttons">
+
+            <button
+            id="adminCancelBtn">
+
+                Cancel
+
+            </button>
+
+            <button
+            id="adminUnlockBtn">
+
+                Unlock
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- BILL HISTORY SCREEN -->
+
+<div id="billHistoryScreen" style="display:none;">
+
+    <div class="bill-top-bar">
+
+        <button
+            id="historyBackBtn"
+            class="back-btn">
+
+            ← Dashboard
+
+        </button>
+
+    </div>
+
+    <h1 class="page-title">
+
+        BILL HISTORY
+
+    </h1>
+
+    <input
+    type="text"
+    id="billSearch"
+    placeholder="🔍 Search Bill Number / Mobile..."
+    autocomplete="off"
+>
+
+    <div class="table-container">
+
+        <table id="historyTable">
+
+            <thead>
+
+                <tr>
+
+                    <th>Bill No</th>
+
+                    <th>Date & Time</th>
+
+                    <th>Customer</th>
+
+                    <th>Mobile</th>
+
+                    <th>Amount</th>
+
+                    <th>Status</th>
+
+                    <th>View</th>
+
+                    <th>Print</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="historyTableBody">
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+    <!-- NEW BILL SCREEN -->
+
+    <div id="newBillScreen" style="display:none;">
+
+        <div class="bill-top-bar">
+
+            <button id="backBtn" class="back-btn">
+                ← Dashboard
+            </button>
+
+            <div class="bill-number">
+
+                Bill No :
+
+                <span id="currentBillNo"></span>
+
+            </div>
+
+        </div>
+
+        <h1 class="page-title">
+
+            NEW BILL
+
+        </h1>
+
+        <div class="customer-section">
+
+            <input
+                type="text"
+                id="customerName"
+                placeholder="Customer Name"
+            >
+
+            <input
+                type="tel"
+                id="customerMobile"
+                placeholder="Mobile Number"
+                maxlength="10"
+            >
+
+        </div>
+
+       
+
+        <div class="billing-layout">
+
+            <!-- LEFT -->
+
+            <div class="billing-left">
+
+                <input
+                    type="tel"
+                    id="barcodeInput"
+                    placeholder="Scan Barcode Here"
+                    autofocus
+                >
+
+                <div class="bill-items-card">
+
+                <div class="table-title">
+
+                    Bill Items
+
+                </div>
+
+                <div class="table-scroll">
+
+                    <table id="billTable">
+
+                        <thead>
+
+                            <tr>
+
+                                <th>Barcode</th>
+                                <th>Product</th>
+                                <th>Size</th>
+                                <th>Brand</th>
+                                <th>Qty</th>
+                                <th>MRP</th>
+                                <th>Disc%</th>
+                                <th>Net</th>
+                                <th>🗑</th>
+
+                            </tr>
+
+                        </thead>
+
+                        <tbody id="billTableBody">
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            </div>
+
+            </div>
+
+            <!-- RIGHT -->
+
+            <div class="billing-right">
+
+                <div class="summary-card">
+
+                    <h2>Bill Summary</h2>
+
+                    <div class="summary-line">
+
+    Items
+
+    <span id="itemCount">
+        0
+    </span>
+
+</div>
+
+<div class="summary-line">
+
+    Quantity
+
+    <span id="itemQty">
+        0
+    </span>
+
+</div>
+
+<div class="summary-line">
+
+    Gross
+
+    <span id="grossAmount">
+        ₹0.00
+    </span>
+
+</div>
+
+<div class="summary-line">
+
+    Discount
+
+    <span id="discountAmount">
+        ₹0.00
+    </span>
+
+</div>
+
+<div class="summary-line">
+
+    GST
+
+    <span id="gstAmount">
+        ₹0.00
+    </span>
+
+</div>
+                
+                </div>
+
+                <div class="payable-card">
+
+                    <div class="payable-label">
+
+                        AMOUNT PAYABLE
+
+                    </div>
+
+                    <div
+                        id="netAmount"
+                        class="payable-amount"
+                    >
+
+                        ₹0.00
+
+                    </div>
+
+                </div>
+
+                <button
+                    id="paymentBtn"
+                    class="payment-btn"
+                >
+
+                    PROCEED TO PAYMENT →
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- PAYMENT SCREEN -->
+
+<div id="paymentScreen" style="display:none;">
+
+    <div class="bill-top-bar">
+
+        <button id="paymentBackBtn" class="back-btn">
+            ← Back
+        </button>
+
+        <div class="bill-number">
+
+         Bill No :
+
+    <span id="paymentBillNo"></span>
+
+        </div>
+
+    </div>
+
+    <h1 class="page-title">
+        PAYMENT
+    </h1>
+
+    <div class="payment-layout">
+
+        <div class="summary-card">
+
+    <h2>Bill Summary</h2>
+
+    <div class="summary-line">
+
+        Items
+
+        <span id="paymentItems">
+            0
+        </span>
+
+    </div>
+
+    <div class="summary-line">
+
+        Quantity
+
+        <span id="paymentQty">
+            0
+        </span>
+
+    </div>
+
+    <div class="summary-line">
+
+        Gross
+
+        <span id="paymentGross">
+            ₹0.00
+        </span>
+
+    
+    </div>
+
+            <div class="summary-line">
+
+                Discount
+
+                <span id="paymentDiscount">
+                    ₹0.00
+                </span>
+
+            </div>
+
+            <div class="summary-line">
+
+                GST Included
+
+                <span id="paymentGST">
+                    ₹0.00
+                </span>
+
+            </div>
+
+            <hr>
+
+            <div class="payable-card">
+
+    <div class="payable-label">
+
+        NET PAYABLE
+
+    </div>
+
+    <div
+        id="paymentNet"
+        class="payable-amount">
+
+        ₹0.00
+
+    </div>
+    </div>
+    </div>
+
+        <div class="summary-card">
+
+            <h2>Payment</h2>
+
+            <label for="cashAmount">Cash</label>
+
+            <input
+                type="number"
+                id="cashAmount"
+                value="0"
+                min="0"
+                step="0.01"
+            >
+
+            <label for="upiAmount">UPI</label>
+
+            <input
+                type="number"
+                id="upiAmount"
+                value="0"
+                min="0"
+                step="0.01"
+                autocomplete="off"
+            >
+
+            <label for="cardAmount">Card</label>
+
+            <input
+                type="number"
+                id="cardAmount"
+                value="0"
+                min="0"
+                step="0.01"
+                autocomplete="off"
+            >
+
+            <div class="summary-line">
+
+                Received
+
+                <span id="totalReceived">
+                    ₹0.00
+                </span>
+
+            </div>
+
+            <div class="summary-line">
+
+                <span id="balanceLabel">
+                    Balance Due
+                </span>
+
+                <span id="balanceAmount">
+                    ₹0.00
+                </span>
+
+            </div>
+
+<div class="payment-buttons">
+
+    <button
+        id="saveBillBtn"
+        class="payment-btn"
+        disabled>
+
+        SAVE BILL
+
+    </button>
+
+    <button
+        id="printBillBtn"
+        class="payment-btn"
+        disabled>
+
+        SAVE & PRINT
+
+    </button>
+
+</div>
+</div>
+</div>
+</div>
+
+<!-- VIEW BILL SCREEN -->
+
+<div id="viewBillScreen" style="display:none;">
+
+    <div class="bill-top-bar">
+
+        <button
+            id="viewBillBackBtn"
+            class="back-btn">
+
+            ← Back
+
+        </button>
+
+    </div>
+<div class="invoice-header">
+
+    <img
+        src="Assets/logo.png"
+        id="invoiceLogo"
+        alt="Kaira Luxe Logo"
+    >
+
+ <h1>KAIRA LUXE</h1>
+ <p>
+Lingerie • Jewellery • Cosmetics
+</p>
+<p>
+Shop No - 3, Shree Towers,<br>
+Near Khallikote University,<br>
+Berhampur - 760001, Odisha,
+</p>
+<p>
+GSTIN : 21BBLPP6327G1ZO
+</p>
+
+<p class="invoice-contact">
+
+    📞 0680-3596443 &nbsp; | &nbsp;
+
+    ✉ kairaluxe@gmail.com
+</p>
+
+<h2>TAX INVOICE</h2>
+
+</div>
+ <div class="invoice-info-card">
+
+    <div class="invoice-row">
+
+        <div>
+
+            <b>Invoice No</b><br>
+
+            <span id="viewBillNo"></span>
+
+        </div>
+
+        <div>
+
+            <b>Date</b><br>
+
+            <span id="viewBillDate"></span>
+
+        </div>
+
+        <div>
+
+            <b>Time</b><br>
+
+            <span id="viewBillTime"></span>
+
+        </div>
+
+    </div>
+
+    <hr>
+
+    <div class="invoice-row">
+
+        <div>
+
+            <b>Customer Name</b><br>
+
+            <span id="viewCustomer"></span>
+
+        </div>
+
+        <div>
+
+            <b>Mobile Number</b><br>
+
+            <span id="viewMobile"></span>
+
+        </div>
+
+    </div>
+
+</div>  
+    
+    <div class="invoice-table-container">
+
+    <table>
+
+            <thead>
+
+                <tr>
+                    <th>Barcode</th>
+                    <th>Brand</th>
+                    <th>Product</th>
+                    <th>Size</th>
+                    <th>Qty</th>
+                    <th>MRP</th>
+                    <th>Net</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="viewBillItems">
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+    <div class="invoice-footer">
+
+    <!-- LEFT -->
+
+    <div class="invoice-totals">
+
+        <div class="total-row">
+            <span>Total Items</span>
+            <span id="viewItems">0</span>
+        </div>
+
+        <div class="total-row">
+            <span>Total Qty</span>
+            <span id="viewQty">0</span>
+        </div>
+
+        <div class="total-row">
+            <span>Gross Amount</span>
+            <span>₹<span id="viewGross"></span></span>
+        </div>
+
+        <div class="total-row">
+            <span>Discount</span>
+            <span>₹<span id="viewDiscount"></span></span>
+        </div>
+
+        <div class="total-row">
+            <span>Taxable Amount</span>
+            <span>₹<span id="viewTaxable"></span></span>
+        </div>
+
+        <hr>
+
+        <div class="grand-total">
+            <span>NET PAYABLE</span>
+            <span>₹<span id="viewNet"></span></span>
+        </div>
+
+    </div>
+
+    <!-- RIGHT -->
+
+    <div class="invoice-payment">
+
+        <div class="gst-summary">
+
+            <h3>GST RECEIPT SUMMARY</h3>
+
+            <div class="total-row">
+                <span>Taxable Amount</span>
+                <span>₹<span id="viewTaxableGST"></span></span>
+            </div>
+
+            <div class="total-row">
+                <span>CGST</span>
+                <span>₹<span id="viewCGST"></span></span>
+            </div>
+
+            <div class="total-row">
+                <span>SGST</span>
+                <span>₹<span id="viewSGST"></span></span>
+            </div>
+
+            <div class="total-row">
+                <span>Total GST</span>
+                <span>₹<span id="viewTotalGST"></span></span>
+            </div>
+
+        </div>
+
+    <h3 class="payment-heading">PAYMENT DETAILS</h3>
+        <div class="total-row">
+            <span>Cash</span>
+            <span>₹<span id="viewCash"></span></span>
+        </div>
+
+        <div class="total-row">
+            <span>UPI</span>
+            <span>₹<span id="viewUPI"></span></span>
+        </div>
+
+        <div class="total-row">
+            <span>Card</span>
+            <span>₹<span id="viewCard"></span></span>
+        </div>
+
+    </div>
+
+</div>
+
+<div class="invoice-policy">
+
+ <h3>NO EXCHANGE • NO RETURNS</h3>
+
+<p>
+For hygiene reasons,<br>
+lingerie items cannot be<br>
+returned after purchase.
+</p>
+
+</div>
+
+<div class="invoice-thanks">
+
+    Thank You For Shopping at <b>KAIRA LUXE</b>
+
+</div>
+
+<div class="invoice-actions">
+
+    <button id="emailInvoiceBtn" disabled>📧 Email Invoice</button>
+
+    <button id="pdfInvoiceBtn" disabled>📄 Save PDF</button>
+
+    <button id="printInvoiceBtn">🖨 Print</button>
+
+</div>
+
+</div> <!-- End viewBillScreen -->
+
+<script src="modules/productMasterTemplate.js"></script>
+
+<script src="modules/settings.js"></script>
+<script src="modules/inventory.js"></script>
+<script src="modules/reports.js"></script>
+<script src="modules/backup.js"></script>
+<script src="modules/diagnostics.js"></script>
+<script src="modules/updates.js"></script>
+
+<script src="app.js"></script>
+</body>
+</html>

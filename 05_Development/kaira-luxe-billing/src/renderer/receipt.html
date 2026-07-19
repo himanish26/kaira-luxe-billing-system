@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>Kaira Luxe Receipt</title>
+
+<link rel="stylesheet" href="receipt.css">
+
+</head>
+
+<body>
+
+<div class="receipt">
+
+<div class="header">
+
+<!--
+<img
+    id="logo"
+    src="../Assets/logo.png">
+-->
+
+
+<h1>KAIRA LUXE</h1>
+
+<p>Lingerie • Jewellery • Cosmetics</p>
+
+<p>
+Shop No - 3, Shree Towers<br>
+Near Khallikote University<br>
+Berhampur - 760001, Odisha
+</p>
+
+<p>
+Contact : 0680-3596443
+</p>
+
+<p>
+Email : kairaluxe@gmail.com
+</p>
+
+<p>
+GSTIN : 21BBLPP6327G1ZO
+</p>
+
+</div>
+
+<hr>
+
+<div class="billInfo">
+
+<div>
+<b>Bill</b> :
+<span id="billNo"></span>
+</div>
+
+<div id="customerRow">
+    <b>Customer</b> : 
+    <span id="customer"></span>
+</div>
+
+<div id="mobileRow">
+    <b>Mobile</b> : <span id="mobile"></span>
+</div>
+
+<div>
+<b>Date</b> :
+<span id="billDate"></span>
+</div>
+
+<div>
+    <b>Time</b> :
+    <span id="billTime"></span>
+</div>
+
+</div>
+
+<hr>
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>Item</th>
+
+<th>Qty</th>
+
+<th>Rate</th>
+
+<th>Net</th>
+
+</tr>
+
+</thead>
+
+<tbody id="items">
+
+</tbody>
+
+</table>
+
+<hr>
+
+<div class="totals">
+
+<div>
+<span>Gross</span>
+
+<span id="gross"></span>
+</div>
+
+<div>
+<span>Discount</span>
+
+<span id="discount"></span>
+</div>
+
+<div>
+<span>GST</span>
+
+<span id="gst"></span>
+</div>
+
+<div class="net">
+
+<span>NET</span>
+
+<span id="net"></span>
+
+</div>
+
+</div>
+
+<hr>
+
+<div class="payment">
+
+<div id="cashRow">
+
+Cash
+
+<span id="cash"></span>
+
+</div>
+
+<div id="upiRow">
+
+UPI
+
+<span id="upi"></span>
+
+</div>
+
+<div id="cardRow">
+
+Card
+
+<span id="card"></span>
+
+</div>
+
+</div>
+
+<hr>
+
+<div class="footer">
+
+    <div>
+        Thank You for Shopping!
+    </div>
+
+    <div style="margin-top:4px;">
+        We look forward to serving you again.
+    </div>
+
+    <div
+        id="receiptFooterMessage"
+        style="margin-top:6px; display:none;">
+    </div>
+
+    <strong style="display:block; margin-top:6px;">
+        NO EXCHANGE • NO RETURNS
+    </strong>
+
+    <div class="return-note">
+
+        For hygiene reasons,<br>
+        lingerie items cannot be<br>
+        returned after purchase.
+
+    </div>
+
+</div>
+
+<script src="receipt.js"></script>
+
+</body>
+
+</html>

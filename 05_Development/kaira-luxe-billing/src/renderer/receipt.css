@@ -1,0 +1,185 @@
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+
+    width:80mm;
+
+    font-family:Arial, Helvetica, sans-serif;
+
+    font-size:12px;
+
+    color:#000;
+
+    background:#fff;
+
+    padding:5mm;
+
+}
+
+.receipt{
+
+    width:80mm;
+
+    padding:4px;
+
+    font-size:12px;
+
+    line-height:1.15;
+
+}
+
+.header{
+
+    text-align:center;
+
+}
+
+
+.header h1{
+
+    font-size:22px;
+
+    margin:5px 0;
+
+    font-weight:700;
+
+}
+
+.header p{
+
+    margin:2px 0;
+
+    line-height:1.4;
+
+}
+
+hr{
+
+    border:none;
+
+    border-top:1px dashed #000;
+
+    margin:5px 0;
+
+}
+
+.billInfo{
+
+    line-height:1.45;
+
+}
+
+table{
+
+    width:100%;
+
+    border-collapse:collapse;
+
+    overflow-y:auto;
+
+}
+
+th{
+
+    border-bottom:1px solid #000;
+
+    padding-bottom:4px;
+
+}
+
+td{
+
+    padding:2px 0;
+
+    vertical-align:top;
+
+}
+
+th:nth-child(2),
+th:nth-child(3),
+th:nth-child(4),
+
+td:nth-child(2){
+
+    text-align:center;
+}
+td:nth-child(3),
+td:nth-child(4){
+
+    text-align:right;
+
+}
+
+.totals div{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    margin:4px 0;
+
+}
+
+.net{
+
+    font-size:22px;
+
+    font-weight:bold;
+
+    border-top:2px solid #000;
+
+    border-bottom:2px solid #000;
+
+    padding:8px 0;
+
+    margin-top:6px;
+
+}
+
+.payment div{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    margin:4px 0;
+
+}
+
+.footer{
+
+    text-align:center;
+
+    margin-top:4px;
+
+    line-height:1.15;
+
+    font-size:12px;
+
+}
+
+.footer strong{
+
+    display:block;
+
+    margin:6px 0 4px;
+
+    font-size:12px;
+
+}
+
+.return-note{
+
+    margin-top:2px;
+
+    font-size:11px;
+
+    line-height:1.2;
+
+    text-align:center;
+
+}
