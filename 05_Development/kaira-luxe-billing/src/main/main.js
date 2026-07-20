@@ -8,6 +8,9 @@ const {
 
 } = require("../database/productService");
 
+const resetInventory =
+    require("../database/resetInventory");
+
 const {
     saveBill,
     getNextBillNumber,
@@ -207,6 +210,33 @@ ipcMain.handle(
     async () => {
 
         return await getLastImport();
+
+    }
+);
+
+ipcMain.handle(
+    "reset-inventory",
+    async () => {
+
+        try{
+
+            return await resetInventory();
+
+        }
+
+        catch(error){
+
+            console.error(error);
+
+            return{
+
+                success:false,
+
+                error:error.message
+
+            };
+
+        }
 
     }
 );

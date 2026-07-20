@@ -76,9 +76,11 @@ window.productMasterTemplate = `
     class="inventory-search"
     placeholder="🔍 Search Barcode, Product, Brand or Style Code...">
 
-<div class="inventory-table">
+<div
+    id="inventoryTableContainer"
+    class="inventory-table">
 
-    <table>
+    <table id="inventoryTable">
 
         <thead>
 
@@ -103,25 +105,20 @@ window.productMasterTemplate = `
 
 </div>
 
-<div class="inventory-actions">
+<div
+    id="inventoryEmptyState"
+    class="inventory-empty-state"
+    style="display:none;">
 
-    <button
-        id="refreshInventoryBtn"
-        class="dashboard-btn">
+    <div class="empty-icon">📦</div>
 
-        🔄 Refresh
+    <h2>Inventory Empty</h2>
 
-    </button>
-
-    <button
-        id="exportInventoryBtn"
-        class="dashboard-btn">
-
-        📤 Export to Excel
-
-    </button>
+    <p>Import a Product Master to begin billing.</p>
 
 </div>
+
+<div class="inventory-actions">
 
 <div class="danger-zone">
 

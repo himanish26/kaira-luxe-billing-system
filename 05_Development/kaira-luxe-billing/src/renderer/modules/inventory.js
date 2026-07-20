@@ -100,42 +100,53 @@ async function loadProducts() {
     const tbody =
         document.getElementById("inventoryTableBody");
 
+    const tableContainer =
+        document.getElementById("inventoryTableContainer");
+
+    const emptyState =
+        document.getElementById("inventoryEmptyState");
+
     tbody.innerHTML = "";
 
-    if(products.length===0){
+    if (products.length === 0) {
 
-    tbody.innerHTML=`
-        <tr>
-            <td colspan="6">
-                No Products Found
-            </td>
-        </tr>
-    `;
+        tableContainer.style.display = "none";
 
-    return;
-}
+        emptyState.style.display = "flex";
+
+        return;
+
+    }
+
+    tableContainer.style.display = "block";
+
+    emptyState.style.display = "none";
 
     products.forEach(product => {
 
         tbody.innerHTML += `
             <tr>
-
                 <td>${product.barcode}</td>
-
                 <td>${product.product_name}</td>
-
                 <td>${product.brand}</td>
-
                 <td>${product.category}</td>
-
                 <td>${product.size}</td>
-
                 <td>₹${Number(product.mrp).toFixed(2)}</td>
-
             </tr>
         `;
 
     });
+
+}
+
+function showInventoryResetSuccess() {
+
+    showSuccessDialog(
+        "Inventory Reset Successful",
+        `The Product Master has been reset successfully.
+
+Please import a Product Master Excel file before creating new billing.`
+    );
 
 }
 
@@ -151,32 +162,41 @@ async function searchProducts(keyword) {
     const tbody =
         document.getElementById("inventoryTableBody");
 
+    const tableContainer =
+        document.getElementById("inventoryTableContainer");
+
+    const emptyState =
+        document.getElementById("inventoryEmptyState");
+
     tbody.innerHTML = "";
+
+    if (products.length === 0) {
+
+        tableContainer.style.display = "none";
+        emptyState.style.display = "flex";
+        return;
+
+    }
+
+    tableContainer.style.display = "block";
+    emptyState.style.display = "none";
 
     products.forEach(product => {
 
         tbody.innerHTML += `
             <tr>
-
                 <td>${product.barcode}</td>
-
                 <td>${product.product_name}</td>
-
                 <td>${product.brand}</td>
-
                 <td>${product.category}</td>
-
                 <td>${product.size}</td>
-
                 <td>₹${Number(product.mrp).toFixed(2)}</td>
-
             </tr>
         `;
 
     });
 
 }
-
 
 /* ===========================================
    IMPORT PRODUCT MASTER
@@ -267,56 +287,45 @@ async function exportInventory(){
    RESET INVENTORY
 =========================================== */
 
-async function showResetInventoryWarning(){
+async function startInventoryReset(){
 
-    const confirmed = confirm(
+    showProcessingDialog("Resetting Inventory");
 
-`⚠️ RESET INVENTORY
+    updateProgress(20,"Preparing...");
 
-Delete all products from Product Master?
+    const result =
+        await window.electronAPI.resetInventory();
 
-Bills and Settings will NOT be affected.
+    if(result.success){
 
-A backup will be created automatically.
+        updateProgress(100,"Completed");
 
-Do you want to continue?`
+        await refreshInventory();
 
-    );
+        setTimeout(() => {
 
-    if(!confirmed){
+            hideProcessingDialog();
 
-        return;
+            alert(
+`Inventory Reset Successful
+
+The Product Master has been reset successfully.
+
+Please import a Product Master Excel file before creating new bills.`
+);
+
+        }, 500);
+
+    }
+    else{
+
+        hideProcessingDialog();
+
+        alert(result.error);
 
     }
 
-    showResetInventoryConfirmation();
-
 }
-
-function showResetInventoryConfirmation(){
-
-    const text = prompt(
-
-`Type
-
-RESET INVENTORY
-
-to confirm deletion.`
-
-    );
-
-    if(text !== "RESET INVENTORY"){
-
-        alert("Inventory Reset Cancelled.");
-
-        return;
-
-    }
-
-    alert("Ready for Backup & Reset");
-
-}
-
 
 /* ===========================================
    BUTTON EVENTS
@@ -354,14 +363,11 @@ function initializeInventoryEvents() {
 
             requireAdminAuthorization(() => {
 
-                showResetInventoryWarning();
+                startInventoryReset();
                 
             });
 
         };
-
-
-    resetBtn.onclick = showResetInventoryWarning;
 
     if (searchBox) {
 

@@ -84,18 +84,20 @@ searchProducts: (keyword) =>
         // ⭐ NEW APIs
 
         getSettings: () =>
-            ipcRenderer.invoke(
-                "get-settings"
-            ),
+    ipcRenderer.invoke(
+        "get-settings"
+    ),
 
-        saveSettings: (settings) =>
-            ipcRenderer.invoke(
-                "save-settings",
-                settings
-            )
+saveSettings: (settings) =>
+    ipcRenderer.invoke(
+        "save-settings",
+        settings
+    ),
 
-        
+resetInventory: () =>
+    ipcRenderer.invoke(
+        "reset-inventory"
+    ),
 
-    }
-
+}
 );

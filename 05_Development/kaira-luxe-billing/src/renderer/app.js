@@ -489,6 +489,40 @@ function requireAdminAuthorization(callback){
 
 }
 
+function showProcessingDialog(title = "Processing...") {
+
+    document.getElementById("processingTitle").innerText = title;
+
+    document.getElementById("processingStatus").innerText = "Preparing...";
+
+    document.getElementById("progressFill").style.width = "0%";
+
+    document.getElementById("progressPercent").innerText = "0%";
+
+    document.getElementById("processingDialog").style.display = "flex";
+
+}
+
+function updateProgress(percent, status) {
+
+    document.getElementById("progressFill").style.width =
+        percent + "%";
+
+    document.getElementById("progressPercent").innerText =
+        percent + "%";
+
+    document.getElementById("processingStatus").innerText =
+        status;
+
+}
+
+function hideProcessingDialog(){
+
+    document.getElementById("processingDialog").style.display =
+        "none";
+
+}
+
 if (adminCancelBtn){
 
     adminCancelBtn.addEventListener("click", () => {
