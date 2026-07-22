@@ -118,6 +118,26 @@ window.productMasterTemplate = `
 
 </div>
 
+<div class="inventory-action-buttons">
+
+    <button
+        id="refreshInventoryBtn"
+        class="dashboard-btn">
+
+        🔄 Refresh
+
+    </button>
+
+    <button
+        id="exportInventoryBtn"
+        class="dashboard-btn">
+
+        📤 Export to Excel
+
+    </button>
+
+</div>
+
 <div class="inventory-actions">
 
 <div class="danger-zone">
