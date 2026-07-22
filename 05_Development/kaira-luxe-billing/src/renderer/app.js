@@ -2078,3 +2078,291 @@ if (printInvoiceBtn) {
     );
 
 }
+
+const correctPaymentBtn =
+    document.getElementById("correctPaymentBtn");
+
+const paymentCorrectionModal =
+    document.getElementById("paymentCorrectionModal");
+
+const paymentBillNo =
+    document.getElementById("correctionBillNo");
+
+const paymentCash =
+    document.getElementById("paymentCash");
+
+const paymentUpi =
+    document.getElementById("paymentUpi");
+
+const paymentCard =
+    document.getElementById("paymentCard");
+
+const paymentRemarks =
+    document.getElementById("paymentRemarks");
+
+const paymentTotal =
+    document.getElementById("paymentTotal");
+
+const savePaymentCorrectionBtn =
+    document.getElementById("savePaymentCorrectionBtn");
+
+const cancelPaymentCorrectionBtn =
+    document.getElementById("cancelPaymentCorrectionBtn");
+
+    console.log({
+    paymentCorrectionModal,
+    paymentBillNo,
+    paymentCash,
+    paymentUpi,
+    paymentCard,
+    paymentRemarks,
+    paymentTotal,
+    savePaymentCorrectionBtn,
+    cancelPaymentCorrectionBtn
+});
+
+correctPaymentBtn.onclick = () => {
+
+    if (!currentViewedBill){
+
+        return;
+
+    }
+
+    requireAdminAuthorization(() => {
+
+        console.log("Modal:", paymentCorrectionModal);
+        console.log("Bill No:", paymentBillNo);
+        console.log("Cash:", paymentCash);
+        console.log("UPI:", paymentUpi);
+        console.log("Card:", paymentCard);
+        console.log("Remarks:", paymentRemarks);
+        console.log("Total:", paymentTotal);
+
+        paymentBillNo.textContent =
+            currentViewedBill.bill_no;
+
+        paymentCash.value =
+            currentViewedBill.cash_amount;
+
+        paymentUpi.value =
+            currentViewedBill.upi_amount;
+
+        paymentCard.value =
+            currentViewedBill.card_amount;
+
+        paymentRemarks.value = "";
+
+        paymentCorrectionModal.style.display =
+            "flex";
+
+        calculatePaymentTotal();
+
+    });
+
+};
+
+function calculatePaymentTotal(){
+
+const total =
+
+        Number(paymentCash.value || 0)
+
+        +
+
+        Number(paymentUpi.value || 0)
+
+        +
+
+        Number(paymentCard.value || 0);
+
+    if(!paymentTotal){
+
+    return;
+
+}
+
+paymentTotal.textContent =
+
+        "Total : ₹" +
+
+        total.toFixed(2);
+
+    if(
+
+        Math.abs(
+
+            total -
+
+            currentViewedBill.net_amount
+
+        ) > 0.01
+
+    ){
+
+        paymentTotal.style.color = "red";
+
+        savePaymentCorrectionBtn.disabled = true;
+
+    }
+
+    else{
+
+        paymentTotal.style.color = "green";
+
+        savePaymentCorrectionBtn.disabled = false;
+
+    }
+
+}
+
+if (
+
+    paymentCorrectionModal &&
+
+    paymentCash &&
+
+    paymentUpi &&
+
+    paymentCard &&
+
+    paymentTotal &&
+
+    savePaymentCorrectionBtn &&
+
+    cancelPaymentCorrectionBtn
+
+){
+
+    paymentCash.oninput = calculatePaymentTotal;
+
+    paymentUpi.oninput = calculatePaymentTotal;
+
+    paymentCard.oninput = calculatePaymentTotal;
+
+    cancelPaymentCorrectionBtn.onclick = () => {
+
+        paymentCorrectionModal.style.display = "none";
+
+    };
+
+}
+
+savePaymentCorrectionBtn.onclick =
+async () => {
+
+    if (!currentViewedBill){
+
+    alert("No bill loaded.");
+
+    return;
+
+}
+
+    if (paymentRemarks.value.trim() === "") {
+
+    alert("Remarks are mandatory.");
+
+    paymentRemarks.focus();
+
+    return;
+
+}
+
+const cash =
+    Number(paymentCash.value);
+
+const upi =
+    Number(paymentUpi.value);
+
+const card =
+    Number(paymentCard.value);
+
+const total =
+    cash + upi + card;
+
+// ADD THIS BLOCK HERE
+if (Math.abs(total - currentViewedBill.net_amount) > 0.01){
+
+    alert("Payment total must equal Net Amount.");
+
+    return;
+
+}
+
+if (
+
+    cash < 0 ||
+
+    upi < 0 ||
+
+    card < 0
+
+){
+
+    alert("Payment amounts cannot be negative.");
+
+    return;
+
+}
+
+    const result =
+        await window.electronAPI
+        .updatePaymentAllocation({
+
+            bill_no:
+                currentViewedBill.bill_no,
+
+            cash_amount:
+                Number(paymentCash.value),
+
+            upi_amount:
+                Number(paymentUpi.value),
+
+            card_amount:
+                Number(paymentCard.value),
+
+            remarks:
+                paymentRemarks.value.trim(),
+
+            corrected_by:
+                "Administrator"
+
+        });
+
+        
+
+    if(result.success){
+
+        paymentCorrectionModal.style.display =
+            "none";
+
+            paymentCash.value = "";
+
+            paymentUpi.value = "";
+
+            paymentCard.value = "";
+
+            paymentRemarks.value = "";
+
+            paymentTotal.innerText = "";
+
+        await viewBill(
+    currentViewedBill.bill_no
+);
+
+await loadBills();
+
+alert(
+    "Payment allocation updated successfully."
+);
+
+}
+
+else{
+
+    alert(result.error);
+
+}
+
+}

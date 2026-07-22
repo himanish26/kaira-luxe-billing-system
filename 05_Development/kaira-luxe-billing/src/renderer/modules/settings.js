@@ -268,9 +268,3 @@ aboutCard.addEventListener(
     "click",
     showAboutPage   
 );
-
-storeCard.addEventListener(
-    "click",
-    showStoreInformation
-);
-

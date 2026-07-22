@@ -15,8 +15,9 @@ const {
     saveBill,
     getNextBillNumber,
     getBills,
-    getBillDetails
-} = require('../database/billService');
+    getBillDetails,
+    updatePaymentAllocation
+} = require("../database/billService");
 
 const {
 
@@ -303,6 +304,40 @@ ipcMain.handle(
 
     }
 );
+
+ipcMain.handle(
+    "update-payment-allocation",
+    async (event, data) => {
+
+        try {
+
+            await updatePaymentAllocation(data);
+
+            return {
+
+                success: true
+
+            };
+
+        }
+
+        catch(error){
+
+            console.error(error);
+
+            return {
+
+                success: false,
+
+                error: error.message
+
+            };
+
+        }
+
+    }
+);
+
 ipcMain.handle(
     "print-bill",
     async (event, billData) => {

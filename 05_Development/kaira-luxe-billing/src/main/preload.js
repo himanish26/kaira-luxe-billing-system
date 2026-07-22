@@ -64,6 +64,14 @@ searchProducts: (keyword) =>
                 billNo
             ),
 
+            updatePaymentAllocation: (data) =>
+                ipcRenderer.invoke(
+                    "update-payment-allocation",
+                    data
+    ),
+
+   
+
         printBill: (billData) =>
             ipcRenderer.invoke(
                 "print-bill",

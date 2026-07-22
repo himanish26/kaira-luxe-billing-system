@@ -227,7 +227,31 @@ Berhampur-760001',
 
 }
 
+db.run(`
+    CREATE TABLE IF NOT EXISTS payment_corrections (
 
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        bill_no TEXT NOT NULL,
+
+        old_cash REAL NOT NULL,
+        old_upi REAL NOT NULL,
+        old_card REAL NOT NULL,
+
+        new_cash REAL NOT NULL,
+        new_upi REAL NOT NULL,
+        new_card REAL NOT NULL,
+
+        remarks TEXT NOT NULL,
+
+        corrected_by TEXT DEFAULT 'Administrator',
+
+        corrected_at TEXT NOT NULL,
+
+        FOREIGN KEY (bill_no)
+            REFERENCES bills(bill_no)
+
+    )
+`);
 
 module.exports = db;
-

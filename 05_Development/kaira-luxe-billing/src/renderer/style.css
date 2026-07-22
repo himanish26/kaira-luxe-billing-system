@@ -2790,6 +2790,7 @@ transform:rotate(360deg);
     padding-left:20px;
 
 }
+
 .primary-btn{
 
     width:100%;
@@ -2803,5 +2804,259 @@ transform:rotate(360deg);
     font-weight:700;
 
     border-radius:12px;
+
+}
+
+.payment-correction-box{
+
+    width: 680px;
+
+    max-width: 90%;
+
+    border-top:6px solid #6d0033;
+
+    border-radius: 22px;
+
+    padding: 35px 40px;
+
+    background: #fff;
+
+    box-shadow: 0 18px 45px rgba(0,0,0,.28);
+
+    animation:.18 ease;
+
+    @keyframes popup{
+
+    from{
+
+        transform:scale(.96);
+
+        opacity:0;
+
+    }
+
+    to{
+
+        transform:scale(1);
+
+        opacity:1;
+
+    }
+
+}
+
+}
+
+.payment-correction-box h1{
+
+    text-align:center;
+
+    font-size:34px;
+
+    margin-bottom:15px;
+
+    color:#6d0033;
+
+    white-space:nowrap;
+
+}
+
+.bill-number{
+
+    background:#f5f5f5;
+
+    border-radius:14px;
+
+    padding:14px;
+
+    font-size:22px;
+
+    font-weight:700;
+
+    text-align:center;
+
+    margin-bottom:28px;
+
+}
+
+.payment-section{
+
+    margin-bottom:22px;
+
+}
+
+
+
+.payment-section label{
+
+    display:block;
+
+    font-size:22px;
+
+    font-weight:700;
+
+    margin-bottom:8px;
+
+}
+
+#paymentTotal{
+
+    font-weight:800;
+
+}
+
+.payment-section input{
+
+    max-width:320;
+
+    height:58px;
+
+    font-size:28px;
+
+    font-weight:bold;
+
+    border-radius:12px;
+
+    border:2px solid #ddd;
+
+    padding-left:20px;
+
+}
+
+.payment-section textarea{
+
+    width:100%;
+
+    height:110px;
+
+    font-size:18px;
+
+    border-radius:12px;
+
+    padding:12px;
+
+    resize:none;
+
+}
+.payment-total{
+
+    text-align:center;
+
+    font-size:40px;
+
+    font-weight:bold;
+
+    color:#0b8b2b;
+
+    margin:25px 0;
+
+    letter-spacing:1px;
+
+}
+
+.payment-buttons{
+
+    display:flex;
+
+    gap:22px;
+
+    margin-top:30px;
+
+}
+
+.payment-buttons button{
+
+    flex:1;
+
+    height:62px;
+
+    border-radius:14px;
+
+    font-size:24px;
+
+    font-weight:700;
+
+    transition:.25s ease;
+
+    cursor:pointer;
+
+}
+
+.payment-section input:focus,
+.payment-section textarea:focus{
+
+    border-color:#7A003C;
+
+    box-shadow:0 0 10px rgba(122,0,60,.18);
+
+    outline:none;
+
+    box-sizing:border-box;
+
+}
+
+#cancelPaymentCorrectionBtn{
+
+    background:#efefef;
+
+    border:2px solid #cfcfcf;
+
+}
+
+#savePaymentCorrectionBtn{
+
+    background:#6d0033;
+
+    color:white;
+
+}
+
+#savePaymentCorrectionBtn:hover{
+
+    transform:translateY(-2px);
+
+    box-shadow:0 8px 20px rgba(122,0,60,.25);
+
+}
+
+#cancelPaymentCorrectionBtn:hover{
+
+    background:#e4e4e4;
+
+}
+
+.modal{
+
+    position:fixed;
+
+    top:0;
+
+    left:0;
+
+    width:100%;
+
+    height:100%;
+
+    display:flex;
+
+    justify-content:center;
+
+    align-items:center;
+
+    background:rgba(0,0,0,.45);
+
+    z-index:9999;
+
+}
+
+#savePaymentCorrectionBtn:disabled{
+
+    background:#cccccc;
+
+    color:#777;
+
+    cursor:not-allowed;
+
+    box-shadow:none;
 
 }

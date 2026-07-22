@@ -385,9 +385,217 @@ function getBillDetails(billNo) {
     });
 
 }
+
+function updatePaymentAllocation(data) {
+
+    return new Promise((resolve, reject) => {
+
+        db.serialize(() => {
+
+            db.run("BEGIN TRANSACTION");
+
+            db.get(
+
+                `
+                SELECT
+                    cash_amount,
+                    upi_amount,
+                    card_amount,
+                    net_amount
+                FROM bills
+                WHERE bill_no = ?
+                `,
+
+                [data.bill_no],
+
+                (err, bill) => {
+
+                    if (err) {
+
+                        db.run("ROLLBACK");
+
+                        reject(err);
+
+                        return;
+
+                    }
+
+                    if (!bill) {
+
+                        db.run("ROLLBACK");
+
+                        reject(new Error("Bill not found."));
+
+                        return;
+
+                    }
+
+                    const total =
+
+                        Number(data.cash_amount) +
+                        Number(data.upi_amount) +
+                        Number(data.card_amount);
+
+                    if (
+
+                        Math.abs(
+                            total - Number(bill.net_amount)
+                        ) > 0.01
+
+                    ) {
+
+                        db.run("ROLLBACK");
+
+                        reject(
+                            new Error(
+                                "Payment total does not match Bill Amount."
+                            )
+                        );
+
+                        return;
+
+                    }
+
+                    db.run(
+
+                        `
+                        INSERT INTO payment_corrections
+                        (
+                            bill_no,
+
+                            old_cash,
+                            old_upi,
+                            old_card,
+
+                            new_cash,
+                            new_upi,
+                            new_card,
+
+                            remarks,
+
+                            corrected_by,
+
+                            corrected_at
+                        )
+                        VALUES
+                        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        `,
+
+                        [
+
+                            data.bill_no,
+
+                            bill.cash_amount,
+                            bill.upi_amount,
+                            bill.card_amount,
+
+                            data.cash_amount,
+                            data.upi_amount,
+                            data.card_amount,
+
+                            data.remarks,
+
+                            data.corrected_by,
+
+                            new Date().toISOString()
+
+                        ],
+
+                        function(err){
+
+                            if(err){
+
+                                db.run("ROLLBACK");
+
+                                reject(err);
+
+                                return;
+
+                            }
+
+                            db.run(
+
+                                `
+                                UPDATE bills
+                                SET
+
+                                    cash_amount = ?,
+
+                                    upi_amount = ?,
+
+                                    card_amount = ?
+
+                                WHERE bill_no = ?
+                                `,
+
+                                [
+
+                                    data.cash_amount,
+
+                                    data.upi_amount,
+
+                                    data.card_amount,
+
+                                    data.bill_no
+
+                                ],
+
+                                function(err){
+
+                                    if(err){
+
+                                        db.run("ROLLBACK");
+
+                                        reject(err);
+
+                                        return;
+
+                                    }
+
+                                    db.run(
+
+                                        "COMMIT",
+
+                                        (err)=>{
+
+                                            if(err){
+
+                                                reject(err);
+
+                                            }
+
+                                            else{
+
+                                                resolve(true);
+
+                                            }
+
+                                        }
+
+                                    );
+
+                                }
+
+                            );
+
+                        }
+
+                    );
+
+                }
+
+            );
+
+        });
+
+    });
+
+}
+
 module.exports = {
     saveBill,
     getNextBillNumber,
     getBills,
-    getBillDetails
+    getBillDetails,
+    updatePaymentAllocation
 };
