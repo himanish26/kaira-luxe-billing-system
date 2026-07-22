@@ -2685,3 +2685,123 @@ transform:rotate(360deg);
     margin:40px auto 0;
 
 }
+
+/* =====================================
+   ABOUT
+===================================== */
+
+.about-card,
+.eula-card{
+
+    max-width:800px;
+
+    margin:30px auto;
+
+    background:#fff;
+
+    border-radius:12px;
+
+    padding:35px;
+
+    box-shadow:0 4px 15px rgba(0,0,0,.08);
+
+}
+
+.about-card{
+    margin-top:20px;
+}
+
+.eula-card{
+
+    height:650px;
+
+}
+
+.eula-content{
+
+    height:100%;
+
+    overflow-y:auto;
+
+    padding-right:15px;
+
+}
+
+.about-row{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    padding:12px 0;
+
+    border-bottom:1px solid #ececec;
+
+}
+
+.about-row span{
+
+    color:#666;
+
+}
+
+.about-row strong{
+
+    color:#222;
+
+}
+
+.about-footer{
+
+    margin-top:30px;
+
+    text-align:center;
+
+    color:#777;
+
+}
+
+.about-btn{
+
+    margin-top:25px;
+
+    width:100%;
+
+}
+
+.eula-content{
+
+    max-height:550px;
+
+    overflow-y:auto;
+
+    line-height:1.8;
+
+}
+
+.eula-content h3{
+
+    margin-top:25px;
+
+}
+
+.eula-content ul{
+
+    padding-left:20px;
+
+}
+.primary-btn{
+
+    width:100%;
+
+    margin-top:30px;
+
+    padding:16px;
+
+    font-size:18px;
+
+    font-weight:700;
+
+    border-radius:12px;
+
+}
