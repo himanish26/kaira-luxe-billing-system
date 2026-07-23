@@ -809,6 +809,22 @@ async function saveCurrentBill(){
             0
         );
 
+        const mobile =
+    document.getElementById("customerMobile").value.trim();
+
+if (mobile !== "" && mobile.length !== 10) {
+
+    alert("Mobile Number must be exactly 10 digits.");
+
+    document.getElementById("customerMobile").focus();
+
+    saveBillBtn.disabled = false;
+    printBillBtn.disabled = false;
+
+    return null;
+
+}
+
     const billData = {
 
         bill_no:
@@ -1112,6 +1128,19 @@ paymentBtn.addEventListener("click", () => {
 
 }
 
+const mobile =
+    document.getElementById("customerMobile").value.trim();
+
+if (mobile !== "" && mobile.length !== 10) {
+
+    alert("Mobile Number must be exactly 10 digits.");
+
+    document.getElementById("customerMobile").focus();
+
+    return;
+
+}
+
     newBillScreen.style.display = "none";
 
     paymentScreen.style.display = "block";
@@ -1306,6 +1335,38 @@ const barcodeInput =
     document.getElementById(
         "barcodeInput"
     );
+
+const customerName =
+    document.getElementById("customerName");
+
+const customerMobile =
+    document.getElementById("customerMobile");
+
+if (customerName) {
+
+    customerName.addEventListener("input", function () {
+
+        this.value = this.value
+            .replace(/[^A-Za-z.' ]/g, "")
+            .replace(/\s+/g, " ")
+            .replace(/^\s/, "");
+
+    });
+
+}
+
+if (customerMobile) {
+
+    customerMobile.addEventListener("input", function () {
+
+        this.value = this.value
+            .replace(/\D/g, "")
+            .slice(0, 10);
+
+    });
+
+}
+
 barcodeInput.addEventListener("input", () => {
 
     barcodeInput.value =

@@ -11,12 +11,17 @@ contextBridge.exposeInMainWorld(
         "get-inventory-summary"
     ),
 
-getProducts: () =>
-    ipcRenderer.invoke(
-        "get-products"
-    ),
+        getProducts: () =>
+            ipcRenderer.invoke(
+                "get-products"
+            ),
 
-searchProducts: (keyword) =>
+            getAppInfo: () => 
+                ipcRenderer.invoke(
+                    "get-app-info"
+                ),
+
+            searchProducts: (keyword) =>
     ipcRenderer.invoke(
         "search-products",
         keyword
@@ -108,4 +113,5 @@ resetInventory: () =>
     ),
 
 }
+
 );

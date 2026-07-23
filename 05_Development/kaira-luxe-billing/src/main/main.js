@@ -505,5 +505,37 @@ ipcMain.handle(
 
         }
 
-    }
-);
+});
+
+const packageInfo = require("../../package.json");
+
+ipcMain.handle("get-app-info", async () => {
+
+    return {
+
+        appName: packageInfo.productName || packageInfo.description,
+
+        version: packageInfo.version,
+
+        author: packageInfo.author,
+
+        license: packageInfo.license,
+
+        electron: process.versions.electron,
+
+        node: process.versions.node,
+
+        chrome: process.versions.chrome,
+
+        platform: process.platform,
+
+        architecture: process.arch,
+
+        database: "SQLite",
+
+        schema: "v1"
+
+    };
+
+});
+

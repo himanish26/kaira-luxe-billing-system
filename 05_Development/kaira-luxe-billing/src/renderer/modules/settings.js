@@ -1,36 +1,34 @@
-const APP_INFO = {
-
-    name: "KAIRA LUXE BILLING SYSTEM",
-
-    version: "1.0.0-alpha",
-
-    build: "22 Jul 2026",
-
-    developer: "Himanish Patnaik",
-
-    license: "Single Device Commercial",
-
-    database: "SQLite",
-
-    schema: "v1",
-
-    framework: "Electron",
-
-    platform: "Windows",
-
-    copyright: "© 2026 Himanish Patnaik"
-
-};
-
 /* =====================================
    ABOUT
 ===================================== */
 
-function showAboutPage() {
+async function showAboutPage() {
 
     settingsScreen.style.display = "none";
 
     settingsPage.style.display = "block";
+
+    try {
+
+    APP_INFO = await window.electronAPI.getAppInfo();
+
+} catch (error) {
+
+    console.error("Failed to load app information:", error);
+
+    APP_INFO = {
+        appName: "KAIRA LUXE BILLING SYSTEM",
+        version: "Unknown",
+        electron: "-",
+        author: "Himanish Patnaik",
+        license: "-",
+        database: "SQLite",
+        schema: "v1",
+        platform: "-",
+        architecture: "-"
+    };
+
+}
 
     settingsPageContent.innerHTML = `
 
@@ -38,11 +36,11 @@ function showAboutPage() {
 
 </div>
 
-<h1>ABOUT</h1>
+<h1> ℹ️ ABOUT</h1>
 
 <div class="about-card">
 
-    <h2>${APP_INFO.name}</h2>
+    <h2>${APP_INFO.appName}</h2>
 
     <div class="about-row">
         <span>Application Version</span>
@@ -50,14 +48,24 @@ function showAboutPage() {
     </div>
 
     <div class="about-row">
-        <span>Build</span>
-        <strong>${APP_INFO.build}</strong>
+        <span>Electron Version</span>
+        <strong>${APP_INFO.electron}</strong>
     </div>
 
     <div class="about-row">
         <span>Developed & Maintained by</span>
-        <strong>${APP_INFO.developer}</strong>
+        <strong>${APP_INFO.author}</strong>
     </div>
+
+    <div class="about-row">
+    <span>Node.js Version</span>
+    <strong>${APP_INFO.node}</strong>
+</div>
+
+<div class="about-row">
+    <span>Chrome Engine</span>
+    <strong>${APP_INFO.chrome}</strong>
+</div>
 
     <div class="about-row">
         <span>License</span>
@@ -75,18 +83,18 @@ function showAboutPage() {
     </div>
 
     <div class="about-row">
-        <span>Framework</span>
-        <strong>${APP_INFO.framework}</strong>
+    <span>Chrome Engine</span>
+    <strong>${APP_INFO.chrome}</strong>
     </div>
 
     <div class="about-row">
         <span>Platform</span>
-        <strong>${APP_INFO.platform}</strong>
+        <strong>${APP_INFO.platform} (${APP_INFO.architecture})</strong>
     </div>
 
     <p class="about-footer">
 
-        ${APP_INFO.copyright}<br>
+        © ${new Date().getFullYear()} Himanish Patnaik<br>
 
         All Rights Reserved
 
@@ -101,6 +109,7 @@ function showAboutPage() {
     </button>
 
 </div>
+
 
 `;
 

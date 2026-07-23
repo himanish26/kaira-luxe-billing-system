@@ -1,14 +1,14 @@
 {
   "name": "kaira-luxe-billing",
-  "version": "1.0.0",
-  "description": "Kaira Luxe Billing System",
+  "productName": "KAIRA LUXE BILLING SYSTEM",
+  "version": "1.0.0-alpha",
+  "description": "Professional Billing & Inventory Management System for Kaira Luxe",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron ."
   },
-  "keywords": [],
-  "author": "Kaira Luxe",
-  "license": "ISC",
+  "author": "Himanish Patnaik",
+  "license": "Single Device Commercial",
   "type": "commonjs",
   "dependencies": {
     "electron": "^42.5.0",
