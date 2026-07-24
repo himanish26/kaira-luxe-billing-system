@@ -794,6 +794,21 @@ tbody tr {
     font-weight:bold;
 
 }
+
+.status-corrected{
+
+    display:inline-block;
+
+    margin-top:6px;
+
+    color:#C97A00;
+
+    font-weight:700;
+
+    font-size:15px;
+
+}
+
 .invoice-header{
 
     text-align:center;
@@ -1144,17 +1159,20 @@ tbody tr {
 }
 .payment-heading{
 
-    margin:40px 0 30px;
+    margin:0 0 25px;
 
-    padding-top:18px;
+    padding:0;
 
-    border-top:1px solid #ddd;
+    text-align:center;
 
-    font-size:30px;
+    font-size:34px;
 
-    font-weight:700;
+    font-weight:800;
+
+    border:none;
 
 }
+
 #viewBillItems td{
 
     text-align:center;
@@ -3130,5 +3148,83 @@ transform:rotate(360deg);
     cursor:not-allowed;
 
     box-shadow:none;
+
+}
+
+/* =====================================
+   PAYMENT CORRECTION HISTORY
+===================================== */
+
+#paymentCorrectionHistory{
+
+    margin-top:30px;
+
+}
+
+.payment-history-card{
+
+    background:#fafafa;
+
+    border-left:6px solid #8B004B;
+
+    border-radius:12px;
+
+    padding:18px 20px;
+
+    margin-bottom:18px;
+
+    box-shadow:0 2px 8px rgba(0,0,0,.06);
+
+}
+
+.payment-history-title{
+
+    font-size:20px;
+
+    font-weight:800;
+
+    color:#8B004B;
+
+    margin-bottom:12px;
+
+    text-transform:uppercase;
+
+    letter-spacing:.5px;
+
+}
+
+.payment-history-card div{
+
+    margin-bottom:8px;
+
+    font-size:17px;
+
+    line-height:1.6;
+
+}
+
+.payment-history-card b{
+
+    display:inline-block;
+
+    min-width:120px;
+
+    color:#333;
+
+}
+
+.payment-history-card:last-child{
+
+    margin-bottom:0;
+
+}
+
+.payment-history-card hr{
+
+    margin:14px 0;
+
+    border:none;
+
+    border-top:1px dashed #ddd;
 
 }

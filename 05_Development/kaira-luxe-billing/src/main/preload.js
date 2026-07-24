@@ -69,6 +69,12 @@ contextBridge.exposeInMainWorld(
                 billNo
             ),
 
+            getPaymentCorrections: (billNo) =>
+    ipcRenderer.invoke(
+        "get-payment-corrections",
+        billNo
+    ),
+
             updatePaymentAllocation: (data) =>
                 ipcRenderer.invoke(
                     "update-payment-allocation",

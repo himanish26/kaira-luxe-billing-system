@@ -290,15 +290,23 @@ function getBills() {
 
             `
             SELECT
-                bill_no,
-                bill_date,
-                bill_time,
-                customer_name,
-                customer_mobile,
-                net_amount,
-                payment_status
-            FROM bills
-            ORDER BY id DESC
+    b.bill_no,
+    b.bill_date,
+    b.bill_time,
+    b.customer_name,
+    b.customer_mobile,
+    b.net_amount,
+    b.payment_status,
+
+    EXISTS (
+        SELECT 1
+        FROM payment_corrections pc
+        WHERE pc.bill_no = b.bill_no
+    ) AS payment_corrected
+
+FROM bills b
+
+ORDER BY b.id DESC
             `,
 
             [],
@@ -386,6 +394,8 @@ function getBillDetails(billNo) {
 
 }
 
+
+
 function updatePaymentAllocation(data) {
 
     return new Promise((resolve, reject) => {
@@ -429,6 +439,30 @@ function updatePaymentAllocation(data) {
                         return;
 
                     }
+
+                    if (
+
+    Number(bill.cash_amount) === Number(data.cash_amount) &&
+
+    Number(bill.upi_amount) === Number(data.upi_amount) &&
+
+    Number(bill.card_amount) === Number(data.card_amount)
+
+) {
+
+    db.run("ROLLBACK");
+
+    reject(
+
+        new Error(
+            "No payment changes detected."
+        )
+
+    );
+
+    return;
+
+}
 
                     const total =
 
@@ -592,10 +626,65 @@ function updatePaymentAllocation(data) {
 
 }
 
+function getPaymentCorrections(billNo) {
+
+    return new Promise((resolve, reject) => {
+
+        db.all(
+
+            `
+            SELECT
+
+                old_cash,
+                old_upi,
+                old_card,
+
+                new_cash,
+                new_upi,
+                new_card,
+
+                remarks,
+
+                corrected_by,
+
+                corrected_at
+
+            FROM payment_corrections
+
+            WHERE bill_no = ?
+
+            ORDER BY corrected_at DESC
+            `,
+
+            [billNo],
+
+            (err, rows) => {
+
+                if (err) {
+
+                    reject(err);
+
+                    return;
+
+                }
+
+                resolve(rows);
+
+            }
+
+        );
+
+    });
+
+}
+
 module.exports = {
+
     saveBill,
     getNextBillNumber,
     getBills,
     getBillDetails,
-    updatePaymentAllocation
+    updatePaymentAllocation,
+    getPaymentCorrections
+
 };

@@ -1810,9 +1810,24 @@ new Date(bill.bill_date)
 <td>₹${Math.round(bill.net_amount)}</td>
 
 <td>
+
 <span class="status-paid">
+
 ${bill.payment_status}
+
 </span>
+
+${
+    bill.payment_corrected
+        ? `
+        <br>
+        <span class="status-corrected">
+            🟠 Payment Corrected
+        </span>
+        `
+        : ""
+}
+
 </td>
 
 <td>
@@ -1867,6 +1882,13 @@ async function viewBill(billNo){
 
     const details =
         await window.electronAPI.getBillDetails(billNo);
+
+        const corrections =
+    await window.electronAPI.getPaymentCorrections(
+        billNo
+    );
+
+        console.log(corrections);
 
         console.log(details);
 
@@ -1974,7 +1996,172 @@ details.items.forEach(item => {
 
 });
 
+const historySection =
+    document.getElementById(
+        "paymentCorrectionHistory"
+    );
+
+const historyList =
+    document.getElementById(
+        "paymentCorrectionList"
+    );
+
+historyList.innerHTML = "";
+
+if (corrections.length === 0) {
+
+    historySection.style.display = "none";
+
 }
+else {
+
+    historySection.style.display = "block";
+
+    corrections.forEach((correction, index) => {
+
+});
+        
+corrections.forEach((correction, index) => {
+
+    let html = `
+
+<div class="payment-history-card">
+
+    <div class="payment-history-title">
+
+        🟠 PAYMENT CORRECTION #${corrections.length - index}
+
+    </div>
+
+`;
+
+    if (
+        Number(correction.old_cash) !==
+        Number(correction.new_cash)
+    ) {
+
+        html += `
+
+<div>
+
+<b>Cash</b>
+
+₹${Number(correction.old_cash).toFixed(2)}
+
+→
+
+₹${Number(correction.new_cash).toFixed(2)}
+
+</div>
+
+`;
+
+    }
+
+    if (
+        Number(correction.old_upi) !==
+        Number(correction.new_upi)
+    ) {
+
+        html += `
+
+<div>
+
+<b>UPI</b>
+
+₹${Number(correction.old_upi).toFixed(2)}
+
+→
+
+₹${Number(correction.new_upi).toFixed(2)}
+
+</div>
+
+`;
+
+    }
+
+    if (
+        Number(correction.old_card) !==
+        Number(correction.new_card)
+    ) {
+
+        html += `
+
+<div>
+
+<b>Card</b>
+
+₹${Number(correction.old_card).toFixed(2)}
+
+→
+
+₹${Number(correction.new_card).toFixed(2)}
+
+</div>
+
+`;
+
+    }
+
+    html += `
+
+<div>
+
+<b>Reason</b>
+
+${correction.remarks}
+
+</div>
+
+<div>
+
+<b>Updated By</b>
+
+${correction.corrected_by}
+
+</div>
+
+<div>
+
+<b>Correction Date</b>
+
+${new Date(correction.corrected_at)
+    .toLocaleDateString(
+        "en-GB",
+        {
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+        }
+    )}
+
+•
+
+${new Date(correction.corrected_at)
+    .toLocaleTimeString(
+        "en-IN",
+        {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true
+        }
+    ).toUpperCase()}
+
+</div>
+
+</div>
+
+`;
+
+    historyList.innerHTML += html;
+
+});
+
+}
+
+}
+
 window.viewBill = viewBill;
 
 async function reprintBill(billNo){

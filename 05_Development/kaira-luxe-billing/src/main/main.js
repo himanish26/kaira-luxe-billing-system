@@ -16,7 +16,8 @@ const {
     getNextBillNumber,
     getBills,
     getBillDetails,
-    updatePaymentAllocation
+    updatePaymentAllocation,
+    getPaymentCorrections
 } = require("../database/billService");
 
 const {
@@ -301,6 +302,15 @@ ipcMain.handle(
     async (event, billNo) => {
 
         return await getBillDetails(billNo);
+
+    }
+);
+
+ipcMain.handle(
+    "get-payment-corrections",
+    async (event, billNo) => {
+
+        return await getPaymentCorrections(billNo);
 
     }
 );
