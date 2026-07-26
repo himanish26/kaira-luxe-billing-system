@@ -1,5 +1,5 @@
 window.productMasterTemplate = `
-<h1 class="page-title">
+<h1 class="inventory-page-title">
     📦 PRODUCT MASTER
 </h1>
 

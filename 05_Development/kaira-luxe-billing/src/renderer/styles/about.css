@@ -1,0 +1,172 @@
+
+/* =====================================
+   ABOUT
+===================================== */
+
+.about-page h1{
+    text-align:center;
+    margin-bottom:40px;
+}
+
+
+
+.about-card,
+.eula-card{
+
+    max-width:960px;
+
+    margin:30px auto;
+
+    background:#fff;
+
+    border-radius:12px;
+
+    padding:35px;
+
+    box-shadow:0 4px 15px rgba(0,0,0,.08);
+
+    
+
+}
+
+.about-card{
+    margin-top:20px;
+}
+
+.eula-card{
+
+    height:650px;
+
+}
+
+
+.about-row{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    padding:18px 0;
+
+    border-bottom:1px solid #ececec;
+
+    font-size:22px;
+
+}
+
+.about-row span{
+
+    color:#666;
+
+    font-weight:500;
+
+}
+
+.about-row strong{
+
+    color:#222;
+
+    font-weight:700;
+
+}
+
+.about-footer{
+
+    margin:40px 0 30px;
+
+    text-align:center;
+
+    font-size:22px;
+
+    font-weight:700;
+
+    line-height:1.6;
+
+    color:#555;
+
+}
+
+.about-btn{
+
+    margin-top:25px;
+
+    width:100%;
+
+}
+
+.eula-content{
+
+    height:100%;
+
+    max-height:550px;
+
+    overflow-y:auto;
+
+    padding-right:15px;
+
+    line-height:1.8;
+
+}
+
+.eula-content h3{
+
+    margin-top:25px;
+
+}
+
+.eula-content ul{
+
+    padding-left:20px;
+
+}
+
+#viewEulaBtn{
+
+    width:100%;
+
+    height:62px;
+
+    margin-top:25px;
+
+    background:#7A003C;
+
+    color:#fff;
+
+    border:none;
+
+    border-radius:14px;
+
+    font-size:24px;
+
+    font-weight:700;
+
+    cursor:pointer;
+
+    transition:.25s ease;
+
+}
+
+#viewEulaBtn:hover{
+
+    transform:translateY(-2px);
+
+    box-shadow:0 8px 20px rgba(122,0,60,.25);
+
+}
+
+.about-card h2{
+
+    text-align:center;
+
+    font-size:46px;
+
+    font-weight:700;
+
+    margin-bottom:35px;
+
+    color:#333;
+
+}
+
