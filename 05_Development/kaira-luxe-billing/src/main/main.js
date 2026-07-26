@@ -548,4 +548,3 @@ ipcMain.handle("get-app-info", async () => {
     };
 
 });
-
