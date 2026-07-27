@@ -30,6 +30,9 @@ const newBillScreen =
 const paymentScreen =
     document.getElementById("paymentScreen");
 
+const reportsScreen =
+    document.getElementById("reportsScreen");    
+
 const billHistoryScreen =
     document.getElementById("billHistoryScreen");
 
@@ -649,6 +652,18 @@ const reportsBtn =
 const settingsBtn =
     document.getElementById("settingsBtn");
 
+if (reportsBtn) {
+
+    reportsBtn.addEventListener("click", () => {
+
+        dashboardScreen.style.display = "none";
+
+        reportsScreen.style.display = "block";
+
+    });
+
+}
+
 
 /* =====================================
    NEW BILL BUTTON
@@ -706,6 +721,22 @@ if (settingsDashboardBtn){
     settingsDashboardBtn.addEventListener("click", () => {
 
         settingsScreen.style.display = "none";
+
+        dashboardScreen.style.display = "block";
+
+    });
+    
+
+}
+
+const reportsDashboardBtn =
+    document.getElementById("reportsDashboardBtn");
+
+if (reportsDashboardBtn){
+
+    reportsDashboardBtn.addEventListener("click", () => {
+
+        reportsScreen.style.display = "none";
 
         dashboardScreen.style.display = "block";
 
@@ -2614,4 +2645,3 @@ else{
 }
 
 }
-

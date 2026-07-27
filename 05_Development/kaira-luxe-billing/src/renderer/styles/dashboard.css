@@ -23,6 +23,8 @@
 
 .dashboard-grid button:hover {
     transform: translateY(-2px);
+    background-color:#7A002C;
+    color: white;
 }
 
 
