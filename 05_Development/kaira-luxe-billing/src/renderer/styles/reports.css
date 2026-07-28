@@ -4,35 +4,39 @@
 
 .reports-container {
 
-    max-width: 900px;
+    width:100%;
 
-    margin: 30px auto;
+    max-width:1200px;
 
-    padding: 25px;
+    margin:40px auto;
+
+    padding:20px;
 
 }
 
 .reports-container h1 {
 
-    margin: 0;
+    font-size:56px;
 
-    font-size: 34px;
+    font-weight:800;
 
-    font-weight: bold;
+    color:#8B004B;
 
-    color: #7A002C;
+    text-align: center;
+
+    margin-bottom:10px;
 
 }
 
 .reports-subtitle {
 
-    margin-top: 8px;
+    font-size:24px;
 
-    margin-bottom: 30px;
+    color:#666;
 
-    font-size: 18px;
+    text-align:center;
 
-    color: #666;
+    margin-bottom:50px;
 
 }
 
@@ -49,5 +53,353 @@
     border: 1px solid #dddddd;
 
     box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+
+}
+
+/* =====================================
+   REPORT TYPE OPTIONS
+===================================== */
+
+.report-option {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 16px;
+
+    padding: 14px 16px;
+
+    margin-bottom: 12px;
+
+    border: 1px solid #d9d9d9;
+
+    border-radius: 8px;
+
+    cursor: pointer;
+
+    transition: all 0.2s ease;
+
+    background: #ffffff;
+
+}
+
+.report-option:last-child {
+
+    margin-bottom: 0;
+
+}
+
+.report-option:hover {
+
+    border-color: #7A002C;
+
+    background: #faf5f7;
+
+}
+
+.report-option input[type="radio"] {
+
+    width: 20px;
+
+    height: 20px;
+
+    accent-color: #7A002C;
+
+    cursor: pointer;
+
+    flex-shrink: 0;
+
+}
+
+.report-option-content {
+
+    display: flex;
+
+    flex-direction: column;
+
+}
+
+.report-title {
+
+    font-size: 18px;
+
+    font-weight: 700;
+
+    color: #222;
+
+}
+
+.report-subtitle {
+
+    margin-top: 2px;
+
+    font-size: 14px;
+
+    color: #555;
+
+    font-weight: 500;
+
+}
+
+/* =====================================
+   DATE RANGE
+===================================== */
+
+#reportDateRange {
+
+    width: 280px;
+
+    height: 48px;
+
+    padding: 0 14px;
+
+    font-size: 17px;
+
+    font-weight: 600;
+
+    color: #333;
+
+    background: #ffffff;
+
+    border: 1px solid #d6d6d6;
+
+    border-radius: 8px;
+
+    cursor: pointer;
+
+    transition: all 0.2s ease;
+
+}
+
+#reportDateRange:hover {
+
+    border-color: #7A002C;
+
+}
+
+#reportDateRange:focus {
+
+    outline: none;
+
+    border-color: #7A002C;
+
+    box-shadow: 0 0 0 3px rgba(122, 0, 44, 0.12);
+
+}
+
+#customDateRange {
+
+    margin-top: 20px;
+
+    display: flex;
+
+    gap: 24px;
+
+    align-items: end;
+
+    flex-wrap: wrap;
+
+}
+
+#customDateRange label {
+
+    display: block;
+
+    margin-bottom: 8px;
+
+    font-size: 15px;
+
+    font-weight: 600;
+
+    color: #444;
+
+}
+
+#customDateRange input[type="date"] {
+
+    width: 220px;
+
+    height: 46px;
+
+    padding: 0 12px;
+
+    font-size: 16px;
+
+    border: 1px solid #d6d6d6;
+
+    border-radius: 8px;
+
+    transition: all 0.2s ease;
+
+}
+
+#customDateRange input[type="date"]:focus {
+
+    outline: none;
+
+    border-color: #7A002C;
+
+    box-shadow: 0 0 0 3px rgba(122, 0, 44, 0.12);
+
+}
+/* =====================================
+   REPORT INFORMATION
+===================================== */
+
+#reportDescription h3 {
+
+    margin: 0 0 12px;
+
+    font-size: 30px;
+
+    font-weight: 700;
+
+    color: #222;
+
+}
+
+#reportDescription p {
+
+    margin: 0 0 20px;
+
+    font-size: 17px;
+
+    line-height: 1.6;
+
+    color: #555;
+
+}
+
+#reportDescription ul {
+
+    margin: 0;
+
+    padding-left: 0;
+
+    list-style: none;
+
+}
+
+#reportDescription li {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    margin-bottom: 10px;
+
+    font-size: 16px;
+
+    color: #333;
+
+}
+
+.report-check {
+
+    width: 22px;
+
+    text-align: center;
+
+    font-weight: bold;
+
+    color: #15803d;
+
+}
+
+/* =====================================
+   EXPORT BUTTON
+===================================== */
+
+.export-report-btn {
+
+    width: 100%;
+
+    height: 60px;
+
+    border: none;
+
+    border-radius: 10px;
+
+    background: #7A002C;
+
+    color: #ffffff;
+
+    font-size: 20px;
+
+    font-weight: 700;
+
+    cursor: pointer;
+
+    transition: all 0.2s ease;
+
+}
+
+.export-report-btn:hover {
+
+    background: #930038;
+
+}
+
+.export-report-btn:active {
+
+    transform: scale(0.99);
+
+}
+
+.export-report-btn:disabled {
+
+    background: #b5b5b5;
+
+    cursor: not-allowed;
+
+}
+.report-note {
+
+    margin-top: 18px;
+
+    text-align: center;
+
+    font-size: 15px;
+
+    line-height: 1.6;
+
+    color: #666;
+
+}
+
+.report-note strong {
+
+    color: #333;
+
+    font-size: 16px;
+
+}
+
+/* =====================================
+   SELECTED REPORT
+===================================== */
+
+.report-option.selected {
+
+    border: 2px solid #7A002C;
+
+    background: #faf2f5;
+
+    box-shadow: 0 4px 12px rgba(122, 0, 44, 0.10);
+
+}
+
+.report-option.selected .report-title {
+
+    color: #7A002C;
+
+}
+
+.report-option.selected .report-subtitle {
+
+    color: #6b4d59;
 
 }

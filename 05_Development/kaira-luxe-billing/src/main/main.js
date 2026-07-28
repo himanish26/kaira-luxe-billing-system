@@ -12,6 +12,12 @@ const resetInventory =
     require("../database/resetInventory");
 
 const {
+    exportReport
+} = require(
+    "../database/reportService"
+);
+
+const {
     saveBill,
     getNextBillNumber,
     getBills,
@@ -516,6 +522,82 @@ ipcMain.handle(
         }
 
 });
+
+ipcMain.handle(
+
+    "export-report",
+
+    async (event, request) => {
+
+        try {
+
+            const today = new Date();
+
+const dd = String(today.getDate()).padStart(2, "0");
+const mm = String(today.getMonth() + 1).padStart(2, "0");
+const yyyy = today.getFullYear();
+
+const fileName =
+    `KLBusinessReport${dd}${mm}${yyyy}.xlsx`;
+
+const result =
+    await dialog.showSaveDialog({
+
+        defaultPath: fileName,
+
+        filters: [
+
+            {
+
+                name: "Excel Workbook",
+
+                extensions: ["xlsx"]
+
+            }
+
+        ]
+
+    });
+
+if (result.canceled) {
+
+    return {
+
+        success: false,
+
+        cancelled: true
+
+    };
+
+}
+
+return await exportReport(
+
+    request,
+
+    result.filePath
+
+);
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            return {
+
+                success: false,
+
+                error: error.message
+
+            };
+
+        }
+
+    }
+
+);
 
 const packageInfo = require("../../package.json");
 

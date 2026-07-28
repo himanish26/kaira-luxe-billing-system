@@ -118,6 +118,12 @@ resetInventory: () =>
         "reset-inventory"
     ),
 
+exportReport: (request) =>
+    ipcRenderer.invoke(
+        "export-report",
+        request
+    ),
+
 }
 
 );

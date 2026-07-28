@@ -4,12 +4,15 @@ const ExcelJS = require("exceljs");
    BUSINESS REPORT
 =========================================== */
 
-const totalColumns = 25;
+const totalColumns = 23;
 
 const lastColumn =
     String.fromCharCode(64 + totalColumns);
 
-async function exportBusinessReport(data) {
+async function exportBusinessReport(
+    data,
+    filePath
+) {
 
     const workbook = new ExcelJS.Workbook();
 
@@ -42,9 +45,7 @@ async function exportBusinessReport(data) {
     { key: "bill_no", width: 15 },
     { key: "bill_date", width: 15 },
     { key: "bill_time", width: 12 },
-    { key: "customer_name", width: 25 },
-    { key: "customer_mobile", width: 18 },
-
+   
     { key: "barcode", width: 18 },
     { key: "brand", width: 20 },
     { key: "product_name", width: 30 },
@@ -77,8 +78,6 @@ headerRow.values = [
     "Bill No",
     "Bill Date",
     "Bill Time",
-    "Customer Name",
-    "Mobile",
 
     "Barcode",
     "Brand",
@@ -112,8 +111,6 @@ for (const row of data) {
         row.bill_no,
         row.bill_date,
         row.bill_time,
-        row.customer_name,
-        row.customer_mobile,
 
         row.barcode,
         row.brand,
@@ -143,7 +140,19 @@ for (const row of data) {
 
 }
 
-    return workbook;
+{
+    await workbook.xlsx.writeFile(
+    filePath
+);
+
+return {
+
+    success: true,
+
+    filePath
+
+};
+}
 
 }
 
