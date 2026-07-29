@@ -537,8 +537,44 @@ const dd = String(today.getDate()).padStart(2, "0");
 const mm = String(today.getMonth() + 1).padStart(2, "0");
 const yyyy = today.getFullYear();
 
-const fileName =
-    `KLBusinessReport${dd}${mm}${yyyy}.xlsx`;
+let fileName;
+
+switch (request.reportType) {
+
+    case "business":
+
+        fileName =
+            `KLBusinessReport${dd}${mm}${yyyy}.xlsx`;
+
+        break;
+
+    case "gst":
+
+        fileName =
+            `KLGSTReport${dd}${mm}${yyyy}.xlsx`;
+
+        break;
+
+    case "product":
+
+        fileName =
+            `KLProductSalesReport${dd}${mm}${yyyy}.xlsx`;
+
+        break;
+
+    case "customer":
+
+        fileName =
+            `KLCustomerPurchaseReport${dd}${mm}${yyyy}.xlsx`;
+
+        break;
+
+    default:
+
+        fileName =
+            `Report${dd}${mm}${yyyy}.xlsx`;
+
+}
 
 const result =
     await dialog.showSaveDialog({
