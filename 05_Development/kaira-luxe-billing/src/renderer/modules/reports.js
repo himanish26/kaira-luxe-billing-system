@@ -311,11 +311,136 @@ function validateReportRequest() {
     const dateRange =
         reportDateRange.value;
 
-    const fromDate =
-        document.getElementById("fromDate").value;
+        let fromDate = "";
 
-    const toDate =
-        document.getElementById("toDate").value;
+let toDate = "";
+
+const today = new Date();
+
+const formatDate = (date) => {
+
+    const year = date.getFullYear();
+
+    const month = String(date.getMonth() + 1)
+        .padStart(2, "0");
+
+    const day = String(date.getDate())
+        .padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+
+};
+
+switch (dateRange) {
+
+    case "today":
+
+        fromDate = formatDate(today);
+        toDate = formatDate(today);
+
+        break;
+
+    case "yesterday": {
+
+        const yesterday = new Date(today);
+
+        yesterday.setDate(
+            yesterday.getDate() - 1
+        );
+
+        fromDate = formatDate(yesterday);
+        toDate = formatDate(yesterday);
+
+        break;
+
+    }
+
+    case "thisMonth": {
+
+        const firstDay =
+            new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                1
+            );
+
+        fromDate = formatDate(firstDay);
+
+        toDate = formatDate(today);
+
+        break;
+
+    }
+
+    case "lastMonth": {
+
+        const firstDay =
+            new Date(
+                today.getFullYear(),
+                today.getMonth() - 1,
+                1
+            );
+
+        const lastDay =
+            new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                0
+            );
+
+        fromDate = formatDate(firstDay);
+
+        toDate = formatDate(lastDay);
+
+        break;
+
+    }
+
+    case "currentFY": {
+
+        const fyStartYear =
+            today.getMonth() >= 3
+                ? today.getFullYear()
+                : today.getFullYear() - 1;
+
+        fromDate =
+            `${fyStartYear}-04-01`;
+
+        toDate =
+            formatDate(today);
+
+        break;
+
+    }
+
+    case "previousFY": {
+
+        const fyStartYear =
+            today.getMonth() >= 3
+                ? today.getFullYear() - 1
+                : today.getFullYear() - 2;
+
+        fromDate =
+            `${fyStartYear}-04-01`;
+
+        toDate =
+            `${fyStartYear + 1}-03-31`;
+
+        break;
+
+    }
+
+    case "custom":
+
+        fromDate =
+            document.getElementById("fromDate").value;
+
+        toDate =
+            document.getElementById("toDate").value;
+
+        break;
+
+}
 
     if (!reportType) {
 

@@ -10,16 +10,11 @@ function formatDate(date) {
 
     return `${day}/${month}/${year}`;
 
-}
+};
 
 /* ===========================================
    BUSINESS REPORT
 =========================================== */
-
-const totalColumns = 23;
-
-const lastColumn =
-    String.fromCharCode(64 + totalColumns);
 
 async function exportBusinessReport(
     data,
@@ -129,53 +124,147 @@ headerRow.values = [
 
 let currentRow = 12;
 
+// Totals
+
+let totalQty = 0;
+
+let totalDiscount = 0;
+
+let totalTaxable = 0;
+
+let totalCGST = 0;
+
+let totalSGST = 0;
+
+let totalNet = 0;
+
+let totalCash = 0;
+
+let totalUPI = 0;
+
+let totalCard = 0;
+
+const processedBills = new Set();
+
+let previousBillNo = "";
+
 for (const row of data) {
 
-    worksheet.getRow(currentRow).values = [
-        row.bill_no,
-        row.bill_date,
-        row.bill_time,
+    const isNewBill = row.bill_no !== previousBillNo;
 
-        row.barcode,
-        row.brand,
-        row.product_name,
-        row.style_code,
-        row.colour,
-        row.size,
-        row.supplier,
-        row.category,
-        row.hsn_code,
+worksheet.getRow(currentRow).values = [
 
-        row.quantity,
-        row.mrp,
-        row.discount_amount,
-        row.taxable_amount,
-        row.gst_rate,
-        row.cgst_amount,
-        row.sgst_amount,
-        row.net_amount,
+    isNewBill ? row.bill_no : "",
+    isNewBill ? row.bill_date : "",
+    isNewBill ? row.bill_time : "",
 
-        row.cash_amount,
-        row.upi_amount,
-        row.card_amount
-    ];
+    row.barcode,
+    row.brand,
+    row.product_name,
+    row.style_code,
+    row.colour,
+    row.size,
+    row.supplier,
+    row.category,
+    row.hsn_code,
+
+    row.quantity,
+    row.mrp,
+    row.discount_amount,
+    row.taxable_amount,
+    row.gst_rate,
+    row.cgst_amount,
+    row.sgst_amount,
+    row.net_amount,
+
+    isNewBill ? row.cash_amount : "",
+    isNewBill ? row.upi_amount : "",
+    isNewBill ? row.card_amount : ""
+
+];
+
+previousBillNo = row.bill_no;
+
+    totalQty += Number(row.quantity || 0);
+
+    totalDiscount += Number(row.discount_amount || 0);
+
+    totalTaxable += Number(row.taxable_amount || 0);
+
+    totalCGST += Number(row.cgst_amount || 0);
+
+    totalSGST += Number(row.sgst_amount || 0);
+
+    totalNet += Number(row.net_amount || 0);
+
+    if (!processedBills.has(row.bill_no)) {
+
+    totalCash += Number(row.cash_amount || 0);
+
+    totalUPI += Number(row.upi_amount || 0);
+
+    totalCard += Number(row.card_amount || 0);
+
+    processedBills.add(row.bill_no);
+
+}
 
     currentRow++;
 
 }
 
-{
-    await workbook.xlsx.writeFile(
-    filePath
-);
+    worksheet.getRow(currentRow).values = [
 
-return {
+    "TOTAL",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
 
-    success: true,
+    totalQty,
 
-    filePath
+    "",
+
+    totalDiscount,
+
+    totalTaxable,
+
+    "",
+
+    totalCGST,
+
+    totalSGST,
+
+    totalNet,
+
+    totalCash,
+
+    totalUPI,
+
+    totalCard
+
+];
+
+worksheet.getRow(currentRow).font = {
+
+    bold: true
 
 };
+
+{
+    await workbook.xlsx.writeFile(filePath);
+
+return {
+    success: true,
+    filePath
+    };
 }
 
 }
@@ -262,6 +351,16 @@ worksheet.getCell("B9").value =
 
     let currentRow = 12;
 
+    let totalTaxable = 0;
+
+    let totalCGST = 0;
+
+    let totalSGST = 0;
+
+    let totalGST = 0;
+
+    let totalNet = 0;
+
     for (const row of data) {
 
         worksheet.getRow(currentRow).values = [
@@ -277,9 +376,45 @@ worksheet.getCell("B9").value =
 
         ];
 
+        totalTaxable += Number(row.taxable_value || 0);
+
+        totalCGST += Number(row.cgst_amount || 0);
+
+        totalSGST += Number(row.sgst_amount || 0);
+
+        totalGST += Number(row.gst_total || 0);
+
+        totalNet += Number(row.net_amount || 0);
+
         currentRow++;
 
     }
+
+    worksheet.getRow(currentRow).values = [
+
+    "TOTAL",
+
+    "",
+
+    "",
+
+    totalTaxable,
+
+    totalCGST,
+
+    totalSGST,
+
+    totalGST,
+
+    totalNet
+
+];
+
+worksheet.getRow(currentRow).font = {
+
+    bold: true
+
+};
 
     await workbook.xlsx.writeFile(filePath);
 
@@ -385,6 +520,8 @@ worksheet.getCell("B9").value =
 
     let currentRow = 12;
 
+    let totalQtySold = 0;
+
     for (const row of data) {
 
         worksheet.getRow(currentRow).values = [
@@ -405,9 +542,37 @@ worksheet.getCell("B9").value =
 
         ];
 
+        totalQtySold += Number(row.qty_sold || 0);
+
         currentRow++;
 
     }
+
+    worksheet.getRow(currentRow).values = [
+
+    "TOTAL",
+
+    "",
+
+    "",
+
+    "",
+
+    "",
+
+    "",
+
+    "",
+
+    totalQtySold
+
+];
+
+worksheet.getRow(currentRow).font = {
+
+    bold: true
+
+};
 
     await workbook.xlsx.writeFile(filePath);
 
