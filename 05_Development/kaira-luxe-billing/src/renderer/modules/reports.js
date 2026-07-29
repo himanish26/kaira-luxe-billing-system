@@ -91,7 +91,37 @@ const reports = {
         serviceFunction:
             "getProductReport",
 
-    }
+    },
+
+    customer: {
+
+    title: "Customer Purchase Report",
+
+    description:
+        "Customer-wise purchase history and spending analysis.",
+
+    features: [
+
+        "Customer Summary",
+        "Purchase History",
+        "Average Bill Value",
+        "First Purchase",
+        "Last Purchase"
+
+    ],
+
+    baseFileName:
+        "KLCustomerPurchaseReport",
+
+    adminOnly: true,
+
+    exportFunction:
+        "exportCustomerPurchaseReport",
+
+    serviceFunction:
+        "getCustomerPurchaseReport"
+
+}
 
 };
 
@@ -223,12 +253,51 @@ async function startReportExport() {
 
     }
 
-    const result =
-    await window.electronAPI.exportReport(
-        request
-    );
+    const report =
+        reports[request.reportType];
 
-console.log(result);
+    if (!report) {
+
+        alert("Invalid Report.");
+
+        return;
+
+    }
+
+    const exportAction = async () => {
+
+        const result =
+            await window.electronAPI.exportReport(
+                request
+            );
+
+        console.log(result);
+
+        if (result.success) {
+
+            alert("✅ Report exported successfully.");
+
+        }
+
+        else if (!result.cancelled) {
+
+            alert(result.error || "Unable to export report.");
+
+        }
+
+    };
+
+    if (report.adminOnly) {
+
+        requireAdminAuthorization(exportAction);
+
+    }
+
+    else {
+
+        exportAction();
+
+    }
 
 }
 

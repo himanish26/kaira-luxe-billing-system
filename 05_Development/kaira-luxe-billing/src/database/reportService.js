@@ -6,7 +6,9 @@ const {
 
     exportGSTReport,
 
-    exportProductSalesReport
+    exportProductSalesReport,
+
+    exportCustomerPurchaseReport
 
 } = require("./excelExporter");
 
@@ -314,18 +316,20 @@ async function exportReport(
 
         case "business": {
 
-            const data =
-                await getBusinessReport(
-                    request.fromDate,
-                    request.toDate
-                );
+    const data =
+        await getBusinessReport(
+            request.fromDate,
+            request.toDate
+        );
 
-            return await exportBusinessReport(
-                data,
-                filePath
-            );
+    return await exportBusinessReport(
+        data,
+        filePath,
+        request.fromDate,
+        request.toDate
+    );
 
-        }
+}
 
         case "gst": {
 
@@ -336,9 +340,11 @@ async function exportReport(
                 );
 
             return await exportGSTReport(
-                data,
-                filePath
-            );
+    data,
+    filePath,
+    request.fromDate,
+    request.toDate
+);
 
         }
 
@@ -351,11 +357,30 @@ async function exportReport(
                 );
 
             return await exportProductSalesReport(
-                data,
-                filePath
-            );
+    data,
+    filePath,
+    request.fromDate,
+    request.toDate
+);
 
         }
+
+        case "customer": {
+
+    const data =
+        await getCustomerPurchaseReport(
+            request.fromDate,
+            request.toDate
+        );
+
+    return await exportCustomerPurchaseReport(
+    data,
+    filePath,
+    request.fromDate,
+    request.toDate
+);
+
+}
 
         default:
 
@@ -367,6 +392,99 @@ async function exportReport(
 
 }
 
+async function getCustomerPurchaseReport(fromDate, toDate) {
+
+    return new Promise((resolve, reject) => {
+
+        const sql = `
+
+            SELECT
+
+                b.customer_name,
+
+                b.customer_mobile,
+
+                COUNT(*) AS total_bills,
+
+                SUM(q.total_qty) AS quantity_purchased,
+
+                ROUND(SUM(b.net_amount), 2) AS total_purchase,
+
+                ROUND(AVG(b.net_amount), 2) AS average_bill,
+
+                MIN(b.bill_date) AS first_purchase,
+
+                MAX(b.bill_date) AS last_purchase
+
+                FROM bills b
+
+                INNER JOIN (
+
+                    SELECT
+
+                        bill_no,
+
+                        SUM(qty) AS total_qty
+
+                    FROM bill_items
+
+                    GROUP BY bill_no
+
+                ) q
+
+                ON b.bill_no = q.bill_no
+
+                WHERE
+
+                DATE(b.bill_date) BETWEEN ? AND ?
+
+                AND TRIM(IFNULL(b.customer_name,'')) <> ''
+
+                AND TRIM(IFNULL(b.customer_mobile,'')) <> ''
+
+                GROUP BY
+
+                b.customer_name,
+                b.customer_mobile
+
+                ORDER BY
+
+                total_purchase DESC,
+                total_bills DESC;
+        `;
+
+        db.all(
+
+            sql,
+
+            [
+
+                fromDate,
+
+                toDate
+
+            ],
+
+            (err, rows) => {
+
+                if (err) {
+
+                    reject(err);
+
+                    return;
+
+                }
+
+                resolve(rows);
+
+            }
+
+        );
+
+    });
+
+}
+
 module.exports = {
 
     exportReport,
@@ -375,6 +493,8 @@ module.exports = {
 
     getGSTReport,
 
-    getProductSalesReport
+    getProductSalesReport,
+
+    getCustomerPurchaseReport
 
 };

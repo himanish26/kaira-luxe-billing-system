@@ -1,5 +1,17 @@
 const ExcelJS = require("exceljs");
 
+function formatDate(date) {
+
+    const d = new Date(date);
+
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+
+    return `${day}/${month}/${year}`;
+
+}
+
 /* ===========================================
    BUSINESS REPORT
 =========================================== */
@@ -11,36 +23,48 @@ const lastColumn =
 
 async function exportBusinessReport(
     data,
-    filePath
+    filePath,
+    fromDate,
+    toDate
 ) {
 
     const workbook = new ExcelJS.Workbook();
 
-    const worksheet =
-        workbook.addWorksheet("Business Report");
+const worksheet =
+    workbook.addWorksheet("Business Report");
 
-        worksheet.mergeCells(`A1:${lastColumn}1`);
-        worksheet.getCell("A1").value = "KAIRA LUXE";
+// ===========================================
+// Report Header
+// ===========================================
 
-        worksheet.mergeCells(`A2:${lastColumn}2`);
-        worksheet.getCell("A2").value = "Store Address";
+worksheet.getCell("A1").value = "Store Name";
+worksheet.getCell("B1").value = "KAIRA LUXE";
 
-        worksheet.mergeCells(`A3:${lastColumn}3`);
-        worksheet.getCell("A3").value = "Phone";
+worksheet.getCell("A2").value = "Address";
+worksheet.getCell("B2").value =
+    "Shop No.3, Shree Towers, Near Khallikote University, Berhampur-760001, Odisha";
 
-        worksheet.mergeCells(`A4:${lastColumn}4`);
-        worksheet.getCell("A4").value = "Email";
+worksheet.getCell("A3").value = "Contact";
+worksheet.getCell("B3").value = "0680-3596443";
 
-        worksheet.mergeCells(`A5:${lastColumn}5`);
-        worksheet.getCell("A5").value = "GSTIN";
+worksheet.getCell("A4").value = "Email";
+worksheet.getCell("B4").value = "kairaluxe@gmail.com";
 
-        worksheet.mergeCells(`A7:${lastColumn}7`);
-        worksheet.getCell("A7").value = "Report Period";
+worksheet.getCell("A5").value = "GSTIN";
+worksheet.getCell("B5").value = "21BBLPP6327G1ZO";
 
-        worksheet.mergeCells(`A8:${lastColumn}8`);
-        worksheet.getCell("A8").value = "Generated At";
+worksheet.getCell("A7").value = "Report Name";
+worksheet.getCell("B7").value = "Business Report";
 
-        worksheet.columns = [
+worksheet.getCell("A8").value = "Report Generated On";
+worksheet.getCell("B8").value =
+    new Date().toLocaleString("en-IN");
+
+worksheet.getCell("A9").value = "Report Period";
+worksheet.getCell("B9").value =
+    `${formatDate(fromDate)} to ${formatDate(toDate)}`;
+        
+    worksheet.columns = [
 
     { key: "bill_no", width: 15 },
     { key: "bill_date", width: 15 },
@@ -72,7 +96,7 @@ async function exportBusinessReport(
 
 ];
 
-    const headerRow = worksheet.getRow(10);
+    const headerRow = worksheet.getRow(11);
 
 headerRow.values = [
     "Bill No",
@@ -103,7 +127,7 @@ headerRow.values = [
     "Card"
 ];
 
-let currentRow = 11;
+let currentRow = 12;
 
 for (const row of data) {
 
@@ -160,13 +184,11 @@ return {
    GST REPORT
 =========================================== */
 
-/* ===========================================
-   GST REPORT
-=========================================== */
-
 async function exportGSTReport(
     data,
-    filePath
+    filePath,
+    fromDate,
+    toDate
 ) {
 
     const totalColumns = 8;
@@ -179,26 +201,36 @@ async function exportGSTReport(
     const worksheet =
         workbook.addWorksheet("GST Report");
 
-    worksheet.mergeCells(`A1:${lastColumn}1`);
-    worksheet.getCell("A1").value = "KAIRA LUXE";
+    // ===========================================
+// Report Header
+// ===========================================
 
-    worksheet.mergeCells(`A2:${lastColumn}2`);
-    worksheet.getCell("A2").value = "Store Address";
+worksheet.getCell("A1").value = "Store Name";
+worksheet.getCell("B1").value = "KAIRA LUXE";
 
-    worksheet.mergeCells(`A3:${lastColumn}3`);
-    worksheet.getCell("A3").value = "Phone";
+worksheet.getCell("A2").value = "Address";
+worksheet.getCell("B2").value =
+    "Shop No.3, Shree Towers, Near Khallikote University, Berhampur-760001, Odisha";
 
-    worksheet.mergeCells(`A4:${lastColumn}4`);
-    worksheet.getCell("A4").value = "Email";
+worksheet.getCell("A3").value = "Contact";
+worksheet.getCell("B3").value = "0680-3596443";
 
-    worksheet.mergeCells(`A5:${lastColumn}5`);
-    worksheet.getCell("A5").value = "GSTIN";
+worksheet.getCell("A4").value = "Email";
+worksheet.getCell("B4").value = "kairaluxe@gmail.com";
 
-    worksheet.mergeCells(`A7:${lastColumn}7`);
-    worksheet.getCell("A7").value = "Report Period";
+worksheet.getCell("A5").value = "GSTIN";
+worksheet.getCell("B5").value = "21BBLPP6327G1ZO";
 
-    worksheet.mergeCells(`A8:${lastColumn}8`);
-    worksheet.getCell("A8").value = "Generated At";
+worksheet.getCell("A7").value = "Report Name";
+worksheet.getCell("B7").value = "GST Report";
+
+worksheet.getCell("A8").value = "Report Generated On";
+worksheet.getCell("B8").value =
+    new Date().toLocaleString("en-IN");
+
+worksheet.getCell("A9").value = "Report Period";
+worksheet.getCell("B9").value =
+    `${formatDate(fromDate)} to ${formatDate(toDate)}`;
 
     worksheet.columns = [
 
@@ -213,7 +245,7 @@ async function exportGSTReport(
 
     ];
 
-    const headerRow = worksheet.getRow(10);
+    const headerRow = worksheet.getRow(11);
 
     headerRow.values = [
 
@@ -228,7 +260,7 @@ async function exportGSTReport(
 
     ];
 
-    let currentRow = 11;
+    let currentRow = 12;
 
     for (const row of data) {
 
@@ -265,13 +297,11 @@ async function exportGSTReport(
    PRODUCT SALES REPORT
 =========================================== */
 
-/* ===========================================
-   PRODUCT SALES REPORT
-=========================================== */
-
 async function exportProductSalesReport(
     data,
-    filePath
+    filePath,
+    fromDate,
+    toDate
 ) {
 
     const totalColumns = 13;
@@ -284,27 +314,37 @@ async function exportProductSalesReport(
     const worksheet =
         workbook.addWorksheet("Product Sales Report");
 
-    worksheet.mergeCells(`A1:${lastColumn}1`);
-    worksheet.getCell("A1").value = "KAIRA LUXE";
+    // ===========================================
+// Report Header
+// ===========================================
 
-    worksheet.mergeCells(`A2:${lastColumn}2`);
-    worksheet.getCell("A2").value = "Store Address";
+worksheet.getCell("A1").value = "Store Name";
+worksheet.getCell("B1").value = "KAIRA LUXE";
 
-    worksheet.mergeCells(`A3:${lastColumn}3`);
-    worksheet.getCell("A3").value = "Phone";
+worksheet.getCell("A2").value = "Address";
+worksheet.getCell("B2").value =
+    "Shop No.3, Shree Towers, Near Khallikote University, Berhampur-760001, Odisha";
 
-    worksheet.mergeCells(`A4:${lastColumn}4`);
-    worksheet.getCell("A4").value = "Email";
+worksheet.getCell("A3").value = "Contact";
+worksheet.getCell("B3").value = "0680-3596443";
 
-    worksheet.mergeCells(`A5:${lastColumn}5`);
-    worksheet.getCell("A5").value = "GSTIN";
+worksheet.getCell("A4").value = "Email";
+worksheet.getCell("B4").value = "kairaluxe@gmail.com";
 
-    worksheet.mergeCells(`A7:${lastColumn}7`);
-    worksheet.getCell("A7").value = "Report Period";
+worksheet.getCell("A5").value = "GSTIN";
+worksheet.getCell("B5").value = "21BBLPP6327G1ZO";
 
-    worksheet.mergeCells(`A8:${lastColumn}8`);
-    worksheet.getCell("A8").value = "Generated At";
+worksheet.getCell("A7").value = "Report Name";
+worksheet.getCell("B7").value = "Product Sales Report";
 
+worksheet.getCell("A8").value = "Report Generated On";
+worksheet.getCell("B8").value =
+    new Date().toLocaleString("en-IN");
+
+worksheet.getCell("A9").value = "Report Period";
+worksheet.getCell("B9").value =
+    `${formatDate(fromDate)} to ${formatDate(toDate)}`;
+    
     worksheet.columns = [
 
         { key: "barcode", width: 18 },
@@ -323,7 +363,7 @@ async function exportProductSalesReport(
 
     ];
 
-    const headerRow = worksheet.getRow(10);
+    const headerRow = worksheet.getRow(11);
 
     headerRow.values = [
 
@@ -343,7 +383,7 @@ async function exportProductSalesReport(
 
     ];
 
-    let currentRow = 11;
+    let currentRow = 12;
 
     for (const row of data) {
 
@@ -381,12 +421,198 @@ async function exportProductSalesReport(
 
 }
 
+/* ===========================================
+   CUSTOMER PURCHASE REPORT
+=========================================== */
+
+async function exportCustomerPurchaseReport(
+    data,
+    filePath,
+    fromDate,
+    toDate
+)
+
+{
+
+    const workbook = new ExcelJS.Workbook();
+
+    const sheet =
+        workbook.addWorksheet(
+            "Customer Purchase Report"
+        );
+
+    // ===========================================
+    // Report Header
+    // ===========================================
+
+    sheet.getCell("A1").value = "Store Name";
+    sheet.getCell("B1").value = "KAIRA LUXE";
+
+    sheet.getCell("A2").value = "Address";
+    sheet.getCell("B2").value =
+        "Shop No.3, Shree Towers, Near Khallikote University, Berhampur-760001, Odisha";
+
+    sheet.getCell("A3").value = "Contact";
+    sheet.getCell("B3").value = "0680-3596443";
+
+    sheet.getCell("A4").value = "Email";
+    sheet.getCell("B4").value = "kairaluxe@gmail.com";
+
+    sheet.getCell("A5").value = "GSTIN";
+    sheet.getCell("B5").value = "21BBLPP6327G1ZO";
+
+    sheet.getCell("A7").value = "Report Name";
+    sheet.getCell("B7").value = "Customer Purchase Report";
+
+    sheet.getCell("A8").value = "Report Generated On";
+    sheet.getCell("B8").value =
+        new Date().toLocaleString("en-IN");
+
+    sheet.getCell("A9").value = "Report Period";
+
+const formatDate = (date) => {
+
+    const d = new Date(date);
+
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+
+    return `${day}/${month}/${year}`;
+
+};
+
+sheet.getCell("B9").value =
+    `${formatDate(fromDate)} to ${formatDate(toDate)}`;
+
+    // ===========================================
+    // Columns
+    // ===========================================
+
+    sheet.columns = [
+
+        {
+            key: "customer_name",
+            width: 28
+        },
+
+        {
+            key: "customer_mobile",
+            width: 18
+        },
+
+        {
+            key: "total_bills",
+            width: 12
+        },
+
+        {
+            key: "quantity_purchased",
+            width: 18
+        },
+
+        {
+            key: "total_purchase",
+            width: 18
+        },
+
+        {
+            key: "average_bill",
+            width: 18
+        },
+
+        {
+            key: "first_purchase",
+            width: 16
+        },
+
+        {
+            key: "last_purchase",
+            width: 16
+        }
+
+    ];
+
+    // ===========================================
+    // Table Header
+    // ===========================================
+
+    const headerRow = sheet.getRow(11);
+
+    headerRow.values = [
+
+        "Customer Name",
+        "Mobile Number",
+        "Bills",
+        "Quantity Purchased",
+        "Total Purchase",
+        "Average Bill",
+        "First Purchase",
+        "Last Purchase"
+
+    ];
+
+    // ===========================================
+    // Data
+    // ===========================================
+
+    let currentRow = 12;
+
+    for (const row of data) {
+
+        sheet.getRow(currentRow).values = [
+
+            row.customer_name,
+            row.customer_mobile,
+            row.total_bills,
+            row.quantity_purchased,
+            row.total_purchase,
+            row.average_bill,
+            row.first_purchase,
+            row.last_purchase
+
+        ];
+
+        currentRow++;
+
+    }
+
+    // ===========================================
+    // Freeze Header
+    // ===========================================
+
+    sheet.views = [
+
+        {
+
+            state: "frozen",
+
+            ySplit: 11
+
+        }
+
+    ];
+
+    await workbook.xlsx.writeFile(filePath);
+
+    return {
+
+        success: true,
+
+        filePath
+
+    };
+
+}
+
 module.exports = {
 
     exportBusinessReport,
 
     exportGSTReport,
 
-    exportProductSalesReport
+    exportProductSalesReport,
+
+    exportCustomerPurchaseReport
 
 };
