@@ -132,6 +132,11 @@ exportReport: (request) =>
         request
     ),
 
+getSystemStatus: () =>
+    ipcRenderer.invoke(
+        "get-system-status"
+    ),
+
 }
 
 );

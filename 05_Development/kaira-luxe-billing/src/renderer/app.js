@@ -136,6 +136,125 @@ function formatCurrency(value) {
 
 };
 
+/* =====================================
+   SYSTEM STATUS
+===================================== */
+
+async function loadSystemStatus() {
+
+    try {
+
+        const status =
+            await window.electronAPI.getSystemStatus();
+
+        /* DATABASE */
+
+        document.getElementById(
+            "systemDatabase"
+        ).textContent =
+
+            status.database.healthy
+
+                ? `🟢 Healthy (${status.database.latency} ms)`
+                : "🔴 Error";
+
+        /* INTERNET */
+
+        document.getElementById(
+            "systemInternet"
+        ).textContent =
+
+            status.internet.online
+
+                ? "🟢 Online"
+                : "🔴 Offline";
+
+                
+        /* PRINTER */
+
+const printerElement =
+    document.getElementById(
+        "systemPrinter"
+    );
+
+const printerName =
+    status.printer.name || "";
+
+switch (status.printer.status) {
+
+    case "Ready":
+
+        printerElement.textContent =
+            `🟢 ${printerName}`;
+
+        printerElement.title =
+            printerName;
+
+        break;
+
+    case "Offline":
+
+        printerElement.textContent =
+            `🔴 ${printerName}`;
+
+        printerElement.title =
+            printerName;
+
+        break;
+
+    case "No Default":
+
+        printerElement.textContent =
+            "🟡 No Default Printer";
+
+        printerElement.title = "";
+
+        break;
+
+    case "No Printer":
+
+        printerElement.textContent =
+            "🔴 No Printer Installed";
+
+        printerElement.title = "";
+
+        break;
+
+    default:
+
+        printerElement.textContent =
+            "🔴 Unavailable";
+
+        printerElement.title = "";
+
+}
+
+        /* BACKUP */
+
+        document.getElementById(
+            "systemBackup"
+        ).textContent =
+
+        status.backup.status === "Never"
+            ? "🟡 Never"
+            : `🟢 ${status.backup.status}`;
+
+    }
+
+    catch (error) {
+
+        console.error(
+
+            "Unable to load system status:",
+
+            error
+
+        );
+
+    }
+
+}
+
 const dashboardScreen =
     document.getElementById("dashboardScreen");
 
@@ -2838,9 +2957,11 @@ else{
 ===================================== */
 
 loadDashboardSummary();
+loadSystemStatus();
 
 setInterval(() => {
 
     loadDashboardSummary();
+    loadSystemStatus();
 
 }, 30000);

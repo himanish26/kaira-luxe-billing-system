@@ -57,6 +57,10 @@ const {
     saveBillPdf
 } = require("./printer");
 
+const {
+    getSystemStatus
+} = require("./statusService");
+
 require('../database/database');
 
 function createWindow() {
@@ -716,3 +720,69 @@ ipcMain.handle("get-app-info", async () => {
     };
 
 });
+
+/* ===========================================
+   SYSTEM STATUS
+=========================================== */
+
+ipcMain.handle(
+
+    "get-system-status",
+
+    async () => {
+
+        try {
+
+            return await getSystemStatus();
+
+        }
+
+        catch (error) {
+
+            console.error(
+
+                "System Status Error:",
+
+                error
+
+            );
+
+            return {
+
+                database: {
+
+                    healthy: false,
+
+                    status: "Error",
+
+                    latency: null
+
+                },
+
+                internet: {
+
+                    online: false,
+
+                    status: "Offline"
+
+                },
+
+                printer: {
+
+                    status: "Unknown"
+
+                },
+
+                backup: {
+
+                    status: "Unknown"
+
+                }
+
+            };
+
+        }
+
+    }
+
+);

@@ -91,7 +91,9 @@
 
     background:#fff;
 
-    border-radius:14px;
+    border-radius:18px;
+
+    border: 2px solid #7A002C; 
 
     padding:25px;
 
@@ -119,9 +121,6 @@
     font-weight: 700;
 }
 
-#systemStatusCard {
-    min-height: 100%;
-}
 
 .dashboard-row{
 
