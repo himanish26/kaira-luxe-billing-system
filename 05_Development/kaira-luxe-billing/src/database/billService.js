@@ -678,6 +678,134 @@ function getPaymentCorrections(billNo) {
 
 }
 
+function getDashboardSummary() {
+
+    return new Promise((resolve, reject) => {
+
+        const sql = `
+
+            SELECT
+
+                (SELECT COUNT(*) FROM products) AS products,
+
+                (
+                    SELECT COUNT(DISTINCT customer_mobile)
+
+                    FROM bills
+
+                    WHERE customer_mobile IS NOT NULL
+                    AND customer_mobile <> ''
+
+                ) AS customers,
+
+                (
+
+                    SELECT COUNT(*)
+
+                    FROM bills
+
+                    WHERE DATE(bill_date)=DATE('now','localtime')
+
+                ) AS todayBills,
+
+                (
+
+                    SELECT IFNULL(SUM(net_amount),0)
+
+                    FROM bills
+
+                    WHERE DATE(bill_date)=DATE('now','localtime')
+
+                ) AS todaySales,
+                
+                (
+
+                    SELECT IFNULL(SUM(total_qty),0)
+
+                    FROM bills
+
+                    WHERE DATE(bill_date)=DATE('now','localtime')
+
+                ) AS todayQtySold,
+
+                (
+
+                    SELECT COUNT(*)
+
+                    FROM bills
+
+                    WHERE strftime('%Y-%m',bill_date)=strftime('%Y-%m','now','localtime')
+
+                ) AS mtdBills,
+
+                (
+
+                    SELECT IFNULL(SUM(net_amount),0)
+
+                    FROM bills
+
+                    WHERE strftime('%Y-%m',bill_date)=strftime('%Y-%m','now','localtime')
+
+                ) AS mtdSales,
+
+                (
+
+                    SELECT IFNULL(SUM(cash_amount),0)
+
+                    FROM bills
+
+                    WHERE DATE(bill_date)=DATE('now','localtime')
+
+                ) AS cashToday,
+
+                (
+
+                    SELECT IFNULL(SUM(upi_amount),0)
+
+                    FROM bills
+
+                    WHERE DATE(bill_date)=DATE('now','localtime')
+
+                ) AS upiToday,
+
+                (
+
+                    SELECT IFNULL(SUM(card_amount),0)
+
+                    FROM bills
+
+                    WHERE DATE(bill_date)=DATE('now','localtime')
+
+                ) AS cardToday
+
+        `;
+
+        db.get(
+
+            sql,
+
+            [],
+
+            (err,row)=>{
+
+                if(err){
+
+                    reject(err);
+
+                    return;
+
+                }
+
+                resolve(row);
+
+            }
+
+        );
+
+    });
+
+}
+
 module.exports = {
 
     saveBill,
@@ -685,6 +813,7 @@ module.exports = {
     getBills,
     getBillDetails,
     updatePaymentAllocation,
-    getPaymentCorrections
+    getPaymentCorrections,
+    getDashboardSummary
 
 };

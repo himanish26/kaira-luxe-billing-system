@@ -21,6 +21,121 @@ console.log(document.getElementById("viewUPI"));
 console.log(document.getElementById("viewCard"));
 console.log(document.getElementById("viewBillItems"));
 
+function formatCurrency(value) {
+
+    return new Intl.NumberFormat("en-IN", {
+
+        style: "currency",
+
+        currency: "INR",
+
+        minimumFractionDigits: 2,
+
+        maximumFractionDigits: 2
+
+    }).format(Number(value) || 0);
+
+}
+
+    async function loadDashboardSummary() {
+
+    try {
+
+        const data =
+            await window.electronAPI.getDashboardSummary();
+
+        document.getElementById(
+            "dashboardProducts"
+        ).textContent =
+            data.products ?? 0;
+
+        document.getElementById(
+            "dashboardCustomers"
+        ).textContent =
+            data.customers ?? 0;
+
+        document.getElementById(
+            "dashboardTodayBills"
+        ).textContent =
+            data.todayBills ?? 0;
+
+        document.getElementById(
+            "dashboardMTDBills"
+        ).textContent =
+            data.mtdBills ?? 0;
+
+        document.getElementById(
+            "dashboardCash"
+        ).textContent =
+            formatCurrency(
+                data.cashToday || 0
+            );
+
+        document.getElementById(
+            "dashboardUPI"
+        ).textContent =
+            formatCurrency(
+                data.upiToday || 0
+            );
+
+        document.getElementById(
+            "dashboardCard"
+        ).textContent =
+            formatCurrency(
+                data.cardToday || 0
+            );
+
+        document.getElementById(
+            "dashboardTotal"
+        ).textContent =
+            formatCurrency(
+                (data.cashToday || 0)
+                +
+                (data.upiToday || 0)
+                +
+                (data.cardToday || 0)
+            );
+
+        document.getElementById(
+            "dashboardTodaySales"
+        ).textContent =
+            formatCurrency(
+                data.todaySales || 0
+            );
+
+        document.getElementById(
+            "dashboardBusinessTodayBills"
+        ).textContent =
+            data.todayBills || 0;
+
+        document.getElementById(
+            "dashboardTodayQty"
+        ).textContent =
+            data.todayQtySold || 0;
+
+        document.getElementById(
+            "dashboardMTDSales"
+        ).textContent =
+            formatCurrency(
+                data.mtdSales || 0
+            );
+
+    }
+
+    
+
+    catch(err){
+
+        console.error(
+            err
+        );
+
+    }
+
+
+
+};
+
 const dashboardScreen =
     document.getElementById("dashboardScreen");
 
@@ -44,6 +159,21 @@ const storeCard =
 
 const inventoryCard =
     document.getElementById("inventoryCard");
+
+    const storeOverviewCard =
+    document.getElementById(
+        "storeOverviewCard"
+    );
+
+const businessOverviewCard =
+    document.getElementById(
+        "businessOverviewCard"
+    );
+
+let businessOverviewVisible =
+    false;
+
+let f6Timer = null;
 
     if (inventoryCard) {
 
@@ -71,9 +201,9 @@ if (storeCard){
 
     storeCard.addEventListener("click", () => {
 
-        settingsScreen.style.display = "none";
+    settingsScreen.style.display = "none";
 
-        settingsPage.style.display = "block";
+    settingsPage.style.display = "block";
         
     settingsPageContent.innerHTML = `
 
@@ -718,11 +848,13 @@ const settingsDashboardBtn =
 
 if (settingsDashboardBtn){
 
-    settingsDashboardBtn.addEventListener("click", () => {
+    settingsDashboardBtn.addEventListener("click", async () => {
 
         settingsScreen.style.display = "none";
 
         dashboardScreen.style.display = "block";
+
+        await loadDashboardSummary();
 
     });
     
@@ -739,6 +871,8 @@ if (reportsDashboardBtn){
         reportsScreen.style.display = "none";
 
         dashboardScreen.style.display = "block";
+
+        loadDashboardSummary();
 
     });
 
@@ -973,6 +1107,9 @@ gst_amount:
     paymentScreen.style.display = "none";
 
     dashboardScreen.style.display = "block";
+
+    await loadDashboardSummary();
+
     loadNextBillNumber();
     return billData;
 }
@@ -1013,6 +1150,8 @@ if (backBtn) {
 
     dashboardScreen.style.display = "block";
 
+    loadDashboardSummary();
+
     return;
 
 }
@@ -1035,6 +1174,7 @@ if (backBtn) {
 
     newBillScreen.style.display = "none";
     dashboardScreen.style.display = "block";
+    loadDashboardSummary();
 
 });
 }
@@ -1227,6 +1367,8 @@ renderBillHistory(allBills);
 billHistoryScreen.style.display = "none";
 
 dashboardScreen.style.display = "block";
+
+loadDashboardSummary();
         }
     );
 
@@ -1589,6 +1731,8 @@ function clearCurrentBill(){
     calculatePayment();
 
     loadNextBillNumber();
+
+    
 
 }
 
@@ -2358,6 +2502,42 @@ if (printInvoiceBtn) {
 
 }
 
+document.addEventListener("keydown", (event) => {
+
+    if (event.code !== "F6")
+        return;
+
+    if (f6Timer)
+        return;
+
+    f6Timer = setTimeout(() => {
+
+        storeOverviewCard.style.display = "none";
+        businessOverviewCard.style.display = "block";
+
+        f6Timer = null;
+
+    }, 2000);
+
+});
+
+document.addEventListener("keyup", (event) => {
+
+    if (event.code !== "F6")
+        return;
+
+    if (f6Timer) {
+
+        clearTimeout(f6Timer);
+        f6Timer = null;
+
+    storeOverviewCard.style.display = "block";
+    businessOverviewCard.style.display = "none";
+
+    }
+
+});
+
 const correctPaymentBtn =
     document.getElementById("correctPaymentBtn");
 
@@ -2645,3 +2825,15 @@ else{
 }
 
 }
+
+/* =====================================
+   INITIAL DASHBOARD LOAD
+===================================== */
+
+loadDashboardSummary();
+
+setInterval(() => {
+
+    loadDashboardSummary();
+
+}, 30000);

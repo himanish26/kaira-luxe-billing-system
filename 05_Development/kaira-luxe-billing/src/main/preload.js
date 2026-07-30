@@ -63,6 +63,14 @@ contextBridge.exposeInMainWorld(
                 "get-bills"
             ),
 
+            getDashboardSummary: () =>
+
+    ipcRenderer.invoke(
+
+        "get-dashboard-summary"
+
+    ),
+
         getBillDetails: (billNo) =>
             ipcRenderer.invoke(
                 "get-bill-details",

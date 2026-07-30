@@ -18,12 +18,15 @@ const {
 );
 
 const {
+
     saveBill,
     getNextBillNumber,
     getBills,
     getBillDetails,
     updatePaymentAllocation,
-    getPaymentCorrections
+    getPaymentCorrections,
+    getDashboardSummary
+
 } = require("../database/billService");
 
 const {
@@ -638,6 +641,51 @@ return await exportReport(
 );
 
 const packageInfo = require("../../package.json");
+
+ipcMain.handle(
+
+    "get-dashboard-summary",
+
+    async () => {
+
+        try {
+
+            return await getDashboardSummary();
+
+        }
+
+        catch (error) {
+
+            console.error(
+
+                "Dashboard Summary Error:",
+
+                error
+
+            );
+
+            return {
+
+                products: 0,
+                customers: 0,
+
+                todayBills: 0,
+                todaySales: 0,
+
+                mtdBills: 0,
+                mtdSales: 0,
+
+                cashToday: 0,
+                upiToday: 0,
+                cardToday: 0
+
+            };
+
+        }
+
+    }
+
+);
 
 ipcMain.handle("get-app-info", async () => {
 

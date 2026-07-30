@@ -54,15 +54,118 @@
 
         </div>
 
-        <div class="summary-card">
+        <div class="dashboard-footer">
 
-            <h3>System Summary</h3>
+    <!-- PAYMENT SUMMARY -->
 
-            <p>Total Products: 0</p>
+    <div class="dashboard-card">
 
-            <p>Total Bills: 0</p>
+        <h3>PAYMENT SUMMARY</h3>
+
+        <div class="dashboard-row">
+            <span>💵 Cash</span>
+            <span id="dashboardCash">₹0.00</span>
+        </div>
+
+        <div class="dashboard-row">
+            <span>📱 UPI</span>
+            <span id="dashboardUPI">₹0.00</span>
+        </div>
+
+        <div class="dashboard-row">
+            <span>💳 Card</span>
+            <span id="dashboardCard">₹0.00</span>
+        </div>
+
+        <hr>
+
+        <div class="dashboard-row dashboard-total">
+
+            <span>Total</span>
+
+            <span id="dashboardTotal">
+                ₹0.00
+            </span>
 
         </div>
+
+    </div>
+
+    <!-- STORE OVERVIEW -->
+
+    <div
+        class="dashboard-card"
+        id="storeOverviewCard">
+
+        <h3>STORE OVERVIEW</h3>
+
+        <div class="dashboard-row">
+            <span>📦 Products</span>
+            <span id="dashboardProducts">0</span>
+        </div>
+
+        <div class="dashboard-row">
+            <span>👥 Customers</span>
+            <span id="dashboardCustomers">0</span>
+        </div>
+
+        <div class="dashboard-row">
+            <span>🧾 Today's Bills</span>
+            <span id="dashboardTodayBills">0</span>
+        </div>
+
+        <div class="dashboard-row">
+            <span>📅 MTD Bills</span>
+            <span id="dashboardMTDBills">0</span>
+        </div>
+
+    </div>
+
+    <!-- BUSINESS OVERVIEW -->
+
+<div
+    class="dashboard-card"
+    id="businessOverviewCard"
+    style="display:none;">
+
+    <h3>BUSINESS OVERVIEW</h3>
+
+    <div class="dashboard-row">
+        <span>💰 Today's Sales</span>
+        <span id="dashboardTodaySales">
+            ₹0.00
+        </span>
+    </div>
+
+    <div class="dashboard-row">
+        <span>🧾 Today's Bills</span>
+        <span id="dashboardBusinessTodayBills">
+            0
+        </span>
+    </div>
+
+    <div class="dashboard-row">
+        <span>📦 Today's Qty Sold</span>
+        <span id="dashboardTodayQty">
+            0
+        </span>
+    </div>
+
+    <hr>
+
+    <div class="dashboard-row dashboard-total">
+
+        <span>📅 MTD Sales</span>
+
+        <span id="dashboardMTDSales">
+            ₹0.00
+        </span>
+
+    </div>
+
+</div>
+
+</div>
 
     </div>
 
@@ -772,6 +875,16 @@ maxlength="11">
         <div class="summary-card">
 
             <h2>Payment</h2>
+            
+            <label for="cashAmount"> 💵 Cash 💵 </label>
+
+            <input
+                type="number"
+                id="cashAmount"
+                value="0"
+                min="0"
+                step="0.01"
+            >
 
             <label for="upiAmount"> 📱 UPI 📱 </label>
 
@@ -782,16 +895,6 @@ maxlength="11">
                 min="0"
                 step="0.01"
                 autocomplete="off"
-            >
-            
-            <label for="cashAmount"> 💵 Cash 💵 </label>
-
-            <input
-                type="number"
-                id="cashAmount"
-                value="0"
-                min="0"
-                step="0.01"
             >
 
             <label for="cardAmount"> 💳 Card 💳 </label>
