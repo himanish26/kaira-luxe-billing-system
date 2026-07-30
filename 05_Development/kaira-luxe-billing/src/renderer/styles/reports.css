@@ -16,7 +16,7 @@
 
 .reports-container h1 {
 
-    font-size:56px;
+    font-size:72px;
 
     font-weight:800;
 
@@ -30,7 +30,7 @@
 
 .reports-subtitle {
 
-    font-size:24px;
+    font-size:28px;
 
     color:#666;
 
@@ -447,5 +447,38 @@
     color:#222;
 
     line-height:1.5;
+
+}
+
+.reports-top-row{
+
+    display:flex;
+
+    gap:24px;
+
+    align-items:stretch;
+
+    margin-bottom:20px;
+
+}
+
+.report-type-card{
+
+    flex:1;
+
+}
+
+.date-range-card{
+
+    flex:1.6;
+
+}
+
+.report-type-card,
+.date-range-card{
+
+    display:flex;
+
+    flex-direction:column;
 
 }
