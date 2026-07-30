@@ -1,7 +1,7 @@
 {
   "name": "kaira-luxe-billing",
   "productName": "KAIRA LUXE BILLING SYSTEM",
-  "version": "1.0.0-beta",
+  "version": "1.0.0-rc1",
   "description": "Professional Billing & Inventory Management System for Kaira Luxe",
   "main": "src/main/main.js",
   "scripts": {

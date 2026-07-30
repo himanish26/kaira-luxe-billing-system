@@ -537,6 +537,8 @@ const dd = String(today.getDate()).padStart(2, "0");
 const mm = String(today.getMonth() + 1).padStart(2, "0");
 const yyyy = today.getFullYear();
 
+const formattedDate = `${dd}_${mm}_${yyyy}`;
+
 let fileName;
 
 switch (request.reportType) {
@@ -544,35 +546,35 @@ switch (request.reportType) {
     case "business":
 
         fileName =
-            `KLBusinessReport${dd}${mm}${yyyy}.xlsx`;
+            `KL_Business_Report_${formattedDate}.xlsx`;
 
         break;
 
     case "gst":
 
         fileName =
-            `KLGSTReport${dd}${mm}${yyyy}.xlsx`;
+            `KL_GST_Report_${formattedDate}.xlsx`;
 
         break;
 
     case "product":
 
         fileName =
-            `KLProductSalesReport${dd}${mm}${yyyy}.xlsx`;
+            `KL_Product_Sales_Report_${formattedDate}.xlsx`;
 
         break;
 
     case "customer":
 
         fileName =
-            `KLCustomerPurchaseReport${dd}${mm}${yyyy}.xlsx`;
+            `KL_Customer_Purchase_Report_${formattedDate}.xlsx`;
 
         break;
 
     default:
 
         fileName =
-            `Report${dd}${mm}${yyyy}.xlsx`;
+            `KL_Report_${formattedDate}.xlsx`;
 
 }
 

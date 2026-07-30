@@ -403,3 +403,49 @@
     color: #6b4d59;
 
 }
+
+/* =====================================
+   SELECTED REPORT PERIOD
+===================================== */
+
+.selected-period-card{
+
+    margin-top:20px;
+
+    padding:16px 18px;
+
+    background:#f8f8f8;
+
+    border:1px solid #e0e0e0;
+
+    border-radius:8px;
+
+}
+
+.selected-period-title{
+
+    font-size:15px;
+
+    font-weight:700;
+
+    color:#666;
+
+    margin-bottom:8px;
+
+    text-transform:uppercase;
+
+    letter-spacing:.5px;
+
+}
+
+#selectedPeriodText{
+
+    font-size:18px;
+
+    font-weight:700;
+
+    color:#222;
+
+    line-height:1.5;
+
+}

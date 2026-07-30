@@ -149,6 +149,11 @@ const reportDescription =
         "reportDescription"
     );
 
+const selectedPeriodText =
+    document.getElementById(
+        "selectedPeriodText"
+    );
+
 const exportReportBtn =
     document.getElementById(
         "exportReportBtn"
@@ -161,6 +166,8 @@ function initializeReports() {
     setupReportSelection();
 
     setupDateRange();
+
+    setMaximumReportDate();
 
     setupExportButton();
 
@@ -211,13 +218,29 @@ function updateSelectedReportCard() {
 
 }
 
+function setMaximumReportDate() {
+
+    const today = new Date()
+        .toISOString()
+        .split("T")[0];
+
+    document
+        .getElementById("fromDate")
+        .max = today;
+
+    document
+        .getElementById("toDate")
+        .max = today;
+
+}
+
 function setupDateRange(){
 
     reportDateRange.addEventListener("change", () => {
 
         if(reportDateRange.value === "custom"){
 
-            customDateRange.style.display = "block";
+            customDateRange.style.display = "flex";
 
         }
 
@@ -227,7 +250,43 @@ function setupDateRange(){
 
         }
 
+        updateSelectedPeriod();
+
     });
+
+    const fromDate =
+    document.getElementById("fromDate");
+
+const toDate =
+    document.getElementById("toDate");
+
+fromDate.addEventListener("change", () => {
+
+    if (toDate.value && fromDate.value > toDate.value) {
+
+        toDate.value = fromDate.value;
+
+    }
+
+    updateSelectedPeriod();
+
+});
+
+toDate.addEventListener("change", () => {
+
+    if (fromDate.value && toDate.value < fromDate.value) {
+
+        alert("To Date cannot be earlier than From Date.");
+
+        toDate.value = fromDate.value;
+
+    }
+
+    updateSelectedPeriod();
+
+});
+
+    updateSelectedPeriod();
 
 }
 
@@ -253,8 +312,7 @@ async function startReportExport() {
 
     }
 
-    const report =
-        reports[request.reportType];
+    const report = reports[request.reportType];
 
     if (!report) {
 
@@ -266,22 +324,36 @@ async function startReportExport() {
 
     const exportAction = async () => {
 
-        const result =
-            await window.electronAPI.exportReport(
-                request
-            );
+        exportReportBtn.disabled = true;
 
-        console.log(result);
+        exportReportBtn.innerHTML = "⏳ EXPORTING...";
 
-        if (result.success) {
+        try {
 
-            alert("✅ Report exported successfully.");
+            const result =
+                await window.electronAPI.exportReport(request);
+
+            console.log(result);
+
+            if (result.success) {
+
+                alert("✅ Report exported successfully.");
+
+            }
+
+            else if (!result.cancelled) {
+
+                alert(result.error || "Unable to export report.");
+
+            }
 
         }
 
-        else if (!result.cancelled) {
+        finally {
 
-            alert(result.error || "Unable to export report.");
+            exportReportBtn.disabled = false;
+
+            exportReportBtn.innerHTML = "📊 EXPORT TO EXCEL";
 
         }
 
@@ -523,6 +595,145 @@ ${item}
 `;
 
 }
+
+function updateSelectedPeriod(){
+
+    const option = reportDateRange.value;
+
+    const today = new Date();
+
+    const formatDisplayDate = (date) => {
+
+        return date.toLocaleDateString("en-IN", {
+
+            day: "numeric",
+
+            month: "long",
+
+            year: "numeric"
+
+        });
+
+    };
+
+    let text = "";
+
+    switch(option){
+
+        case "today":
+
+            text = formatDisplayDate(today);
+
+            break;
+
+        case "yesterday":{
+
+            const yesterday = new Date(today);
+
+            yesterday.setDate(today.getDate() - 1);
+
+            text = formatDisplayDate(yesterday);
+
+            break;
+
+        }
+
+        case "thisMonth":{
+
+            const firstDay = new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                1
+            );
+
+            text =
+                `${formatDisplayDate(firstDay)} to Till Date`;
+
+            break;
+
+        }
+
+        case "lastMonth":{
+
+            const firstDay = new Date(
+                today.getFullYear(),
+                today.getMonth() - 1,
+                1
+            );
+
+            const lastDay = new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                0
+            );
+
+            text =
+                `${formatDisplayDate(firstDay)} to ${formatDisplayDate(lastDay)}`;
+
+            break;
+
+        }
+
+        case "currentFY":{
+
+            const fyYear =
+                today.getMonth() >= 3
+                    ? today.getFullYear()
+                    : today.getFullYear() - 1;
+
+            text =
+                `1 April ${fyYear} to Till Date`;
+
+            break;
+
+        }
+
+        case "previousFY":{
+
+            const fyYear =
+                today.getMonth() >= 3
+                    ? today.getFullYear() - 1
+                    : today.getFullYear() - 2;
+
+            text =
+                `1 April ${fyYear} to 31 March ${fyYear + 1}`;
+
+            break;
+
+        }
+
+        case "custom":{
+
+            const from =
+                document.getElementById("fromDate").value;
+
+            const to =
+                document.getElementById("toDate").value;
+
+            if(from && to){
+
+                text =
+                    `${formatDisplayDate(new Date(from))} to ${formatDisplayDate(new Date(to))}`;
+
+            }
+
+            else{
+
+                text =
+                    "Please select both dates.";
+
+            }
+
+            break;
+
+        }
+
+    }
+
+    selectedPeriodText.textContent = text;
+
+}
+
 /* =====================================
    INITIALIZE REPORTS
 ===================================== */
