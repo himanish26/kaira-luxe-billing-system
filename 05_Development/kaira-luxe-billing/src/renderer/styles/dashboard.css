@@ -111,6 +111,18 @@
 
 }
 
+#systemStatusCard .dashboard-row span:first-child {
+    color: #333;
+}
+
+#systemStatusCard .dashboard-row span:last-child {
+    font-weight: 700;
+}
+
+#systemStatusCard {
+    min-height: 100%;
+}
+
 .dashboard-row{
 
     display:flex;
@@ -124,6 +136,12 @@
     font-size:22px;
 
     font-weight:600;
+
+}
+
+.dashboard-row:last-child {
+
+    border-bottom: none;
 
 }
 

@@ -160,18 +160,19 @@ const storeCard =
 const inventoryCard =
     document.getElementById("inventoryCard");
 
-    const storeOverviewCard =
-    document.getElementById(
-        "storeOverviewCard"
-    );
+const systemStatusCard =
+    document.getElementById("systemStatusCard");
+
+const paymentSummaryCard =
+    document.getElementById("paymentSummaryCard");
+
+const storeOverviewCard =
+    document.getElementById("storeOverviewCard");
 
 const businessOverviewCard =
-    document.getElementById(
-        "businessOverviewCard"
-    );
+    document.getElementById("businessOverviewCard");
 
-let businessOverviewVisible =
-    false;
+let businessOverviewVisible = false;
 
 let f6Timer = null;
 
@@ -2512,12 +2513,15 @@ document.addEventListener("keydown", (event) => {
 
     f6Timer = setTimeout(() => {
 
-        storeOverviewCard.style.display = "none";
-        businessOverviewCard.style.display = "block";
+    systemStatusCard.style.display = "none";
+    paymentSummaryCard.style.display = "block";
 
-        f6Timer = null;
+    storeOverviewCard.style.display = "none";
+    businessOverviewCard.style.display = "block";
 
-    }, 2000);
+    f6Timer = null;
+
+}, 2000);
 
 });
 
@@ -2531,8 +2535,11 @@ document.addEventListener("keyup", (event) => {
         clearTimeout(f6Timer);
         f6Timer = null;
 
-    storeOverviewCard.style.display = "block";
-    businessOverviewCard.style.display = "none";
+    systemStatusCard.style.display = "block";
+paymentSummaryCard.style.display = "none";
+
+storeOverviewCard.style.display = "block";
+businessOverviewCard.style.display = "none";
 
     }
 
