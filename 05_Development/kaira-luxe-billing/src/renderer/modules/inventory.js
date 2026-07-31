@@ -196,14 +196,17 @@ async function searchProducts(keyword) {
     products.forEach(product => {
 
         tbody.innerHTML += `
-            <tr>
-                <td>${product.barcode}</td>
-                <td>${product.product_name}</td>
-                <td>${product.brand}</td>
-                <td>${product.category}</td>
-                <td>${product.size}</td>
-                <td>₹${Number(product.mrp).toFixed(2)}</td>
-            </tr>
+        <tr>
+            <td>${product.barcode}</td>
+            <td>${product.brand}</td>
+            <td>${product.segment || ""}</td>
+            <td>${product.category}</td>
+            <td>${product.season || ""}</td>
+            <td>${product.collection || ""}</td>
+            <td>${product.product_name}</td>
+            <td>${product.size}</td>
+            <td>₹${Number(product.mrp).toFixed(2)}</td>
+        </tr>
         `;
 
     });
@@ -385,11 +388,18 @@ function initializeInventoryEvents() {
 
         searchBox.addEventListener("input", (e) => {
 
-            searchProducts(
-    e.target.value.trim()
-);
+    const keyword = e.target.value.trim();
 
-        });
+    if (keyword === "") {
+
+        loadProducts();
+        return;
+
+    }
+
+    searchProducts(keyword);
+
+});
 
     }
 
