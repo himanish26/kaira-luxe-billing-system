@@ -14,19 +14,34 @@ window.productMasterTemplate = `
     <div class="master-stats">
 
         <div>
-            Products :
-            <span id="inventoryProductCount">0</span>
-        </div>
+    Products :
+    <span id="inventoryProductCount">0</span>
+</div>
 
-        <div>
-            Brands :
-            <span id="inventoryBrandCount">0</span>
-        </div>
+<div>
+    Brands :
+    <span id="inventoryBrandCount">0</span>
+</div>
 
-        <div>
-            Categories :
-            <span id="inventoryCategoryCount">0</span>
-        </div>
+<div>
+    Segments :
+    <span id="inventorySegmentCount">0</span>
+</div>
+
+<div>
+    Categories :
+    <span id="inventoryCategoryCount">0</span>
+</div>
+
+<div>
+    Seasons :
+    <span id="inventorySeasonCount">0</span>
+</div>
+
+<div>
+    Collections :
+    <span id="inventoryCollectionCount">0</span>
+</div>
 
     </div>
 
@@ -87,9 +102,12 @@ window.productMasterTemplate = `
             <tr>
 
                 <th>Barcode</th>
-                <th>Product</th>
                 <th>Brand</th>
+                <th>Segment</th>
                 <th>Category</th>
+                <th>Season</th>
+                <th>Collection</th>
+                <th>Product</th>
                 <th>Size</th>
                 <th>MRP</th>
 

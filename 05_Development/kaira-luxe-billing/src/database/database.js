@@ -28,7 +28,13 @@ function createTables() {
 
     brand TEXT,
 
+    segment TEXT DEFAULT 'Women',
+
     category TEXT,
+
+    season TEXT DEFAULT 'All Season',
+
+    collection TEXT DEFAULT '',
 
     product_name TEXT,
 
@@ -220,10 +226,68 @@ Berhampur-760001',
     )
 `);
 
+        runDatabaseMigrations();
+
         console.log("All Tables Created Successfully");
     });
 
     
+
+}
+
+function runDatabaseMigrations() {
+
+    db.all(
+        "PRAGMA table_info(products)",
+        [],
+        (err, columns) => {
+
+            if (err) {
+
+                console.error("Migration Error:", err);
+                return;
+
+            }
+
+            const existingColumns =
+                columns.map(c => c.name);
+
+            if (!existingColumns.includes("segment")) {
+
+                db.run(`
+                    ALTER TABLE products
+                    ADD COLUMN segment TEXT DEFAULT 'Women'
+                `);
+
+                console.log("✓ Added column: segment");
+
+            }
+
+            if (!existingColumns.includes("season")) {
+
+                db.run(`
+                    ALTER TABLE products
+                    ADD COLUMN season TEXT DEFAULT 'All Season'
+                `);
+
+                console.log("✓ Added column: season");
+
+            }
+
+            if (!existingColumns.includes("collection")) {
+
+                db.run(`
+                    ALTER TABLE products
+                    ADD COLUMN collection TEXT DEFAULT ''
+                `);
+
+                console.log("✓ Added column: collection");
+
+            }
+
+        }
+
+    );
 
 }
 

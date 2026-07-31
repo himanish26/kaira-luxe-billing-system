@@ -43,7 +43,10 @@ function getInventorySummary() {
             SELECT
                 COUNT(*) AS products,
                 COUNT(DISTINCT brand) AS brands,
-                COUNT(DISTINCT category) AS categories
+                COUNT(DISTINCT segment) AS segments,
+                COUNT(DISTINCT category) AS categories,
+                COUNT(DISTINCT season) AS seasons,
+                COUNT(DISTINCT collection) AS collections
             FROM products
             `,
             [],
@@ -108,14 +111,22 @@ function searchProducts(keyword) {
                 barcode LIKE ?
                 OR product_name LIKE ?
                 OR brand LIKE ?
+                OR segment LIKE ?
+                OR category LIKE ?
+                OR season LIKE ?
+                OR collection LIKE ?
                 OR style_code LIKE ?
             ORDER BY product_name
             `,
             [
-                `%${keyword}%`,
-                `%${keyword}%`,
-                `%${keyword}%`,
-                `%${keyword}%`
+                `%${keyword}%`, // barcode
+                `%${keyword}%`, // product_name
+                `%${keyword}%`, // brand
+                `%${keyword}%`, // segment
+                `%${keyword}%`, // category
+                `%${keyword}%`, // season
+                `%${keyword}%`, // collection
+                `%${keyword}%`  // style_code
             ],
             (err, rows) => {
 

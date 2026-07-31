@@ -24,7 +24,10 @@ function importProducts(filePath) {
                     barcode,
                     sku,
                     brand,
+                    segment,
                     category,
+                    season,
+                    collection,
                     product_name,
                     style_code,
                     size,
@@ -40,13 +43,21 @@ function importProducts(filePath) {
                     active
                 )
                 VALUES
-                (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 `,
                 [
                     product.barcode,
                     product.sku,
                     product.brand,
+
+                    product.segment || "Women",
+
                     product.category,
+
+                    product.season || "All Season",
+
+                    product.collection || "",
+
                     product.product_name,
                     product.style_code,
                     product.size,
