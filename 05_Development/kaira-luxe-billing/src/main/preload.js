@@ -40,7 +40,7 @@ contextBridge.exposeInMainWorld(
                 "import-products",
                 filePath
             ),
-
+            
         getProduct: (barcode) =>
             ipcRenderer.invoke(
                 "get-product",
@@ -104,9 +104,14 @@ contextBridge.exposeInMainWorld(
             ),
 
             exportInventory: () =>
-    ipcRenderer.invoke(
-        "export-inventory"
-    ),
+                ipcRenderer.invoke(
+                "export-inventory"
+            ),
+
+            downloadProductMasterTemplate: () =>
+                ipcRenderer.invoke(
+                    "download-product-master-template"
+                ),
 
         // ⭐ NEW APIs
 

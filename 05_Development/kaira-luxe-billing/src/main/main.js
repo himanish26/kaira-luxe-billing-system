@@ -41,6 +41,10 @@ const importProducts =
     require('../database/importProducts');
 
 const {
+    downloadProductMasterTemplate
+} = require("../database/productMasterExporter");
+
+const {
     app,
     BrowserWindow,
     ipcMain,
@@ -463,8 +467,11 @@ ipcMain.handle(
                 { header: "Barcode", key: "barcode", width: 18 },
                 { header: "SKU", key: "sku", width: 18 },
                 { header: "Brand", key: "brand", width: 18 },
-                { header: "Category", key: "category", width: 20 },
-                { header: "Product", key: "product_name", width: 35 },
+                { header: "Segment", key: "segment", width: 15 },
+                { header: "Category", key: "category", width: 18 },
+                { header: "Season", key: "season", width: 15 },
+                { header: "Collection", key: "collection", width: 22 },
+                { header: "Product Name", key: "product_name", width: 35 },
                 { header: "Style Code", key: "style_code", width: 18 },
                 { header: "Size", key: "size", width: 12 },
                 { header: "Colour", key: "colour", width: 15 },
@@ -529,6 +536,72 @@ ipcMain.handle(
         }
 
 });
+
+ipcMain.handle(
+    "download-product-master-template",
+    async () => {
+
+        try {
+
+            const result =
+                await dialog.showSaveDialog({
+
+                    defaultPath: "Kaira_Luxe_Product_Master_Template.xlsx",
+
+                    filters: [
+
+                        {
+
+                            name: "Excel Workbook",
+
+                            extensions: ["xlsx"]
+
+                        }
+
+                    ]
+
+                });
+
+            if (result.canceled) {
+
+                return {
+
+                    success: false,
+
+                    cancelled: true
+
+                };
+
+            }
+
+            await downloadProductMasterTemplate(
+                result.filePath
+            );
+
+            return {
+
+                success: true
+
+            };
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            return {
+
+                success: false,
+
+                error: error.message
+
+            };
+
+        }
+
+    }
+);
 
 ipcMain.handle(
 

@@ -221,12 +221,30 @@ async function importProductMaster(){
 
     console.log("Import Product Master");
 
+    const importBtn =
+    document.getElementById("importBtn");
+
+    importBtn.disabled = true;
+
+    importBtn.textContent =
+        "⏳ Importing...";
+
+    const downloadTemplateBtn =
+    document.getElementById("downloadTemplateBtn");
+
     const filePath =
         await window.electronAPI.selectExcelFile();
 
     if(!filePath){
-        return;
-    }
+
+    importBtn.disabled = false;
+
+    importBtn.textContent =
+        "📥 Import Product Master";
+
+    return;
+
+}
     
     const result =
         await window.electronAPI.importProducts(filePath);
@@ -235,7 +253,7 @@ async function importProductMaster(){
 
     if(result.success){
 
-        alert(
+    alert(
 `Import Completed
 
 New Products : ${result.imported}
@@ -243,15 +261,25 @@ New Products : ${result.imported}
 Duplicates Skipped : ${result.skipped}
 
 Rows Read : ${result.total}`
-);
+    );
 
-        refreshInventory();
+    await refreshInventory();
 
-    }else{
+    importBtn.disabled = false;
 
-        alert(result.error);
+    importBtn.textContent =
+        "📥 Import Product Master";
 
-    }
+}else{
+
+    importBtn.disabled = false;
+
+    importBtn.textContent =
+        "📥 Import Product Master";
+
+    alert(result.error);
+
+}
 
 }
 
@@ -285,14 +313,40 @@ Product summary, last import details and inventory list have been reloaded.`
 
 async function exportInventory(){
 
-    const result =
-        await window.electronAPI.exportInventory();
+    const exportBtn =
+        document.getElementById("exportInventoryBtn");
 
-    if(result.success){
+    exportBtn.disabled = true;
 
-        alert(
+    exportBtn.textContent =
+        "⏳ Exporting...";
+
+    try{
+
+        const result =
+            await window.electronAPI.exportInventory();
+
+        if(result.success){
+
+            alert(
 `Inventory exported successfully.`
-        );
+            );
+
+        }
+        else if(result.error){
+
+            alert(result.error);
+
+        }
+
+    }
+
+    finally{
+
+        exportBtn.disabled = false;
+
+        exportBtn.textContent =
+            "📤 Export to Excel";
 
     }
 
@@ -351,6 +405,9 @@ function initializeInventoryEvents() {
     const importBtn =
         document.getElementById("importBtn");
 
+    const downloadTemplateBtn =
+        document.getElementById("downloadTemplateBtn");
+
     const refreshBtn =
         document.getElementById("refreshInventoryBtn");
 
@@ -364,7 +421,59 @@ function initializeInventoryEvents() {
         document.getElementById("inventorySearch");
 
     if (importBtn)
-        importBtn.onclick = importProductMaster;
+
+    importBtn.onclick = () => {
+
+        requireAdminAuthorization(() => {
+
+            importProductMaster();
+
+        });
+
+    };
+
+    if (downloadTemplateBtn)
+
+    downloadTemplateBtn.onclick = async () => {
+
+        downloadTemplateBtn.disabled = true;
+
+        downloadTemplateBtn.textContent =
+            "⏳ Downloading...";
+
+        try {
+
+            const result =
+                await window.electronAPI.downloadProductMasterTemplate();
+
+            if (result?.success) {
+
+                alert(
+                    "Product Master Template downloaded successfully."
+                );
+
+            } else if (result?.error) {
+
+                alert(result.error);
+
+            }
+
+        } catch (err) {
+
+            console.error(err);
+
+            alert(err.message);
+
+        } finally {
+
+            downloadTemplateBtn.disabled = false;
+
+            downloadTemplateBtn.textContent =
+                "📄 Download Master Template";
+
+        }
+
+    };
 
     if (refreshBtn)
         refreshBtn.onclick = refreshInventory;
@@ -383,7 +492,7 @@ function initializeInventoryEvents() {
             });
 
         };
-
+    
     if (searchBox) {
 
         searchBox.addEventListener("input", (e) => {

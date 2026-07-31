@@ -45,6 +45,8 @@ window.productMasterTemplate = `
 
     </div>
 
+    <div class="inventory-action-buttons">
+
     <button
         id="importBtn"
         class="dashboard-btn">
@@ -52,6 +54,16 @@ window.productMasterTemplate = `
         📥 Import Product Master
 
     </button>
+
+    <button
+        id="downloadTemplateBtn"
+        class="dashboard-btn">
+
+        📄 Download Master Template
+
+    </button>
+
+</div>
 
 </div>
 
