@@ -80,6 +80,20 @@ const {
 } = require("../services/backupService");
 
 const {
+    checkForUpdates
+} = require("../services/updateService");
+
+const {
+
+    downloadFile
+
+} = require(
+
+    "../services/downloadService"
+
+);
+
+const {
 
     startBackupScheduler
 
@@ -1063,6 +1077,78 @@ ipcMain.handle(
             options
 
         );
+
+    }
+
+);
+
+ipcMain.handle(
+
+    "updates:check",
+
+    async () => {
+
+        return await checkForUpdates();
+
+    }
+
+);
+
+ipcMain.handle(
+
+    "updates:download",
+
+    async (
+
+        event,
+
+        url,
+
+        fileName
+
+    ) => {
+
+        try {
+
+            const downloadedFile =
+
+                await downloadFile(
+
+                    event,
+
+                    url,
+
+                    fileName
+
+                );
+
+            return {
+
+                success: true,
+
+                filePath:
+
+                    downloadedFile
+
+            };
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            return {
+
+                success: false,
+
+                message:
+
+                    error.message
+
+            };
+
+        }
 
     }
 

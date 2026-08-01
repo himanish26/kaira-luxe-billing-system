@@ -82,4 +82,120 @@ async function showUpdatesPage() {
 
     });
 
+    document
+
+    .getElementById("checkUpdatesCard")
+
+    .addEventListener(
+
+        "click",
+
+        async () => {
+
+            const result =
+                await window.electronAPI.checkForUpdates();
+
+            console.log(result);
+
+            if (!result.success) {
+
+                await window.electronAPI.showMessageBox({
+
+                    type: "error",
+
+                    title: "Update Check Failed",
+
+                    message: result.message
+
+                });
+
+                return;
+
+            }
+
+            if (!result.updateAvailable) {
+
+                await window.electronAPI.showMessageBox({
+
+                    type: "info",
+
+                    title: "You're Up To Date",
+
+                    message:
+
+`Current Version : ${result.currentVersion}
+
+You are already using the latest version.`
+
+                });
+
+                return;
+
+            }
+
+            const info =
+    result.updateInfo;
+
+const releaseNotes =
+    info.notes
+        .map(note => `• ${note}`)
+        .join("\n");
+
+const response =
+    await window.electronAPI.showMessageBox({
+
+        type: "info",
+
+        title: "New Version Available",
+
+        buttons: [
+
+            "Later",
+
+            "Download"
+
+        ],
+
+        defaultId: 1,
+
+        cancelId: 0,
+
+        message:
+
+`Current Version
+
+${result.currentVersion}
+
+Latest Version
+
+${result.latestVersion}
+
+Release Date
+
+${info.releaseDate}
+
+What's New
+
+${releaseNotes}`
+
+    });
+
+if (response.response !== 1) {
+
+    return;
+
+}
+
+console.log(
+
+    "User chose Download."
+
+);
+
+// Download starts here
+
+        }
+
+    );
+
 }

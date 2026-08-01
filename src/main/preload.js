@@ -186,17 +186,51 @@ restoreBackup: (
 
 ),
 
-restoreBackup: (
+checkForUpdates: () =>
 
-    zipPath
+    ipcRenderer.invoke(
+        "updates:check"
+    ),
 
-) => ipcRenderer.invoke(
+downloadUpdate: (
 
-    "backup:restore",
+    url,
 
-    zipPath
+    fileName
 
-),
+) =>
+
+    ipcRenderer.invoke(
+
+        "updates:download",
+
+        url,
+
+        fileName
+
+    ),
+
+onDownloadProgress: (
+
+    callback
+
+) =>
+
+    ipcRenderer.on(
+
+        "update-download-progress",
+
+        (
+
+            event,
+
+            progress
+
+        ) =>
+
+            callback(progress)
+
+    ),
 
 }
 
