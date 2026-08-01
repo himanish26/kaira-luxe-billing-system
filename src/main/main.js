@@ -71,9 +71,19 @@ const {
 
     createBackup,
 
-    getBackupHistory
+    getBackupHistory,
+
+    validateBackup,
+
+    restoreBackup
 
 } = require("../services/backupService");
+
+const {
+
+    startBackupScheduler
+
+} = require("../services/backupScheduler");
 
 function createWindow() {
 
@@ -109,7 +119,10 @@ app.whenReady().then(() => {
 
     createWindow();
 
+    startBackupScheduler();
+
 });
+
 ipcMain.handle(
     'select-excel-file',
     async () => {
@@ -948,6 +961,108 @@ ipcMain.handle(
         }
 
         return result.filePaths[0];
+
+    }
+
+);
+
+ipcMain.handle(
+
+    "backup:validate",
+
+    async (event, zipPath) => {
+
+        return await validateBackup(zipPath);
+
+    }
+
+);
+
+ipcMain.handle(
+
+    "backup:restore",
+
+    async (
+
+        event,
+
+        zipPath
+
+    ) => {
+
+        return await restoreBackup(
+            zipPath
+        );
+
+    }
+
+);
+
+ipcMain.handle(
+
+    "restore:selectFile",
+
+    async () => {
+
+        const { canceled, filePaths } =
+            await dialog.showOpenDialog({
+
+                title: "Select Backup",
+
+                properties: [
+
+                    "openFile"
+
+                ],
+
+                filters: [
+
+                    {
+
+                        name: "Backup ZIP",
+
+                        extensions: [
+
+                            "zip"
+
+                        ]
+
+                    }
+
+                ]
+
+            });
+
+        return {
+
+            canceled,
+
+            filePath:
+
+                filePaths[0]
+
+        };
+
+    }
+
+);
+/* ===========================================
+   SHOW MESSAGE BOX
+=========================================== */
+
+ipcMain.handle(
+
+    "dialog:showMessageBox",
+
+    async (event, options) => {
+
+        return await dialog.showMessageBox(
+
+            BrowserWindow.getFocusedWindow(),
+
+            options
+
+        );
 
     }
 

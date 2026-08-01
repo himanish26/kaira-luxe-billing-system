@@ -1,12 +1,13 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { app } = require("electron");
+const {
+    app
+} = require("electron");
+
+const packageJson = require("../../package.json");
 const archiver = require("archiver");
-
-console.log("ARCHIVER =", archiver);
-console.log("TYPE =", typeof archiver);
-
+const AdmZip = require("adm-zip");
 const DEFAULT_BACKUP_FOLDER = path.join(
     os.homedir(),
     "Documents",
@@ -93,13 +94,6 @@ async function createBackup() {
         "billing.db"
     );
 
-    const userDataPath = app.getPath("userData");
-
-    const electronStoreFile = path.join(
-        userDataPath,
-        "config.json"
-    );
-
     return new Promise((resolve, reject) => {
 
         const output =
@@ -138,40 +132,67 @@ async function createBackup() {
 
         archive.pipe(output);
 
+        const backupInfo = {
+
+    application:
+        packageJson.productName ||
+        "KAIRA LUXE Billing System",
+
+    backupSchema: 1,
+
+    appVersion:
+        packageJson.version,
+
+    createdOn:
+        new Date().toISOString(),
+
+    createdBy:
+        "Administrator",
+
+    database:
+        "billing.db",
+
+    includesSettings:
+    true,
+
+    platform:
+        process.platform,
+
+    electron:
+        process.versions.electron,
+
+    node:
+        process.versions.node
+
+};
+
+archive.append(
+
+    JSON.stringify(
+        backupInfo,
+        null,
+        4
+    ),
+
+    {
+
+        name:
+            "backup-info.json"
+
+    }
+
+);
+
         archive.file(
     databasePath,
     {
         name: "Database/billing.db"
     }
     
+    
+
 );
 
-if (fs.existsSync(electronStoreFile)) {
-
-    archive.file(
-        electronStoreFile,
-        {
-            name: "Settings/config.json"
-        }
-    );
-
-}
-
-const settingsPath = path.join(
-    process.cwd(),
-    "config.json"
-);
-
-if (fs.existsSync(settingsPath)) {
-
-    archive.file(
-        settingsPath,
-        {
-            name: "Settings/config.json"
-        }
-    );
-
-}
 
 const logsFolder = path.join(
     process.cwd(),
@@ -261,6 +282,400 @@ function getBackupHistory() {
 
 }
 
+async function validateBackup(zipPath) {
+
+    try {
+
+        const zip = new AdmZip(zipPath);
+
+        const entries = zip.getEntries();
+
+        const infoEntry = entries.find(
+
+            entry =>
+
+                entry.entryName === "backup-info.json"
+
+        );
+
+        if (!infoEntry) {
+
+            return {
+
+                success: false,
+
+                message: "backup-info.json not found."
+
+            };
+
+        }
+
+        const metadata = JSON.parse(
+
+            infoEntry
+
+                .getData()
+
+                .toString("utf8")
+
+        );
+
+        if (metadata.backupSchema !== 1) {
+
+            return {
+
+                success: false,
+
+                message: "Unsupported backup schema."
+
+            };
+
+        }
+
+        if (
+
+            metadata.application !==
+
+            (
+
+                packageJson.productName ||
+
+                "KAIRA LUXE Billing System"
+
+            )
+
+        ) {
+
+            return {
+
+                success: false,
+
+                message: "Backup belongs to another application."
+
+            };
+
+        }
+
+        const databaseExists = entries.some(
+
+    entry =>
+
+        entry.entryName ===
+        "Database/billing.db"
+
+);
+
+const logsExists = entries.some(
+
+    entry =>
+
+        entry.entryName.startsWith(
+            "Logs/"
+        )
+
+);
+
+const settingsExists = entries.some(
+
+    entry =>
+
+        entry.entryName.startsWith(
+            "Settings/"
+        )
+
+);
+
+        if (!databaseExists) {
+
+            return {
+
+                success: false,
+
+                message: "Database not found in backup."
+
+            };
+
+        }
+
+        return {
+
+    success: true,
+
+    metadata,
+
+    databaseExists,
+
+    logsExists,
+
+    settingsExists
+
+};
+
+    }
+
+    catch (error) {
+
+        return {
+
+            success: false,
+
+            message: error.message
+
+        };
+
+    }
+
+}
+
+async function restoreBackup(zipPath) {
+
+    try {
+
+        
+
+        const zip =
+            new AdmZip(zipPath);
+
+        const entries =
+            zip.getEntries();
+
+        const databaseEntry =
+            entries.find(
+
+                entry =>
+
+                    entry.entryName ===
+                    "Database/billing.db"
+
+            );
+
+        if (!databaseEntry) {
+
+            return {
+
+                success: false,
+
+                message:
+                    "billing.db not found inside backup."
+
+            };
+
+        }
+
+        const tempFolder =
+            path.join(
+
+                app.getPath("temp"),
+
+                "kaira_restore"
+
+            );
+
+        ensureDirectory(tempFolder);
+
+        zip.extractEntryTo(
+
+            databaseEntry,
+
+            tempFolder,
+
+            false,
+
+            true
+
+        );
+
+        console.log("Temp Folder:", tempFolder);
+
+console.log(
+    "Temp Folder Contents:",
+    fs.readdirSync(tempFolder)
+);
+
+const extractedDatabase = path.join(
+    tempFolder,
+    "billing.db"
+);
+
+console.log(
+    "Expected Database:",
+    extractedDatabase
+);
+
+console.log(
+    "Exists:",
+    fs.existsSync(extractedDatabase)
+);
+
+        console.log(
+            "Database extracted:",
+            extractedDatabase
+        );
+
+        const liveDatabase = path.join(
+    process.cwd(),
+    "billing.db"
+);
+
+const backupDatabase = path.join(
+    process.cwd(),
+    "billing.db.bak"
+);
+
+// Backup current database
+
+if (fs.existsSync(liveDatabase)) {
+
+    fs.renameSync(
+        liveDatabase,
+        backupDatabase
+    );
+
+}
+
+// Copy restored database
+
+fs.copyFileSync(
+
+    extractedDatabase,
+
+    liveDatabase
+
+);
+
+console.log(
+    "STEP 1 : Database copied."
+);
+
+// Verify restore
+
+const logsExist = entries.some(
+
+    entry =>
+
+        entry.entryName.startsWith(
+            "Logs/"
+        )
+
+);
+
+if (logsExist) {
+
+    const logsFolder = path.join(
+        process.cwd(),
+        "logs"
+    );
+
+    ensureDirectory(logsFolder);
+
+    zip.extractEntriesTo(
+
+        "Logs/",
+
+        process.cwd(),
+
+        true
+
+    );
+
+    console.log(
+        "STEP 1A : Logs restored."
+    );
+
+}
+
+if (!fs.existsSync(liveDatabase)) {
+
+    if (fs.existsSync(backupDatabase)) {
+
+        fs.renameSync(
+            backupDatabase,
+            liveDatabase
+        );
+
+    }
+
+    return {
+
+        success: false,
+
+        message:
+            "Database restore verification failed."
+
+    };
+
+}
+
+// Delete backup
+
+if (fs.existsSync(backupDatabase)) {
+
+    fs.unlinkSync(
+        backupDatabase
+    );
+
+}
+
+console.log(
+    "STEP 2 : Backup deleted."
+);
+
+// Delete temporary folder
+
+fs.rmSync(
+
+    tempFolder,
+
+    {
+
+        recursive: true,
+
+        force: true
+
+    }
+
+);
+
+console.log(
+    "STEP 3 : Temp folder deleted."
+);
+
+console.log(
+    "STEP 4 : Returning success."
+);
+
+        console.log(
+    "Restart required."
+);
+
+return {
+
+    success: true,
+
+    message:
+        "Database restored successfully."
+
+};
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        return {
+
+            success: false,
+
+            message:
+                error.message
+
+        };
+
+    }
+
+}
+
 module.exports = {
 
     DEFAULT_BACKUP_FOLDER,
@@ -273,6 +688,10 @@ module.exports = {
 
     createBackup,
 
-    getBackupHistory
+    getBackupHistory,
+
+    validateBackup,
+
+    restoreBackup
 
 };

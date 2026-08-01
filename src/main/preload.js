@@ -141,6 +141,12 @@ selectBackupFolder: () =>
         "backup:selectFolder"
     ),
 
+validateBackup: (zipPath) =>
+    ipcRenderer.invoke(
+        "backup:validate",
+        zipPath
+    ),
+
 resetInventory: () =>
     ipcRenderer.invoke(
         "reset-inventory"
@@ -156,6 +162,41 @@ getSystemStatus: () =>
     ipcRenderer.invoke(
         "get-system-status"
     ),
+
+showMessageBox: (options) =>
+    ipcRenderer.invoke(
+        "dialog:showMessageBox",
+        options
+    ),
+
+selectRestoreFile: () =>
+    ipcRenderer.invoke(
+        "restore:selectFile"
+    ),
+
+restoreBackup: (
+
+    zipPath
+
+) => ipcRenderer.invoke(
+
+    "backup:restore",
+
+    zipPath
+
+),
+
+restoreBackup: (
+
+    zipPath
+
+) => ipcRenderer.invoke(
+
+    "backup:restore",
+
+    zipPath
+
+),
 
 }
 
