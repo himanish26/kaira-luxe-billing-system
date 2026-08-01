@@ -1,0 +1,44 @@
+appId: com.kairaluxe.billing
+
+productName: KAIRA LUXE BILLING SYSTEM
+
+directories:
+  output: dist
+
+files:
+  - "**/*"
+  - "!dist/**"
+  - "!node_modules/.cache/**"
+  - "!updates/**"
+  - "!*.log"
+  - "!*.zip"
+
+extraMetadata:
+  main: src/main/main.js
+
+win:
+  icon: assets/icons/icon.ico
+
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+  artifactName: "KairaLuxeBillingSetup-${version}.${ext}"
+
+nsis:
+  oneClick: false
+
+  perMachine: true
+
+  allowToChangeInstallationDirectory: true
+
+  createDesktopShortcut: always
+
+  createStartMenuShortcut: true
+
+  shortcutName: "KAIRA LUXE BILLING SYSTEM"
+
+  installerIcon: assets/icons/installer.ico
+
+compression: maximum

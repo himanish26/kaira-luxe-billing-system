@@ -186,14 +186,79 @@ if (response.response !== 1) {
 
 }
 
-console.log(
+showProcessingDialog(
 
-    "User chose Download."
+    "⬆ Downloading Update"
 
 );
 
-// Download starts here
+updateProgress(
 
+    0,
+
+    "Connecting to update server..."
+
+);
+
+window.electronAPI.onDownloadProgress(
+
+    progress => {
+
+        updateProgress(
+
+            progress,
+
+            "Downloading update..."
+
+        );
+
+    }
+
+);
+
+const downloadResult =
+
+    await window.electronAPI.downloadUpdate(
+
+        info.downloadUrl,
+
+        "KairaLuxeSetup.exe"
+
+    );
+
+hideProcessingDialog();
+
+if (!downloadResult.success) {
+
+    await window.electronAPI.showMessageBox({
+
+        type: "error",
+
+        title: "Download Failed",
+
+        message: downloadResult.message
+
+    });
+
+    return;
+
+}
+
+await window.electronAPI.showMessageBox({
+
+    type: "info",
+
+    title: "Download Complete",
+
+    message:
+
+`Installer downloaded successfully.
+
+Location:
+
+${downloadResult.filePath}`
+
+});
         }
 
     );
