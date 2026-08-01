@@ -1,0 +1,11 @@
+{
+    "version": "1.0.0-rc3",
+    "minimumVersion": "1.0.0-rc1",
+    "releaseDate": "2026-08-01",
+    "notes": [
+        "Initial RC3 Release",
+        "Automatic Backup",
+        "Restore Module"
+    ],
+    "downloadUrl": ""
+}
