@@ -1,0 +1,422 @@
+.invoice-header{
+
+    text-align:center;
+
+    margin-bottom:30px;
+
+}
+
+#invoiceLogo{
+
+    width:360px;
+
+    height:auto;
+
+    margin-bottom:8px;
+
+}
+
+.invoice-header h1{
+
+    font-size:42px;
+
+    font-weight:800;
+
+    letter-spacing:2px;
+
+    margin-top:10px;
+
+}
+
+.invoice-header h2{
+
+    font-size:42px;
+
+    font-weight:900;
+
+    margin-top:10px;
+
+    margin-bottom:10px;
+
+}
+.invoice-info-card{
+
+    border-top:1px solid #000;
+
+    border-bottom:1px solid #000;
+
+    padding:20px 0;
+
+    margin-bottom:25px;
+
+}
+
+.invoice-row{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    gap:40px;
+
+    margin-bottom:15px;
+
+}
+
+.invoice-row div{
+
+    flex:1;
+
+}
+
+.invoice-info-card hr{
+
+    border:none;
+
+    border-top:1px solid #000;
+
+    margin:15px 0;
+
+}
+/* ==========================
+   VIEW INVOICE
+========================== */
+
+.invoice-footer{
+
+    display:grid;
+
+    grid-template-columns:1fr 1fr;
+
+    gap:40px;
+
+    align-items:start;
+
+}
+
+.invoice-totals,
+.invoice-payment h3{
+
+    text-align:center;
+
+    font-size:34px;
+
+    font-weight:800;
+
+    margin:10px 0 20px;
+
+    padding:0;
+
+}
+
+.grand-total{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    margin-top:20px;
+
+    background:#8b0035;
+
+    color:#fff;
+
+    padding:22px 24px;
+
+    border-radius:10px;
+
+    font-size:30px;
+
+    font-weight:bold;
+
+}
+
+.gst-summary h3,
+.invoice-payment h3{
+
+    text-align:center;
+
+}
+
+.invoice-payment{
+
+    flex:1;
+
+    display:flex;
+
+    flex-direction:column;
+
+    justify-content:flex-start;
+
+    padding:20px 35px;
+
+}
+
+.invoice-totals{
+
+    padding:20px 35px;
+
+}
+
+.invoice-policy{
+
+    margin-top:30px;
+
+    background:#fafafa;
+
+    border:1px solid #ddd;
+
+    border-radius:10px;
+
+    padding:35px;
+
+    text-align:center;
+
+}
+
+.invoice-policy p{
+
+    margin-top:10px;
+
+    line-height:1.6;
+
+}
+
+.invoice-thanks{
+
+    text-align:center;
+
+    margin-top:25px;
+
+    font-size:22px;
+
+    font-weight:bold;
+
+}
+
+.invoice-actions{
+
+    display:flex;
+
+    gap:15px;
+
+    margin-top:25px;
+
+}
+
+.invoice-actions button{
+
+    flex:1;
+
+    height:60px;
+
+    border:none;
+
+    border-radius:8px;
+
+    background:#8b0035;
+
+    color:white;
+
+    font-size:20px;
+
+    font-weight:bold;
+
+    cursor:pointer;
+
+}
+
+.invoice-actions button:hover{
+
+    background:#680026;
+
+}
+#viewBillScreen{
+
+    max-width:1200px;
+
+    margin:auto;
+
+}
+@media print{
+
+    .back-btn,
+    .invoice-actions{
+
+        display:none;
+
+    }
+
+    body{
+
+        background:#fff;
+
+        padding:0;
+
+    }
+
+    #viewBillScreen{
+
+        max-width:none;
+
+    }
+
+}
+.invoice-tagline{
+
+    font-size:22px;
+
+    font-weight:600;
+
+    margin-top:8px;
+
+    color:#444;
+
+}
+
+.invoice-address{
+
+    font-size:20px;
+
+    line-height:1.5;
+
+    margin-top:10px;
+
+    color:#555;
+
+}
+
+.invoice-gstin{
+
+    font-size:18px;
+
+    font-weight:600;
+
+    margin-top:10px;
+
+    color:#444;
+
+}
+
+
+
+.invoice-contact{
+
+    font-size:18px;
+
+    font-weight:600;
+
+    margin-top:10px;
+
+    color:#444;
+
+}
+
+.invoice-gstin{
+
+    font-size:18px;
+
+    font-weight:700;
+
+    margin-top:6px;
+
+    color:#444;
+
+}
+.payment-heading{
+
+    margin:0 0 25px;
+
+    padding:0;
+
+    text-align:center;
+
+    font-size:34px;
+
+    font-weight:800;
+
+    border:none;
+
+}
+
+#viewBillItems td{
+
+    text-align:center;
+    vertical-align:middle;
+
+}
+
+/* Brand */
+
+#viewBillItems td:nth-child(2){
+
+    text-align:left;
+
+    font-weight:600;
+
+}
+
+/* View Bill Table */
+
+#viewBillItems td:nth-child(3){
+
+    text-align:left;
+
+    font-weight:600;
+
+}
+.gst-summary{
+
+    border-bottom:1px solid #ddd;
+
+    padding-bottom:18px;
+
+    margin-bottom:25px;
+
+}
+
+.invoice-table-container{
+
+    width:100%;
+
+    background:#fff;
+
+    border-radius:16px;
+
+    box-shadow:0 8px 20px rgba(0,0,0,.08);
+
+    overflow:hidden;
+
+    margin-bottom:30px;
+
+}
+
+.invoice-table-container table{
+
+    width:100%;
+
+    border-collapse:collapse;
+
+}
+
+.invoice-table-container thead th{
+
+    background:#8B004B;
+
+    color:#fff;
+
+    padding:16px;
+
+}
+
+.invoice-table-container tbody td{
+
+    padding:16px;
+
+    text-align:center;
+
+    border-bottom:1px solid #eee;
+
+}

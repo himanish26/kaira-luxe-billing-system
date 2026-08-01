@@ -1,0 +1,54 @@
+/* =====================================================
+   KAIRA LUXE DESIGN SYSTEM
+===================================================== */
+
+:root{
+
+    /* Brand */
+
+    --primary:#8B004B;
+    --primary-dark:#6D0033;
+    --primary-light:#A00054;
+
+    /* Backgrounds */
+
+    --bg:#F5F5F5;
+    --card:#FFFFFF;
+
+    /* Text */
+
+    --text:#222222;
+    --text-light:#555555;
+    --text-muted:#777777;
+
+    /* Borders */
+
+    --border:#DDDDDD;
+
+    /* Status */
+
+    --success:#198754;
+    --danger:#DC3545;
+    --warning:#C97A00;
+    --info:#0D6EFD;
+
+    /* Radius */
+
+    --radius-sm:8px;
+    --radius:12px;
+    --radius-lg:16px;
+    --radius-xl:20px;
+    --radius-xxl:24px;
+
+    /* Shadows */
+
+    --shadow-sm:
+        0 2px 8px rgba(0,0,0,.08);
+
+    --shadow:
+        0 8px 20px rgba(0,0,0,.08);
+
+    --shadow-lg:
+        0 12px 35px rgba(0,0,0,.08);
+
+}

@@ -1,0 +1,484 @@
+/* =====================================
+   REPORTS SCREEN
+===================================== */
+
+.reports-container {
+
+    width:100%;
+
+    max-width:1200px;
+
+    margin:40px auto;
+
+    padding:20px;
+
+}
+
+.reports-container h1 {
+
+    font-size:72px;
+
+    font-weight:800;
+
+    color:#7A002C;
+
+    text-align: center;
+
+    margin-bottom:10px;
+
+}
+
+.reports-subtitle {
+
+    font-size:28px;
+
+    color:#666;
+
+    text-align:center;
+
+    margin-bottom:50px;
+
+}
+
+.reports-card {
+
+    background: #ffffff;
+
+    border-radius: 10px;
+
+    padding: 20px;
+
+    margin-bottom: 20px;
+
+    border: 1px solid #dddddd;
+
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+
+}
+
+/* =====================================
+   REPORT TYPE OPTIONS
+===================================== */
+
+.report-option {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 16px;
+
+    padding: 14px 16px;
+
+    margin-bottom: 12px;
+
+    border: 1px solid #d9d9d9;
+
+    border-radius: 8px;
+
+    cursor: pointer;
+
+    transition: all 0.2s ease;
+
+    background: #ffffff;
+
+}
+
+.report-option:last-child {
+
+    margin-bottom: 0;
+
+}
+
+.report-option:hover {
+
+    border-color: #7A002C;
+
+    background: #faf5f7;
+
+}
+
+.report-option input[type="radio"] {
+
+    width: 20px;
+
+    height: 20px;
+
+    accent-color: #7A002C;
+
+    cursor: pointer;
+
+    flex-shrink: 0;
+
+}
+
+.report-option-content {
+
+    display: flex;
+
+    flex-direction: column;
+
+}
+
+.report-title {
+
+    font-size: 18px;
+
+    font-weight: 700;
+
+    color: #222;
+
+}
+
+.report-subtitle {
+
+    margin-top: 2px;
+
+    font-size: 14px;
+
+    color: #555;
+
+    font-weight: 500;
+
+}
+
+/* =====================================
+   DATE RANGE
+===================================== */
+
+#reportDateRange {
+
+    width: 280px;
+
+    height: 48px;
+
+    padding: 0 14px;
+
+    font-size: 17px;
+
+    font-weight: 600;
+
+    color: #333;
+
+    background: #ffffff;
+
+    border: 1px solid #d6d6d6;
+
+    border-radius: 8px;
+
+    cursor: pointer;
+
+    transition: all 0.2s ease;
+
+}
+
+#reportDateRange:hover {
+
+    border-color: #7A002C;
+
+}
+
+#reportDateRange:focus {
+
+    outline: none;
+
+    border-color: #7A002C;
+
+    box-shadow: 0 0 0 3px rgba(122, 0, 44, 0.12);
+
+}
+
+#customDateRange {
+
+    margin-top: 20px;
+
+    display: flex;
+
+    gap: 24px;
+
+    align-items: end;
+
+    flex-wrap: wrap;
+
+}
+
+#customDateRange label {
+
+    display: block;
+
+    margin-bottom: 8px;
+
+    font-size: 15px;
+
+    font-weight: 600;
+
+    color: #444;
+
+}
+
+#customDateRange input[type="date"] {
+
+    width: 220px;
+
+    height: 46px;
+
+    padding: 0 12px;
+
+    font-size: 16px;
+
+    border: 1px solid #d6d6d6;
+
+    border-radius: 8px;
+
+    transition: all 0.2s ease;
+
+}
+
+#customDateRange input[type="date"]:focus {
+
+    outline: none;
+
+    border-color: #7A002C;
+
+    box-shadow: 0 0 0 3px rgba(122, 0, 44, 0.12);
+
+}
+/* =====================================
+   REPORT INFORMATION
+===================================== */
+
+#reportDescription h3 {
+
+    margin: 0 0 12px;
+
+    font-size: 30px;
+
+    font-weight: 700;
+
+    color: #222;
+
+}
+
+#reportDescription p {
+
+    margin: 0 0 20px;
+
+    font-size: 17px;
+
+    line-height: 1.6;
+
+    color: #555;
+
+}
+
+#reportDescription ul {
+
+    margin: 0;
+
+    padding-left: 0;
+
+    list-style: none;
+
+}
+
+#reportDescription li {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    margin-bottom: 10px;
+
+    font-size: 16px;
+
+    color: #333;
+
+}
+
+.report-check {
+
+    width: 22px;
+
+    text-align: center;
+
+    font-weight: bold;
+
+    color: #15803d;
+
+}
+
+/* =====================================
+   EXPORT BUTTON
+===================================== */
+
+.export-report-btn {
+
+    width: 100%;
+
+    height: 60px;
+
+    border: none;
+
+    border-radius: 10px;
+
+    background: #7A002C;
+
+    color: #ffffff;
+
+    font-size: 24px;
+
+    font-weight: 700;
+
+    cursor: pointer;
+
+    transition: all 0.2s ease;
+
+}
+
+.export-report-btn:hover {
+
+    background: #930038;
+
+}
+
+.export-report-btn:active {
+
+    transform: scale(0.99);
+
+}
+
+.export-report-btn:disabled {
+
+    background: #b5b5b5;
+
+    cursor: not-allowed;
+
+}
+.report-note {
+
+    margin-top: 18px;
+
+    text-align: center;
+
+    font-size: 20px;
+
+    line-height: 1.6;
+
+    color: #666;
+
+}
+
+.report-note strong {
+
+    color: #333;
+
+    font-size: 20px;
+
+}
+
+/* =====================================
+   SELECTED REPORT
+===================================== */
+
+.report-option.selected {
+
+    border: 2px solid #7A002C;
+
+    background: #faf2f5;
+
+    box-shadow: 0 4px 12px rgba(122, 0, 44, 0.10);
+
+}
+
+.report-option.selected .report-title {
+
+    color: #7A002C;
+
+}
+
+.report-option.selected .report-subtitle {
+
+    color: #6b4d59;
+
+}
+
+/* =====================================
+   SELECTED REPORT PERIOD
+===================================== */
+
+.selected-period-card{
+
+    margin-top:20px;
+
+    padding:16px 18px;
+
+    background:#f8f8f8;
+
+    border:1px solid #e0e0e0;
+
+    border-radius:8px;
+
+}
+
+.selected-period-title{
+
+    font-size:15px;
+
+    font-weight:700;
+
+    color:#666;
+
+    margin-bottom:8px;
+
+    text-transform:uppercase;
+
+    letter-spacing:.5px;
+
+}
+
+#selectedPeriodText{
+
+    font-size:18px;
+
+    font-weight:700;
+
+    color:#222;
+
+    line-height:1.5;
+
+}
+
+.reports-top-row{
+
+    display:flex;
+
+    gap:24px;
+
+    align-items:stretch;
+
+    margin-bottom:20px;
+
+}
+
+.report-type-card{
+
+    flex:1;
+
+}
+
+.date-range-card{
+
+    flex:1.6;
+
+}
+
+.report-type-card,
+.date-range-card{
+
+    display:flex;
+
+    flex-direction:column;
+
+}

@@ -1,0 +1,202 @@
+/* =====================================================
+   DASHBOARD
+===================================================== */
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+    margin-bottom: 40px;
+}
+
+.dashboard-grid button {
+    height: 110px;
+    border: none;
+    border-radius: 16px;
+    background: var(--card);
+    font-size: 34px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.10);
+    transition: 0.2s;
+}
+
+.dashboard-grid button:hover {
+    transform: translateY(-2px);
+    background-color:#7A002C;
+    color: white;
+}
+
+
+/* ==========================
+   DASHBOARD HEADER
+========================== */
+
+.dashboard-header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:flex-start;
+
+    margin-bottom:30px;
+
+}
+
+.datetime-box{
+
+    text-align:right;
+
+}
+
+#currentDate{
+
+    font-size:22px;
+
+    font-weight:700;
+
+    color:#555;
+
+}
+
+#currentTime{
+
+    font-size:48px;
+
+    font-weight:900;
+
+    color:var(--primary);
+
+    margin-top:5px;
+
+}
+
+
+.dashboard-footer{
+
+    display:flex;
+
+    gap:25px;
+
+    margin-top:35px;
+
+}
+
+.dashboard-card{
+
+    flex:1 1 0;
+
+    min-height:320px;
+
+    background:#fff;
+
+    border-radius:18px;
+
+    border: 2px solid #7A002C; 
+
+    padding:25px;
+
+    box-shadow:0 6px 18px rgba(0,0,0,.08);
+
+}
+
+.dashboard-card h3{
+
+    margin:0 0 22px;
+
+    font-size:26px;
+
+    font-weight:700;
+
+    color:#7A002C;
+
+}
+
+#systemStatusCard .dashboard-row span:first-child {
+    color: #333;
+}
+
+#systemStatusCard .dashboard-row span:last-child {
+    font-weight: 700;
+}
+
+
+.dashboard-row{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    margin:16px 0;
+
+    font-size:22px;
+
+    font-weight:600;
+
+}
+
+.dashboard-row:last-child {
+
+    border-bottom: none;
+
+}
+
+.dashboard-card hr{
+
+    border:none;
+
+    border-top:2px solid #ececec;
+
+    margin:18px 0;
+
+}
+
+.dashboard-total{
+
+    font-size:26px;
+
+    font-weight:700;
+
+}
+
+@media (max-width:1200px){
+
+    .dashboard-footer{
+
+        flex-direction:column;
+
+    }
+
+}
+
+/* ==========================================
+   STORE / BUSINESS OVERVIEW TOGGLE
+========================================== */
+
+#storeOverviewCard,
+#businessOverviewCard {
+
+    transition: opacity 0.20s ease;
+
+}
+
+#businessOverviewCard h3 {
+
+    color: #7A002C;
+
+}
+
+#businessOverviewCard hr {
+
+    margin: 18px 0;
+
+}
+
+#businessOverviewCard .dashboard-total {
+
+    font-weight: 700;
+
+}

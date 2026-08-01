@@ -1,0 +1,310 @@
+@import "./styles/variables.css";
+@import "./styles/base.css";
+@import "./styles/dashboard.css";
+@import "./styles/billing.css";
+@import "./styles/invoice.css";
+@import "./styles/settings.css";
+@import "./styles/inventory.css";
+@import "./styles/about.css";
+@import "./styles/reports.css";
+
+
+
+
+/* =========================
+   BILL SUMMARY
+========================= */
+
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 18px;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.total-row{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    padding:12px 0;
+
+    border-bottom:1px solid #ddd;
+
+    font-size:22px;
+
+    color:#333;
+
+    font-weight:600;
+
+
+}
+.gst-summary .total-row:last-child{
+
+    border-bottom:none;
+
+}
+
+/* ==========================================
+   DANGER ZONE
+========================================== */
+
+.danger-zone{
+
+    margin-top:40px;
+
+    padding:25px;
+
+    border:2px solid #dc3545;
+
+    border-radius:12px;
+
+    background:#fff5f5;
+
+}
+
+.danger-zone h2{
+
+    color:#dc3545;
+
+    margin-bottom:15px;
+
+}
+
+.danger-zone p{
+
+    margin:8px 0;
+
+}
+
+.danger-warning{
+
+    color:#b30000;
+
+    font-weight:bold;
+
+}
+
+.danger-btn{
+
+    margin-top:20px;
+
+    padding:12px 28px;
+
+    background:#dc3545;
+
+    color:white;
+
+    border:none;
+
+    border-radius:8px;
+
+    font-size:15px;
+
+    font-weight:bold;
+
+    cursor:pointer;
+
+    transition:.2s;
+
+}
+
+.danger-btn:hover{
+
+    background:#bb2d3b;
+
+}
+
+.processing-modal{
+
+    width:420px;
+
+    text-align:center;
+
+}
+
+.processing-icon{
+
+    font-size:54px;
+
+    margin-bottom:18px;
+
+    animation:spin 2s linear infinite;
+
+}    
+
+@keyframes spin{
+
+from{
+
+transform:rotate(0deg);
+
+}
+
+to{
+
+transform:rotate(360deg);
+
+}
+
+}
+
+.processing-status{
+
+    margin:20px 0;
+
+    font-size:18px;
+
+    font-weight:600;
+
+}
+
+.progress-bar{
+
+    width:100%;
+
+    height:12px;
+
+    background:#e5e5e5;
+
+    border-radius:20px;
+
+    overflow:hidden;
+
+}
+
+.progress-fill{
+
+    width:0%;
+
+    height:100%;
+
+    background:#2e7d32;
+
+    transition:width .35s ease;
+
+}
+
+.progress-percent{
+
+    margin-top:15px;
+
+    font-size:16px;
+
+    font-weight:bold;
+
+}
+
+.inventory-empty{
+
+    padding:70px 20px;
+
+}
+
+.empty-state{
+
+    text-align:center;
+
+}
+
+.empty-icon{
+
+    font-size:60px;
+
+    margin-bottom:15px;
+
+}
+
+.empty-state h3{
+
+    margin:10px 0;
+
+    color:#7a0045;
+
+}
+
+.empty-state p{
+
+    color:#666;
+
+    margin:6px 0;
+
+}
+
+.inventory-empty-state{
+
+    display:flex;
+
+    flex-direction:column;
+
+    justify-content:center;
+
+    align-items:center;
+
+    background:#fff;
+
+    border-radius:18px;
+
+    padding:60px 20px;
+
+    margin-top:20px;
+
+    margin-bottom:30px;
+
+    box-shadow:0 8px 24px rgba(0,0,0,.08);
+
+}
+
+.empty-icon{
+
+    font-size:58px;
+
+    margin-bottom:18px;
+
+}
+
+.inventory-empty-state h2{
+
+    color:#7a0045;
+
+    margin-bottom:10px;
+
+}
+
+.inventory-empty-state p{
+
+    color:#666;
+
+    margin:4px 0;
+
+    font-size:18px;
+
+}
+
+.inventory-action-buttons{
+
+    display:flex;
+
+    gap:20px;
+
+    margin-top:25px;
+
+}
+
+.inventory-action-buttons .dashboard-btn{
+
+    flex:1;
+
+    margin:40px auto 0;
+
+}
+
+#settingsPage h1{
+    text-align:center;
+    margin-bottom:40px;
+}
