@@ -39,6 +39,10 @@ nsis:
 
   shortcutName: "KAIRA LUXE BILLING SYSTEM"
 
-  installerIcon: assets/icons/installer.ico
+  installerIcon: src/renderer/assets/icons/installer.ico
+
+  uninstallerIcon: src/renderer/assets/icons/installer.ico
+
+  installerHeaderIcon: src/renderer/assets/icons/installer.ico
 
 compression: maximum

@@ -1,14 +1,13 @@
 {
     "version": "1.0.0-rc4",
     "minimumVersion": "1.0.0-rc1",
-    "releaseDate": "2026-08-01",
-    "notes":[
-    "RC4 stability improvements",
-    "New application lock overlay",
-    "Improved updater reliability",
-    "Automatic backup improvements"
-],
-    "downloadUrl":"https://raw.githubusercontent.com/himanish26/kaira-luxe-billing-system/main/updates/test.txt",
-
-    "sha256":"REPLACE_WITH_REAL_HASH"
+    "releaseDate": "2026-08-02",
+    "notes": [
+        "RC4 stability improvements",
+        "New application lock overlay",
+        "Improved updater reliability",
+        "Automatic backup improvements"
+    ],
+    "downloadUrl": "https://github.com/himanish26/kaira-luxe-billing-system/releases/download/v1.0.0-rc4/KairaLuxeBillingSetup-1.0.0-rc4.exe",
+    "sha256": "9640b8667580de2134d7d42d67edbfb618ca78fb90c2654669d89c98d56aea4b"
 }
