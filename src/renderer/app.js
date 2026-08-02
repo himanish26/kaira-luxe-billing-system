@@ -913,7 +913,13 @@ const settingsBtn =
 
 if (reportsBtn) {
 
-    reportsBtn.addEventListener("click", () => {
+    reportsBtn.addEventListener("click", async () => {
+
+    if (!(await guardBusyOperation())) {
+
+        return;
+
+    }
 
         hideAllScreens();
 
@@ -933,7 +939,13 @@ const newBillBtn =
 
 if (newBillBtn) {
 
-    newBillBtn.addEventListener("click", () => {
+    newBillBtn.addEventListener("click", async () => {
+
+    if (!(await guardBusyOperation())) {
+
+        return;
+
+    }
 
         hideAllScreens();
 
@@ -963,7 +975,13 @@ if (newBillBtn) {
 
 if (settingsBtn){
 
-    settingsBtn.addEventListener("click", () => {
+    settingsBtn.addEventListener("click", async () => {
+
+    if (!(await guardBusyOperation())) {
+
+        return;
+
+    }
 
     hideAllScreens();
 
@@ -1519,9 +1537,15 @@ if (viewBillBackBtn) {
 
 }
 
-if (historyBackBtn) {
+if (billHistoryBtn) {
 
-billHistoryBtn.addEventListener("click", async () => {
+    billHistoryBtn.addEventListener("click", async () => {
+
+        if (!(await guardBusyOperation())) {
+
+            return;
+
+        }
 
         hideAllScreens();
 
@@ -1529,8 +1553,7 @@ billHistoryBtn.addEventListener("click", async () => {
 
         await loadBills();
 
-    }
-);
+    });
 
 }
 

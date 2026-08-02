@@ -95,6 +95,26 @@ const {
 
 const {
 
+    launchInstaller
+
+} = require(
+
+    "../services/installerService"
+
+);
+
+const {
+
+    verifyInstalledVersion
+
+} = require(
+
+    "../services/updateVerifier"
+
+);
+
+const {
+
     startBackupScheduler
 
 } = require("../services/backupScheduler");
@@ -132,6 +152,8 @@ function createWindow() {
 app.whenReady().then(() => {
 
     createWindow();
+
+    verifyInstalledVersion();
 
     startBackupScheduler();
 
@@ -1104,7 +1126,9 @@ ipcMain.handle(
 
         url,
 
-        fileName
+        fileName,
+
+        version
 
     ) => {
 
@@ -1118,7 +1142,9 @@ ipcMain.handle(
 
                     url,
 
-                    fileName
+                    fileName,
+
+                    version
 
                 );
 
@@ -1145,6 +1171,58 @@ ipcMain.handle(
                 message:
 
                     error.message
+
+            };
+
+        }
+
+    }
+
+);
+
+ipcMain.handle(
+
+    "updates:install",
+
+    async (
+
+        event,
+
+        installerPath
+
+    ) => {
+
+        try {
+
+            await launchInstaller(
+
+                installerPath
+
+            );
+
+            setTimeout(() => {
+
+                app.quit();
+
+            }, 2000);
+
+            return {
+
+                success: true
+
+            };
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            return {
+
+                success: false,
+
+                message: error.message
 
             };
 

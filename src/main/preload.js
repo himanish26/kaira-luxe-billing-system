@@ -196,7 +196,9 @@ downloadUpdate: (
 
     url,
 
-    fileName
+    fileName,
+
+    version
 
 ) =>
 
@@ -206,7 +208,9 @@ downloadUpdate: (
 
         url,
 
-        fileName
+        fileName,
+
+        version
 
     ),
 
@@ -229,6 +233,20 @@ onDownloadProgress: (
         ) =>
 
             callback(progress)
+
+    ),
+
+    launchInstaller: (
+
+    installerPath
+
+) =>
+
+    ipcRenderer.invoke(
+
+        "updates:install",
+
+        installerPath
 
     ),
 

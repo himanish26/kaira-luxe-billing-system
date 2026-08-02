@@ -9,7 +9,7 @@ function getUpdatesFolder() {
 
         app.getPath("userData"),
 
-        "Updates"
+        "UpdateCache"
 
     );
 
@@ -39,7 +39,9 @@ async function downloadFile(
 
     url,
 
-    fileName
+    fileName,
+
+    version
 
 ) {
 
@@ -135,13 +137,41 @@ async function downloadFile(
 
                 "finish",
 
-                () =>
+                () => {
 
-                    resolve(
+    const updateInfo = {
 
-                        destination
+        expectedVersion: version,
 
-                    )
+        downloadedAt: new Date().toISOString()
+
+    };
+
+    fs.writeFileSync(
+
+        path.join(
+
+            updatesFolder,
+
+            "update.json"
+
+        ),
+
+        JSON.stringify(
+
+            updateInfo,
+
+            null,
+
+            4
+
+        )
+
+    );
+
+    resolve(destination);
+
+}
 
             );
 

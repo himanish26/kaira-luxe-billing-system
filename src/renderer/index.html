@@ -1526,6 +1526,50 @@ style="display:none;">
 
 </div>
 
+</div> <!-- End reportsScreen -->
+
+<!-- =====================================
+     APPLICATION LOCK OVERLAY
+====================================== -->
+
+<div id="appLockOverlay" class="app-lock-overlay">
+
+    <div class="app-lock-card">
+
+        <div class="lock-spinner"></div>
+
+        <h2 id="lockTitle">
+
+            Please Wait
+
+        </h2>
+
+        <p id="lockMessage">
+
+            Processing...
+
+        </p>
+
+        <div class="lock-progress">
+
+            <div id="lockProgressBar"></div>
+
+        </div>
+
+        <div id="lockPercentage">
+
+            0%
+
+        </div>
+
+    </div>
+
+</div>
+
+<script src="utils/appState.js"></script>
+<script src="utils/appLock.js"></script>
+<script src="utils/busyGuard.js"></script>
+
 <!-- Core helper -->
 <script src="modules/settingsLayout.js"></script>
 
@@ -1549,6 +1593,7 @@ style="display:none;">
 
 <!-- Always last -->
 <script src="app.js"></script>
+
 
 
 </body>

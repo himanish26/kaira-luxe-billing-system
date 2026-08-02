@@ -186,19 +186,19 @@ if (response.response !== 1) {
 
 }
 
-showProcessingDialog(
+setAppState(APP_STATES.UPDATING);
 
-    "⬆ Downloading Update"
+lockApplication(
 
-);
+    "⬆️ Updating Kaira Luxe",
 
-updateProgress(
-
-    0,
-
-    "Connecting to update server..."
+    "Downloading latest version..."
 
 );
+
+setLockProgress(0);
+
+setLockMessage("Connecting...");
 
 window.electronAPI.onDownloadProgress(
 
@@ -222,13 +222,17 @@ const downloadResult =
 
         info.downloadUrl,
 
-        "KairaLuxeSetup.exe"
+        "KAIRA_LUXE_BILLING_SYSTEM_Setup.exe",
+
+        info.version
 
     );
 
-hideProcessingDialog();
+unlockApplication();
 
 if (!downloadResult.success) {
+
+    setAppState(APP_STATES.NORMAL);
 
     await window.electronAPI.showMessageBox({
 
@@ -244,23 +248,102 @@ if (!downloadResult.success) {
 
 }
 
-await window.electronAPI.showMessageBox({
 
-    type: "info",
 
-    title: "Download Complete",
+const installResponse =
 
-    message:
+    await window.electronAPI.showMessageBox({
+
+        type: "question",
+
+        title: "Download Complete",
+
+        buttons: [
+
+            "Later",
+
+            "Install Now"
+
+        ],
+
+        defaultId: 1,
+
+        cancelId: 0,
+
+        message:
 
 `Installer downloaded successfully.
 
-Location:
+Would you like to install the update now?`
 
-${downloadResult.filePath}`
+    });
 
-});
-        }
+if (
+
+    installResponse.response !== 1
+
+) {
+
+    setAppState(APP_STATES.NORMAL);
+
+    return;
+
+}
+
+lockApplication(
+
+    "⬆️ Updating Kaira Luxe",
+
+    "Installing update..."
+
+);
+
+setLockProgress(25);
+
+setLockMessage("Downloading latest version...");
+
+const installResult =
+
+    await window.electronAPI.launchInstaller(
+
+        downloadResult.filePath
 
     );
+
+if (!installResult.success) {
+
+    setAppState(APP_STATES.NORMAL);
+
+    unlockApplication();
+
+    await window.electronAPI.showMessageBox({
+
+        type: "error",
+
+        title: "Installation Failed",
+
+        message: installResult.message
+
+    });
+
+    return;
+
+}
+
+setLockProgress(60);
+
+setLockMessage("Downloading latest version...");
+
+setTimeout(() => {
+
+    setLockProgress(100);
+
+setLockMessage("Preparing installer...");
+
+}, 1000);
+    
+}
+
+);
 
 }
