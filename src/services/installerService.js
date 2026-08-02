@@ -1,5 +1,6 @@
-const { shell } = require("electron");
 const fs = require("fs");
+
+const { spawn } = require("child_process");
 
 async function launchInstaller(installerPath) {
 
@@ -9,7 +10,23 @@ async function launchInstaller(installerPath) {
 
     }
 
-    await shell.openPath(installerPath);
+    const child = spawn(
+
+        installerPath,
+
+        [],
+
+        {
+
+            detached: true,
+
+            stdio: "ignore"
+
+        }
+
+    );
+
+    child.unref();
 
     return true;
 

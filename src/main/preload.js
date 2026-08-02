@@ -238,7 +238,9 @@ onDownloadProgress: (
 
     launchInstaller: (
 
-    installerPath
+    installerPath,
+
+    expectedHash
 
 ) =>
 
@@ -246,7 +248,9 @@ onDownloadProgress: (
 
         "updates:install",
 
-        installerPath
+        installerPath,
+
+        expectedHash
 
     ),
 

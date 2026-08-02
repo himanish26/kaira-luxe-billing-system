@@ -1,0 +1,85 @@
+./.DS_Store
+./.gitignore
+./billing.db
+./electron-builder.yml
+./package-lock.json
+./package.json
+./project_files.txt
+./README.md
+./src/.DS_Store
+./src/database/billService.js
+./src/database/database.js
+./src/database/excelExporter.js
+./src/database/importProducts.js
+./src/database/productMasterExporter.js
+./src/database/productService.js
+./src/database/reportService.js
+./src/database/resetInventory.js
+./src/database/settingsService.js
+./src/database/storeSettingsService.js
+./src/main/main.js
+./src/main/preload.js
+./src/main/printer.js
+./src/main/statusService.js
+./src/renderer/.DS_Store
+./src/renderer/app.js
+./src/renderer/assets/.DS_Store
+./src/renderer/assets/branding/.DS_Store
+./src/renderer/assets/branding/installerHeader.bmp
+./src/renderer/assets/branding/installerSidebar.bmp
+./src/renderer/assets/branding/logo.png
+./src/renderer/assets/branding/welcome.png
+./src/renderer/assets/icons/.DS_Store
+./src/renderer/assets/icons/clipboard (1).ico
+./src/renderer/assets/icons/clipboard (2).ico
+./src/renderer/assets/icons/clipboard (3).ico
+./src/renderer/assets/icons/clipboard (4).ico
+./src/renderer/assets/icons/clipboard (5).ico
+./src/renderer/assets/icons/clipboard (6).ico
+./src/renderer/assets/icons/clipboard (7).ico
+./src/renderer/assets/icons/clipboard (8).ico
+./src/renderer/assets/icons/icon.ico
+./src/renderer/assets/icons/icon.png
+./src/renderer/assets/icons/icon.svg
+./src/renderer/assets/icons/installer.ico
+./src/renderer/assets/logo.png
+./src/renderer/index.html
+./src/renderer/modules/.DS_Store
+./src/renderer/modules/inventory.js
+./src/renderer/modules/productMasterTemplate.js
+./src/renderer/modules/reports.js
+./src/renderer/modules/settings.js
+./src/renderer/modules/settingsLayout.js
+./src/renderer/modules/shortcuts.js
+./src/renderer/modules/system.js
+./src/renderer/modules/system/activitylog.js
+./src/renderer/modules/system/backup.js
+./src/renderer/modules/system/diagnostics.js
+./src/renderer/modules/system/exportData.js
+./src/renderer/modules/system/restore.js
+./src/renderer/modules/system/updates.js
+./src/renderer/receipt.css
+./src/renderer/receipt.html
+./src/renderer/receipt.js
+./src/renderer/style.css
+./src/renderer/styles/about.css
+./src/renderer/styles/base.css
+./src/renderer/styles/billing.css
+./src/renderer/styles/dashboard.css
+./src/renderer/styles/Inventory.css
+./src/renderer/styles/invoice.css
+./src/renderer/styles/reports.css
+./src/renderer/styles/settings.css
+./src/renderer/styles/variables.css
+./src/renderer/utils/appLock.js
+./src/renderer/utils/appState.js
+./src/renderer/utils/busyGuard.js
+./src/services/backupScheduler.js
+./src/services/backupService.js
+./src/services/checksumService.js
+./src/services/downloadService.js
+./src/services/installerService.js
+./src/services/updateService.js
+./src/services/updateVerifier.js
+./updates/latest.json
+./updates/test.txt

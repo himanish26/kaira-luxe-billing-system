@@ -105,6 +105,16 @@ const {
 
 const {
 
+    verifyChecksum
+
+} = require(
+
+    "../services/checksumService"
+
+);
+
+const {
+
     verifyInstalledVersion
 
 } = require(
@@ -1188,23 +1198,85 @@ ipcMain.handle(
 
         event,
 
-        installerPath
+        installerPath,
+
+        expectedHash
 
     ) => {
 
         try {
 
-            await launchInstaller(
+            console.log("Installer Path:", installerPath);
 
-                installerPath
+console.log("Expected Hash:", expectedHash);
 
-            );
+const checksumValid =
 
-            setTimeout(() => {
+    await verifyChecksum(
+
+        installerPath,
+
+        expectedHash
+
+    );
+
+if (!checksumValid) {
+
+    try {
+
+        if (fs.existsSync(installerPath)) {
+
+            fs.unlinkSync(installerPath);
+
+        }
+
+    }
+
+    catch (error) {
+
+        console.error(
+
+            "Failed to delete invalid installer:",
+
+            error
+
+        );
+
+    }
+
+    return {
+
+        success: false,
+
+        message:
+
+            "Downloaded installer failed checksum verification."
+
+    };
+
+}
+
+                await launchInstaller(
+
+                    installerPath
+
+                );
+
+                await new Promise(
+
+                    resolve =>
+
+                        setTimeout(
+
+                            resolve,
+
+                            1000
+
+                        )
+
+                );
 
                 app.quit();
-
-            }, 2000);
 
             return {
 
@@ -1213,6 +1285,8 @@ ipcMain.handle(
             };
 
         }
+
+        
 
         catch (error) {
 

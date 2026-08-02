@@ -304,9 +304,16 @@ setLockMessage("Downloading latest version...");
 
 const installResult =
 
+    console.log("===== UPDATE INFO =====");
+    console.log(info);
+    console.log("SHA256 =", info.sha256);
+    console.log("Download Result =", downloadResult);
+
     await window.electronAPI.launchInstaller(
 
-        downloadResult.filePath
+        downloadResult.filePath,
+
+        info.sha256
 
     );
 

@@ -2,10 +2,13 @@
     "version": "1.0.0-rc4",
     "minimumVersion": "1.0.0-rc1",
     "releaseDate": "2026-08-01",
-    "notes": [
-        "Initial RC3 Release",
-        "Automatic Backup",
-        "Restore Module"
-    ],
-    "downloadUrl":"https://raw.githubusercontent.com/himanish26/kaira-luxe-billing-system/main/updates/test.txt"
+    "notes":[
+    "RC4 stability improvements",
+    "New application lock overlay",
+    "Improved updater reliability",
+    "Automatic backup improvements"
+],
+    "downloadUrl":"https://raw.githubusercontent.com/himanish26/kaira-luxe-billing-system/main/updates/test.txt",
+
+    "sha256":"REPLACE_WITH_REAL_HASH"
 }

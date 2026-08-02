@@ -9,7 +9,11 @@
 
     "pack": "electron-builder --dir",
 
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+
+    "manifest": "node scripts/generateUpdateManifest.js",
+
+    "release": "npm run dist && npm run manifest"
 },
   "author": "Himanish Patnaik",
   "license": "Single Device Commercial",

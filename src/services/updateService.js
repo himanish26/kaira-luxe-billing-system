@@ -96,6 +96,9 @@ async function checkForUpdates() {
         const latest =
             response.data;
 
+            console.log("LATEST JSON FROM GITHUB");
+            console.log(JSON.stringify(latest, null, 2));
+
         const currentVersion =
             packageJson.version;
 
