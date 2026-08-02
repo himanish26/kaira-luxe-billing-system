@@ -302,20 +302,18 @@ setLockProgress(25);
 
 setLockMessage("Downloading latest version...");
 
+console.log("===== UPDATE INFO =====");
+console.log(info);
+console.log("SHA256 =", info.sha256);
+console.log("Download Result =", downloadResult);
+
 const installResult =
-
-    console.log("===== UPDATE INFO =====");
-    console.log(info);
-    console.log("SHA256 =", info.sha256);
-    console.log("Download Result =", downloadResult);
-
     await window.electronAPI.launchInstaller(
-
         downloadResult.filePath,
-
         info.sha256
-
     );
+
+console.log("INSTALL RESULT =", installResult);
 
 if (!installResult.success) {
 
@@ -324,17 +322,12 @@ if (!installResult.success) {
     unlockApplication();
 
     await window.electronAPI.showMessageBox({
-
         type: "error",
-
         title: "Installation Failed",
-
         message: installResult.message
-
     });
 
     return;
-
 }
 
 setLockProgress(60);

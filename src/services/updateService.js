@@ -80,24 +80,46 @@ async function checkForUpdates() {
 
     try {
 
-        const response =
-            await axios.get(
+        console.log("UPDATE_URL =", UPDATE_URL);
 
-                UPDATE_URL,
+        const response = await axios.get(
 
-                {
 
-                    timeout: 5000
+    UPDATE_URL,
 
-                }
+    {
 
-            );
+        headers: {
+
+            "Cache-Control": "no-cache",
+
+            "Pragma": "no-cache"
+
+        },
+
+        params: {
+
+            t: Date.now()
+
+        }
+
+    }
+
+);
 
         const latest =
             response.data;
 
             console.log("LATEST JSON FROM GITHUB");
-            console.log(JSON.stringify(latest, null, 2));
+            console.log("Response Keys:");
+
+console.log(Object.keys(latest));
+
+console.log("Raw Response:");
+
+console.dir(latest, { depth: null });
+
+console.log("SHA256 =", latest.sha256);
 
         const currentVersion =
             packageJson.version;
