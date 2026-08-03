@@ -308,6 +308,15 @@ let f6Timer = null;
 const deviceCard =
     document.getElementById("deviceCard");
 
+    if (deviceCard) {
+
+    deviceCard.addEventListener(
+        "click",
+        showDeviceSettings
+    );
+
+}
+
 const systemCard =
     document.getElementById("systemCard");
 

@@ -58,7 +58,8 @@ const fs = require("fs");
 
 const {
     printBill,
-    saveBillPdf
+    saveBillPdf,
+    printTestReceipt
 } = require("./printer");
 
 const {
@@ -129,10 +130,12 @@ const {
 
 } = require("../services/backupScheduler");
 
+let mainWindow;
+
 function createWindow() {
 
-    const win = new BrowserWindow({
-
+    mainWindow = new BrowserWindow({
+        
         width: 1400,
 
         height: 900,
@@ -150,7 +153,7 @@ function createWindow() {
 
     });
 
-    win.loadFile(
+    mainWindow.loadFile(
         path.join(
             __dirname,
             '../renderer/index.html'
@@ -460,6 +463,40 @@ ipcMain.handle(
         }
 
     }
+);
+
+/* ===========================================
+   TEST PRINTER
+=========================================== */
+
+ipcMain.handle(
+
+    "printer:test",
+
+    async (event, printerName) => {
+
+        try {
+
+            return await printTestReceipt(printerName);
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            return {
+
+                success: false,
+
+                error: error.message
+
+            };
+
+        }
+
+    }
+
 );
 
 ipcMain.handle(
@@ -1096,6 +1133,52 @@ ipcMain.handle(
    SHOW MESSAGE BOX
 =========================================== */
 
+/* ===========================================
+   GET INSTALLED PRINTERS
+=========================================== */
+
+ipcMain.handle(
+
+    "printer:getAll",
+
+    async () => {
+
+        try {
+
+            const printers =
+                await mainWindow.webContents.getPrintersAsync();
+
+                console.log("===== INSTALLED PRINTERS =====");
+                console.log(printers);
+
+            return {
+
+                success: true,
+
+                printers
+
+            };
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            return {
+
+                success: false,
+
+                message: error.message
+
+            };
+
+        }
+
+    }
+
+);
+
 ipcMain.handle(
 
     "dialog:showMessageBox",
@@ -1113,6 +1196,8 @@ ipcMain.handle(
     }
 
 );
+
+
 
 ipcMain.handle(
 

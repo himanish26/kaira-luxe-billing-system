@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>Printer Test</title>
+
+<style>
+
+@page{
+
+    size:80mm auto;
+    margin:0;
+
+}
+
+html,
+body{
+
+    width:80mm;
+
+    box-sizing:border-box;
+
+    margin:0;
+
+    padding:3mm;
+
+    font-family:
+        "Courier New",
+        monospace;
+
+    font-size:13px;
+
+    color:#000;
+
+    background:#fff;
+
+}
+
+.center{
+
+    text-align:center;
+
+}
+
+.left{
+
+    text-align:left;
+
+}
+
+.bold{
+
+    font-weight:bold;
+
+}
+
+.divider{
+
+    border-top:1px dashed #000;
+
+    margin:8px 0;
+
+}
+
+.big{
+
+    font-size:20px;
+
+    font-weight:bold;
+
+}
+
+.small{
+
+    font-size:11px;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="center big">
+
+KAIRA LUXE
+
+</div>
+
+<div class="center small">
+
+Billing System
+
+</div>
+
+<div class="divider"></div>
+
+<div class="center bold">
+
+★ TEST PRINT ★
+
+</div>
+
+<div class="divider"></div>
+
+<div class="left">
+
+Printer :
+<span id="printerName"></span>
+
+</div>
+
+<div class="left">
+
+Status :
+✓ Connected
+
+</div>
+
+<div class="left">
+
+Paper :
+80 mm Thermal
+
+</div>
+
+<div class="left">
+
+Date :
+<span id="date"></span>
+
+</div>
+
+<div class="left">
+
+Time :
+<span id="time"></span>
+
+</div>
+
+<div class="divider"></div>
+
+<div class="center">
+
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+
+<br>
+
+abcdefghijklmnopqrstuvwxyz
+
+<br>
+
+0123456789
+
+<br>
+
+!@#$%^&*()_+-=[]{};':",./<>?
+
+</div>
+
+<div class="divider"></div>
+
+<div class="center">
+
+████████████████████████████████
+
+<br>
+
+================================
+
+<br>
+
+--------------------------------
+
+<br>
+
+********************************
+
+</div>
+
+<div class="divider"></div>
+
+<div class="left">
+
+✓ Printer communication successful
+
+<br>
+
+✓ Print alignment OK
+
+<br>
+
+✓ Character rendering OK
+
+<br>
+
+✓ Ready for Billing
+
+</div>
+
+<div class="divider"></div>
+
+<div class="center">
+
+END OF TEST PRINT
+
+</div>
+
+<script src="testReceipt.js"></script>
+
+</body>
+
+</html>

@@ -126,6 +126,17 @@ saveSettings: (settings) =>
         settings
     ),
 
+getPrinters: () =>
+    ipcRenderer.invoke(
+        "printer:getAll"
+    ),
+
+testPrinter: (printerName) =>
+    ipcRenderer.invoke(
+        "printer:test",
+        printerName
+    ),
+
 createBackup: () =>
     ipcRenderer.invoke(
         "backup:create"

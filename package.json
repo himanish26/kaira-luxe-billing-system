@@ -6,15 +6,11 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-
     "pack": "electron-builder --dir",
-
     "dist": "electron-builder",
-
     "manifest": "node updates/generateUpdateManifest.js",
-
     "release": "npm run dist && npm run manifest"
-},
+  },
   "author": "Himanish Patnaik",
   "license": "Single Device Commercial",
   "type": "commonjs",
@@ -24,11 +20,13 @@
     "axios": "^1.19.0",
     "electron-store": "^11.0.2",
     "exceljs": "^4.4.0",
+    "jsbarcode": "^3.12.3",
+    "qrcode": "^1.5.4",
     "sqlite3": "^6.0.1",
     "xlsx": "^0.18.5"
-},
+  },
   "devDependencies": {
     "electron": "^42.5.0",
     "electron-builder": "^26.15.3"
-}
+  }
 }

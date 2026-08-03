@@ -4,6 +4,7 @@
 ./electron-builder.yml
 ./package-lock.json
 ./package.json
+./project_files copy.txt
 ./project_files.txt
 ./README.md
 ./src/.DS_Store
@@ -81,5 +82,6 @@
 ./src/services/installerService.js
 ./src/services/updateService.js
 ./src/services/updateVerifier.js
+./updates/generateUpdateManifest.js
 ./updates/latest.json
 ./updates/test.txt

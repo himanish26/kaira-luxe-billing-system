@@ -202,9 +202,114 @@ await printWindow.webContents.executeJavaScript(
 
 }
 
+async function printTestReceipt(printerName) {
+
+    return new Promise((resolve, reject) => {
+
+        const printWindow = new BrowserWindow({
+
+            show: false,
+
+            width: 320,
+
+            height: 500,
+
+            webPreferences: {
+
+                nodeIntegration: true,
+
+                contextIsolation: false
+
+            }
+
+        });
+
+       printWindow.loadFile(
+
+    path.join(
+
+        __dirname,
+
+        "../renderer/testReceipt.html"
+
+    )
+
+);
+
+        printWindow.webContents.once(
+
+            "did-finish-load",
+
+        async () => {
+
+                await printWindow.webContents.executeJavaScript(
+
+        `window.testReceiptData = ${JSON.stringify({
+
+            printerName,
+
+            date: new Date().toLocaleDateString(),
+
+            time: new Date().toLocaleTimeString()
+
+        })};`
+
+        );
+
+                setTimeout(() => {
+
+                    printWindow.webContents.print(
+
+                        {
+
+                            silent: true,
+
+                            printBackground: true,
+
+                            deviceName: printerName
+
+                        },
+
+                        (success, error) => {
+
+                            printWindow.close();
+
+                            if (success) {
+
+                                resolve({
+
+                                    success: true
+
+                                });
+
+                            }
+
+                            else {
+
+                                reject(error);
+
+                            }
+
+                        }
+
+                    );
+
+                },300);
+
+            }
+
+        );
+
+    });
+
+}
+
 module.exports = {
 
     printBill,
-    saveBillPdf
+
+    saveBillPdf,
+
+    printTestReceipt
 
 };
