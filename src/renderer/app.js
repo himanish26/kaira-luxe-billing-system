@@ -255,6 +255,10 @@ switch (status.printer.status) {
 
 }
 
+"use strict";
+
+history.scrollRestoration = "manual";
+
 const dashboardScreen =
     document.getElementById("dashboardScreen");
 
@@ -3028,5 +3032,15 @@ function hideAllScreens() {
     settingsPage.style.display = "none";
 
     document.getElementById("viewBillScreen").style.display = "none";
+
+}
+
+function showScreen(screen) {
+
+    hideAllScreens();
+
+    screen.style.display = "block";
+
+    document.documentElement.scrollTop = 0;
 
 }

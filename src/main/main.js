@@ -81,6 +81,16 @@ const {
 } = require("../services/backupService");
 
 const {
+
+    connectGoogleDrive
+
+} = require(
+
+    "../services/googleDriveService"
+
+);
+
+const {
     checkForUpdates
 } = require("../services/updateService");
 
@@ -1372,6 +1382,36 @@ if (!checksumValid) {
         }
 
         
+
+        catch (error) {
+
+            console.error(error);
+
+            return {
+
+                success: false,
+
+                message: error.message
+
+            };
+
+        }
+
+    }
+
+);
+
+ipcMain.handle(
+
+    "google:connect",
+
+    async () => {
+
+        try {
+
+            return await connectGoogleDrive();
+
+        }
 
         catch (error) {
 

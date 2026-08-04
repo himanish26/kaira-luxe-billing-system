@@ -265,6 +265,14 @@ onDownloadProgress: (
 
     ),
 
+connectGoogleDrive: () =>
+
+    ipcRenderer.invoke(
+
+        "google:connect"
+
+    ),
+
 }
 
 );

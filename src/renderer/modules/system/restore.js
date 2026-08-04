@@ -14,7 +14,7 @@ function showRestorePage() {
 
     backText: "← System",
 
-    backAction: showSystemPage,
+    backAction: showBackupPage,
 
     content: `
 
@@ -51,14 +51,12 @@ function showRestorePage() {
 });
 
 document
-
     .getElementById("restoreNowCard")
-
     .addEventListener(
-
         "click",
+        () => {
 
-        async () => {
+            requireAdminAuthorization(async () => {
 
         const result =
     await window.electronAPI.selectRestoreFile();
@@ -169,7 +167,11 @@ await window.electronAPI.showMessageBox({
         "Backup restored successfully.\n\nThe application will now restart."
 
 });
+
+            });
+
         }
+
     );
 
 }

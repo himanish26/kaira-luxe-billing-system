@@ -6,12 +6,12 @@ function showBackupPage() {
 
     renderSettingsPage({
 
-        title: "BACKUP",
+        title: "BACKUP & RESTORE",
 
         icon: "💾",
 
-        subtitle: "Create and manage database backups.",
-
+        subtitle: "Create, restore and manage secure database backups.",
+        
         backText: "← System",
 
         backAction: showSystemPage,
@@ -19,6 +19,32 @@ function showBackupPage() {
         content: `
 
 <div class="settings-grid">
+
+
+
+    <div
+        class="settings-card"
+        id="googleDriveStatusCard">
+
+        <div class="settings-icon">☁️</div>
+
+        <h2>Google Drive Status</h2>
+
+        <p>
+
+    🔴 Not Connected
+
+    <br><br>
+
+    Secure cloud backup
+
+    <br>
+
+    not configured
+
+</p>
+
+    </div>
 
     <div
         class="settings-card"
@@ -31,6 +57,23 @@ function showBackupPage() {
         <p>Create a manual database backup</p>
 
     </div>
+
+    <div
+    class="settings-card"
+    id="restoreBackupCard">
+
+    <div class="settings-icon">♻️</div>
+
+    <h2>Restore Backup</h2>
+
+    <p>
+
+        Restore a verified<br>
+        database backup
+
+    </p>
+
+</div>
 
     <div
         class="settings-card"
@@ -102,6 +145,13 @@ function showBackupPage() {
 
             }
         );
+
+        document
+    .getElementById("restoreBackupCard")
+    .addEventListener(
+        "click",
+        showRestorePage
+    );
 
         document
 

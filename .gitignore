@@ -20,3 +20,7 @@ out/
 
 # Temporary Files
 *.tmp
+
+google-credentials.json
+
+google-token.json

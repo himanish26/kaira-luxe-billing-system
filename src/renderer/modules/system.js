@@ -22,28 +22,34 @@ function showSystemPage() {
 <div class="settings-grid">
 
     <div
-        class="settings-card"
-        id="backupCard">
+    class="settings-card"
+    id="backupCard">
 
-        <div class="settings-icon">💾</div>
+    <div class="settings-icon">💾</div>
 
-        <h2>Backup</h2>
+    <h2>Backup & Restore</h2>
 
-        <p>Create and manage backups</p>
+    <p>
+        Backup, Restore<br>
+        Google Drive
+    </p>
 
-    </div>
+</div>
 
-    <div
-        class="settings-card"
-        id="restoreCard">
+<div
+    class="settings-card"
+    id="dayClosingCard">
 
-        <div class="settings-icon">♻️</div>
+    <div class="settings-icon">🌙</div>
 
-        <h2>Restore Backup</h2>
+    <h2>Day Closing</h2>
 
-        <p>Restore previous backup</p>
+    <p>
+        Close Business Day<br>
+        Backup & Exit
+    </p>
 
-    </div>
+</div>
 
     <div
         class="settings-card"
@@ -106,11 +112,15 @@ function showSystemPage() {
         showBackupPage
     );
 
-document
-    .getElementById("restoreCard")
+    document
+    .getElementById("dayClosingCard")
     .addEventListener(
         "click",
-        showRestorePage
+        () => {
+
+            alert("Day Closing\n\nComing in the next development phase.");
+
+        }
     );
 
 document
