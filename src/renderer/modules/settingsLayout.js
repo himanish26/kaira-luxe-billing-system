@@ -93,35 +93,53 @@ function showDeviceSettings() {
 🖨 Device Settings
 </h1>
 
-<div class="settings-group">
+<div class="device-settings-container">
 
-    <div class="settings-card-large">
+    <div class="device-card printer-card">
 
-        <h2>🖨 Printer</h2>
+        <h2 class="device-card-title">
+
+            🖨 Printer
+
+        </h2>
 
         <div class="settings-field">
 
-            <label>Default Printer</label>
+    <label>
 
-            <select id="printerSelect">
+        Default Printer
 
-                <option>
-                    Loading printers...
-                </option>
+    </label>
 
-            </select>
+    <select id="printerSelect">
 
-        </div>
+        <option>
+
+            Loading printers...
+
+        </option>
+
+    </select>
+
+</div>
+
+        <!-- Existing Printer HTML starts here -->
 
         <div class="settings-field">
 
             <label>Status</label>
 
-            <div id="printerStatus">
+            <div
 
-                🟡 No Printer Selected
+    id="printerStatus"
 
-            </div>
+    class="status-badge status-warning"
+
+>
+
+    🟡 Loading...
+
+</div>
 
         </div>
 
@@ -147,9 +165,13 @@ function showDeviceSettings() {
 
     </div>
 
-    <div class="settings-card-large">
+    <div class="device-card scanner-card">
 
-    <h2>📷 Scanner</h2>
+    <h2 class="device-card-title">
+
+            📷 Scanner
+
+        </h2>
 
     <div class="settings-field">
 
@@ -189,10 +211,17 @@ function showDeviceSettings() {
 
         <label>Expected Scan</label>
 
-        <input
-            id="expectedScan"
-            type="text"
-            readonly>
+        <div
+
+        id="expectedScan"
+
+        class="expected-scan"
+
+        >
+
+        8901234567890
+
+        </div>
 
     </div>
 
@@ -201,9 +230,14 @@ function showDeviceSettings() {
         <label>Scanner Output</label>
 
         <input
-            id="scannerOutput"
-            type="text"
-            autocomplete="off">
+
+id="scannerOutput"
+
+placeholder="Scan a barcode..."
+
+autocomplete="off"
+
+>
 
     </div>
 
@@ -211,7 +245,7 @@ function showDeviceSettings() {
 
         <label>Status</label>
 
-        <div id="scannerStatus">
+        <div id="scannerStatus" class="status-badge status-warning">
 
             🟡 Waiting for Scan
 
@@ -220,14 +254,6 @@ function showDeviceSettings() {
     </div>
 
     <div class="settings-actions">
-
-        <button
-            id="clearScannerBtn"
-            class="dashboard-btn">
-
-            🗑 Clear
-
-        </button>
 
         <button
             id="saveScannerBtn"
@@ -249,6 +275,81 @@ const printerSelect =
 const printerStatus =
     document.getElementById("printerStatus");
 
+    async function refreshPrinterStatus() {
+
+    try {
+
+        const status =
+            await window.electronAPI.getSystemStatus();
+
+        switch (status.printer.status) {
+
+            case "Ready":
+
+                printerStatus.textContent =
+                    `🟢 ${status.printer.name}`;
+
+                printerStatus.className =
+                    "status-badge status-success";
+
+                break;
+
+            case "Offline":
+
+                printerStatus.textContent =
+                    `🟡 ${status.printer.name} (Offline)`;
+
+                printerStatus.className =
+                    "status-badge status-warning";
+
+                break;
+
+            case "No Default":
+
+                printerStatus.textContent =
+                    "🟡 No Default Printer";
+
+                printerStatus.className =
+                    "status-badge status-warning";
+
+                break;
+
+            case "No Printer":
+
+                printerStatus.textContent =
+                    "🔴 No Printer Installed";
+
+                printerStatus.className =
+                    "status-badge status-error";
+
+                break;
+
+            default:
+
+                printerStatus.textContent =
+                    "🔴 Unavailable";
+
+                printerStatus.className =
+                    "status-badge status-error";
+
+        }
+
+    }
+
+    catch (err) {
+
+        console.error(err);
+
+        printerStatus.textContent =
+            "🔴 Unable to Detect Printer";
+
+        printerStatus.className =
+            "status-badge status-error";
+
+    }
+
+}
+
 window.electronAPI
     .getPrinters()
     .then(result => {
@@ -256,11 +357,16 @@ window.electronAPI
         console.log(result);
 
         if (!result.success) {
-            printerStatus.textContent =
-                "🔴 Unable to load printers";
-            return;
-        }
 
+    printerStatus.textContent =
+        "🔴 Unable to load printers";
+
+    printerStatus.className =
+        "status-badge status-error";
+
+    return;
+
+}
         printerSelect.innerHTML = "";
 
         result.printers.forEach(printer => {
@@ -277,60 +383,75 @@ window.electronAPI
                 option.selected = true;
             }
 
-            if (printer.isDefault) {
-
-    printerStatus.textContent =
-        "🟢 Ready";
-
-}
 
             printerSelect.appendChild(option);
 
         });
 
-    
+        refreshPrinterStatus();
+
+    if (
+
+    !result.printers.some(
+
+        p => p.isDefault
+
+    )
+
+) {
+
+    printerStatus.textContent =
+        "🟢 Ready";
+
+    printerStatus.className =
+        "status-badge status-success";
+
+}
 
     })
     .catch(err => {
-        console.error(err);
-        printerStatus.textContent =
-            "🔴 Unable to load printers";
-    });
+
+    console.error(err);
+
+    printerStatus.textContent =
+        "🔴 Unable to load printers";
+
+    printerStatus.className =
+        "status-badge status-error";
+
+});
 
 document
-    .getElementById("testPrinterBtn")
+    .getElementById("savePrinterBtn")
     .addEventListener(
 
         "click",
 
         async () => {
 
-            const printerName =
-                printerSelect.value;
+            try {
 
-            if (!printerName) {
+                await window.electronAPI.saveSettings({
 
-                alert("Please select a printer.");
+                    default_printer:
+                        printerSelect.value
 
-                return;
+                });
 
-            }
-
-            const result =
-                await window.electronAPI
-                    .testPrinter(printerName);
-
-            if (result.success) {
-
-                alert("Test print sent successfully.");
-
-            }
-
-            else {
+                await refreshPrinterStatus();
 
                 alert(
-                    result.error ||
-                    "Printing failed."
+                    "✅ Printer settings saved successfully."
+                );
+
+            }
+
+            catch (err) {
+
+                console.error(err);
+
+                alert(
+                    "Unable to save printer settings."
                 );
 
             }
@@ -387,17 +508,18 @@ function updateScannerUI() {
     const type =
         scannerType.value;
 
-    expectedScan.value =
+    expectedScan.textContent =
         TEST_CODES[type];
+
+    scannerOutput.value = "";
 
     scannerOutput.focus();
 
     scannerStatus.textContent =
         "🟡 Waiting for Scan";
 
-    scannerPreview.innerHTML = `
-    <svg id="barcodeSvg"></svg>
-    `;
+    scannerStatus.className =
+        "status-badge status-warning";
 
 if (type === "barcode") {
 
@@ -459,7 +581,7 @@ function validateScanner() {
         scannerOutput.value.trim();
 
     const expectedValue =
-        expectedScan.value.trim();
+        expectedScan.textContent.trim();
 
     if (scannedValue === expectedValue) {
 

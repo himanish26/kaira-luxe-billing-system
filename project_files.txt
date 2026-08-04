@@ -72,9 +72,14 @@
 ./src/renderer/styles/reports.css
 ./src/renderer/styles/settings.css
 ./src/renderer/styles/variables.css
+./src/renderer/testReceipt.html
+./src/renderer/testReceipt.js
 ./src/renderer/utils/appLock.js
 ./src/renderer/utils/appState.js
 ./src/renderer/utils/busyGuard.js
+./src/renderer/vendor/.DS_Store
+./src/renderer/vendor/JsBarcode.all.min.js
+./src/renderer/vendor/qrcode.min.js
 ./src/services/backupScheduler.js
 ./src/services/backupService.js
 ./src/services/checksumService.js
