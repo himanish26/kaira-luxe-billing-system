@@ -1,5 +1,13 @@
 const db = require("./database");
 
+const {
+
+    logInvoiceGenerated,
+
+    logPaymentCorrected
+
+} = require("./logService");
+
 function getNextBillNumber() {
 
     return new Promise((resolve, reject) => {
@@ -257,30 +265,45 @@ function saveBill(billData) {
 
             function commit(){
 
-                db.run("COMMIT",(err)=>{
+    db.run(
 
-                    if(err){
+        "COMMIT",
 
-                        reject(err);
+        async (err)=>{
 
-                    }
+            if(err){
 
-                    else{
-
-                        resolve(true);
-
-                    }
-
-                });
+                reject(err);
 
             }
+
+            else{
+
+                await logInvoiceGenerated(
+
+                    billData.bill_no,
+
+                    billData.net_amount,
+
+                    billData.total_qty
+
+                );
+
+                resolve(true);
+
+            }
+
+        }
+
+    );
+
+}
 
         });
 
     });
 
 }
-
 
 function getBills() {
 

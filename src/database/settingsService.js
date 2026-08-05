@@ -1,5 +1,11 @@
 const db = require("./database");
 
+const {
+
+    logSettingsChanged
+
+} = require("./logService");
+
 function getSettings() {
 
     return new Promise((resolve, reject) => {
@@ -68,9 +74,12 @@ function saveSettings(settings) {
 
                 else{
 
-                    resolve(true);
+    logSettingsChanged()
+        .catch(console.error);
 
-                }
+    resolve(true);
+
+}
 
             }
 

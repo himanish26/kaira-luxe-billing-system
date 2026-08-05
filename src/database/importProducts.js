@@ -1,5 +1,12 @@
 const XLSX = require("xlsx");
+const path = require("path");
 const db = require("./database");
+
+const {
+
+    logProductImport
+
+} = require("./logService");
 
 function importProducts(filePath) {
 
@@ -93,47 +100,63 @@ function importProducts(filePath) {
 
                     }
 
-                    if(completed === products.length){
+                    if (completed === products.length) {
 
-                        resolve({
+    db.run(
 
-                            success:true,
+        `
+        INSERT OR REPLACE INTO inventory_import_log
+        (
+            id,
+            file_name,
+            imported_on,
+            products_imported
+        )
+        VALUES
+        (
+            1,
+            ?,
+            ?,
+            ?
+        )
+        `,
 
-                            imported,
+        [
+            require("path").basename(filePath),
+            new Date().toLocaleString(),
+            imported
+        ],
 
-                            skipped,
+        async function (err) {
 
-                            total:products.length
+            if (err) {
 
-                        });
+                return reject(err);
 
+            }
 
-                        db.run(
-    `
-    INSERT OR REPLACE INTO inventory_import_log
-    (
-        id,
-        file_name,
-        imported_on,
-        products_imported
-    )
-    VALUES
-    (
-        1,
-        ?,
-        ?,
-        ?
-    )
-    `,
-    [
-        require("path").basename(filePath),
-        new Date().toLocaleString(),
-        imported
-    ]
-);
+            await logProductImport(imported);
+
+            resolve({
+
+                success: true,
+
+                imported,
+
+                skipped,
+
+                total: products.length
+
+            });
+
+        }
+
+    );
+
+}
                     }
 
-                }
+                
 
             );
 

@@ -646,13 +646,20 @@ if (saveReceiptBtn){
         const lastUpdated =
             `${formattedDate} • ${formattedTime}`;
 
-        await window.electronAPI.saveSettings({
+        const current =
+    await window.electronAPI.getSettings();
 
-            receipt_message: msg,
+await window.electronAPI.saveSettings({
 
-            last_updated: lastUpdated
+    receipt_message: msg,
 
-        });
+    backup_location: current.backup_location,
+
+    auto_backup_time: current.auto_backup_time,
+
+    last_updated: lastUpdated
+
+});
 
         receiptMessage.innerText =
             msg || "Not Set";

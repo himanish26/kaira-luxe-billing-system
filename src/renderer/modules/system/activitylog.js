@@ -2,7 +2,52 @@
    ACTIVITY LOG
 ===================================== */
 
-function showActivityLogPage() {
+async function showActivityLogPage() {
+
+    const activities =
+        await window.electronAPI.getActivities();
+
+    let html = "";
+
+    activities.forEach(activity => {
+
+        html += `
+
+<div class="activity-item">
+
+    <div class="activity-time">
+
+        ${activity.activity_time}
+
+    </div>
+
+    <div class="activity-content">
+
+        <div class="activity-category">
+
+            ${activity.category}
+
+        </div>
+
+        <div class="activity-action">
+
+            ${activity.action}
+
+        </div>
+
+        <div class="activity-details">
+
+            ${activity.details || ""}
+
+        </div>
+
+    </div>
+
+</div>
+
+`;
+
+    });
 
     renderSettingsPage({
 
@@ -10,7 +55,7 @@ function showActivityLogPage() {
 
         icon: "📜",
 
-        subtitle: "View all important system activities.",
+        subtitle: "System activity history",
 
         backText: "← System",
 
@@ -18,52 +63,167 @@ function showActivityLogPage() {
 
         content: `
 
-<div class="settings-grid">
+    <div class="activity-toolbar">
 
-    <div
-        class="settings-card"
-        id="viewActivityCard">
+    <div class="activity-search">
 
-        <div class="settings-icon">📜</div>
-
-        <h2>View Activity</h2>
-
-        <p>
-            View system activity history
-        </p>
+        <input
+            id="activitySearch"
+            type="text"
+            placeholder="🔍 Search activities..." />
 
     </div>
 
-    <div
-        class="settings-card">
+    <div class="activity-actions">
 
-        <div class="settings-icon">🗓️</div>
+        <button
+            id="exportActivityBtn"
+            class="primary-btn">
 
-        <h2>Last Activity</h2>
+            📤 Export to Excel
 
-        <p>
-            No recent activity
-        </p>
-
-    </div>
-
-    <div
-        class="settings-card">
-
-        <div class="settings-icon">🧹</div>
-
-        <h2>Clear History</h2>
-
-        <p>
-            Administrator Only
-        </p>
+        </button>
 
     </div>
+
+</div>
+
+<div
+    id="activityCategoryBar"
+    class="activity-category-bar">
+
+</div>
+
+
+<div class="activity-log-container">
+
+    ${html}
 
 </div>
 
 `
 
     });
+
+    document
+    .getElementById(
+        "exportActivityBtn"
+    )
+    .addEventListener(
+
+        "click",
+
+        async () => {
+
+            const result =
+                await window
+                .electronAPI
+                .exportActivityLog();
+
+            if (
+                result.success
+            ) {
+
+                await window
+                .electronAPI
+                .showMessageBox({
+
+                    type: "info",
+
+                    title: "Export Complete",
+
+                    message:
+                        "Activity Log exported successfully."
+
+                });
+
+            }
+
+        }
+
+    );
+
+    document
+    .getElementById(
+        "archiveActivityBtn"
+    )
+    .addEventListener(
+
+        "click",
+
+        async () => {
+
+            const confirmation =
+    await window
+        .electronAPI
+        .showMessageBox({
+
+            type: "warning",
+
+            title: "Archive Activity Log",
+
+            buttons: [
+
+                "Cancel",
+
+                "Archive"
+
+            ],
+
+            defaultId: 1,
+
+            cancelId: 0,
+
+            message:
+
+`This will
+
+• Export the Activity Log to Excel
+
+• Remove all archived activities
+
+A new archive entry will be created automatically.
+
+Do you want to continue?`
+
+        });
+
+if (confirmation.response !== 1) {
+
+    return;
+
+}
+
+const result =
+    await window
+        .electronAPI
+        .archiveActivities();
+
+            if (result.cancelled) {
+
+    return;
+
+}
+
+if (result.success) { 
+
+                await window
+                .electronAPI
+                .showMessageBox({
+
+                    type: "info",
+
+                    title: "Archive Complete",
+
+                    message:
+                        "Activity Log archived successfully."
+
+                });
+
+            }
+
+        }
+
+    );
 
 }

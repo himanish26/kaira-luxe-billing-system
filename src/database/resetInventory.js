@@ -1,5 +1,11 @@
 const db = require("./database");
 
+const {
+
+    logInventoryReset
+
+} = require("./logService");
+
 function resetInventory() {
 
     return new Promise((resolve, reject) => {
@@ -33,14 +39,18 @@ function resetInventory() {
                             }
 
                             db.run(
+
                                 "COMMIT",
-                                function(err){
+
+                                async function(err){
 
                                     if(err){
 
                                         return reject(err);
 
                                     }
+
+                                    await logInventoryReset();
 
                                     resolve({
 

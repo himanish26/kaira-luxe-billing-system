@@ -3,15 +3,20 @@
 ./billing.db
 ./electron-builder.yml
 ./export_project_files.command
+./google-credentials.json
 ./package-lock.json
 ./package.json
 ./project_files.txt
 ./README.md
 ./src/.DS_Store
+./src/database/activityExporter.js
+./src/database/activityLogService.js
+./src/database/activityService.js
 ./src/database/billService.js
 ./src/database/database.js
 ./src/database/excelExporter.js
 ./src/database/importProducts.js
+./src/database/logService.js
 ./src/database/productMasterExporter.js
 ./src/database/productService.js
 ./src/database/reportService.js
@@ -55,6 +60,7 @@
 ./src/renderer/modules/system.js
 ./src/renderer/modules/system/activitylog.js
 ./src/renderer/modules/system/backup.js
+./src/renderer/modules/system/dayClosing.js
 ./src/renderer/modules/system/diagnostics.js
 ./src/renderer/modules/system/exportData.js
 ./src/renderer/modules/system/restore.js
@@ -64,6 +70,7 @@
 ./src/renderer/receipt.js
 ./src/renderer/style.css
 ./src/renderer/styles/about.css
+./src/renderer/styles/activitylog.css
 ./src/renderer/styles/base.css
 ./src/renderer/styles/billing.css
 ./src/renderer/styles/dashboard.css
@@ -84,6 +91,8 @@
 ./src/services/backupService.js
 ./src/services/checksumService.js
 ./src/services/downloadService.js
+./src/services/googleDriveService.js
+./src/services/googleOAuthService.js
 ./src/services/installerService.js
 ./src/services/updateService.js
 ./src/services/updateVerifier.js

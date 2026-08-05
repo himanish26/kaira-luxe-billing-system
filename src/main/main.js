@@ -37,6 +37,21 @@ const {
 
 } = require("../database/settingsService");
 
+const {
+
+    logActivity,
+    getActivities,
+    searchActivities,
+    archiveActivities
+
+} = require("../database/activityService");
+
+const {
+
+    exportActivityLog
+
+} = require("../database/activityExporter");
+
 const importProducts =
     require('../database/importProducts');
 
@@ -1422,6 +1437,171 @@ ipcMain.handle(
                 success: false,
 
                 message: error.message
+
+            };
+
+        }
+
+    }
+
+);
+
+/* ===========================================
+   ACTIVITY LOG
+=========================================== */
+
+ipcMain.handle(
+
+    "activity:log",
+
+    async (event, activity) => {
+
+        try {
+
+            return await logActivity(activity);
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            return {
+
+                success: false,
+
+                message: error.message
+
+            };
+
+        }
+
+    }
+
+);
+
+ipcMain.handle(
+
+    "activity:get",
+
+    async () => {
+
+        try {
+
+            return await getActivities();
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            return [];
+
+        }
+
+    }
+
+);
+
+/* ===========================================
+   EXPORT ACTIVITY LOG
+=========================================== */
+
+ipcMain.handle(
+
+    "activity:export",
+
+    async () => {
+
+        try {
+
+            return await exportActivityLog();
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            return {
+
+                success: false,
+
+                message: error.message
+
+            };
+
+        }
+
+    }
+
+);
+
+/* ===========================================
+   ARCHIVE ACTIVITY LOG
+=========================================== */
+
+ipcMain.handle(
+
+    "activity:archive",
+
+    async () => {
+
+        try {
+
+            // 1. Export Excel
+            const exportResult =
+                await exportActivityLog();
+
+            if (
+                !exportResult.success
+            ) {
+
+                return exportResult;
+
+            }
+
+            // 2. Delete activities
+            await archiveActivities();
+
+            // 3. Create archive log
+            await logActivity({
+
+                category: "SYSTEM",
+
+                action: "Activity Log Archived",
+
+                details:
+                    exportResult.fileName,
+
+                user_name: "Administrator",
+
+                status: "SUCCESS"
+
+            });
+
+            return {
+
+                success: true,
+
+                fileName:
+                    exportResult.fileName
+
+            };
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            return {
+
+                success: false,
+
+                message:
+                    error.message
 
             };
 

@@ -147,6 +147,27 @@ getBackupHistory: () =>
         "backup:getHistory"
     ),
 
+logActivity: (activity) =>
+    ipcRenderer.invoke(
+        "activity:log",
+        activity
+    ),
+
+    getActivities: () =>
+    ipcRenderer.invoke(
+        "activity:get"
+    ),
+
+    exportActivityLog: () =>
+    ipcRenderer.invoke(
+        "activity:export"
+    ),
+
+    archiveActivities: () =>
+    ipcRenderer.invoke(
+        "activity:archive"
+    ),
+
 selectBackupFolder: () =>
     ipcRenderer.invoke(
         "backup:selectFolder"

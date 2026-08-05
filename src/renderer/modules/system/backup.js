@@ -178,8 +178,18 @@ function showBackupPage() {
             settings.backup_location =
                 selectedFolder;
 
-            settings.last_updated =
-                new Date().toISOString();
+            const now = new Date();
+
+settings.last_updated =
+    `${now.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+    })} • ${now.toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true
+    }).toUpperCase()}`;
 
             console.log("Saving Settings...", settings);
 

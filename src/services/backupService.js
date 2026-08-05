@@ -19,6 +19,18 @@ const {
     getSettings
 } = require("../database/settingsService");
 
+const {
+
+    logBackupCreated,
+
+    logBackupFailed,
+
+    logRestoreCompleted,
+
+    logRestoreFailed
+
+} = require("../database/logService");
+
 function ensureDirectory(folderPath) {
 
     if (!fs.existsSync(folderPath)) {
@@ -108,27 +120,71 @@ async function createBackup() {
 
             });
 
-        output.on("close", () => {
+        output.on(
 
-            resolve({
+    "close",
 
-                success: true,
+    async () => {
 
-                backupFileName,
+        try {
 
-                backupFilePath,
+            await logBackupCreated(
 
-                size: archive.pointer()
+                backupFileName
 
-            });
+            );
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+        }
+
+        resolve({
+
+            success: true,
+
+            backupFileName,
+
+            backupFilePath,
+
+            size: archive.pointer()
 
         });
 
-        archive.on("error", err => {
+    }
 
-            reject(err);
+);
 
-        });
+        archive.on(
+
+    "error",
+
+    async (err) => {
+
+        try {
+
+            await logBackupFailed(
+
+                err.message
+
+            );
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+        }
+
+        reject(err);
+
+    }
+
+);
 
         archive.pipe(output);
 
@@ -648,6 +704,18 @@ console.log(
     "Restart required."
 );
 
+try {
+
+    await logRestoreCompleted();
+
+}
+
+catch (error) {
+
+    console.error(error);
+
+}
+
 return {
 
     success: true,
@@ -661,18 +729,34 @@ return {
 
     catch (error) {
 
-        console.error(error);
+    console.error(error);
 
-        return {
+    try {
 
-            success: false,
+        await logRestoreFailed(
 
-            message:
-                error.message
+            error.message
 
-        };
+        );
 
     }
+
+    catch (err) {
+
+        console.error(err);
+
+    }
+
+    return {
+
+        success: false,
+
+        message:
+            error.message
+
+    };
+
+}
 
 }
 
