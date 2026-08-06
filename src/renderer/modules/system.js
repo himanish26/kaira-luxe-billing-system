@@ -116,11 +116,7 @@ function showSystemPage() {
     .getElementById("dayClosingCard")
     .addEventListener(
         "click",
-        () => {
-
-            alert("Day Closing\n\nComing in the next development phase.");
-
-        }
+        showDayClosingPage
     );
 
 document

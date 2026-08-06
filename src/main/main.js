@@ -153,6 +153,12 @@ const {
 
 } = require("../services/backupScheduler");
 
+const {
+
+    getDayClosingSummary
+
+} = require("../database/dayClosingService");
+
 let mainWindow;
 
 let isAppQuitting = false;
@@ -1679,6 +1685,18 @@ ipcMain.handle(
             };
 
         }
+
+    }
+
+);
+
+ipcMain.handle(
+
+    "get-day-closing-summary",
+
+    async () => {
+
+        return await getDayClosingSummary();
 
     }
 

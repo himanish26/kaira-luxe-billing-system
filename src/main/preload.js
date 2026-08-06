@@ -71,6 +71,14 @@ contextBridge.exposeInMainWorld(
 
     ),
 
+    getDayClosingSummary: () =>
+
+    ipcRenderer.invoke(
+
+        "get-day-closing-summary"
+
+    ),
+
         getBillDetails: (billNo) =>
             ipcRenderer.invoke(
                 "get-bill-details",
