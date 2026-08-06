@@ -66,7 +66,7 @@ rows += `
 
 </div>
 
-<div class="table-container">
+<div class="activity-table-container">
 
     <table id="historyTable">
 
@@ -155,7 +155,7 @@ rows += `
     );
 
     const searchBox =
-document.getElementById("activitySearch");
+    document.getElementById("activitySearch");
 
 searchBox.addEventListener("input", () => {
 
@@ -163,9 +163,9 @@ searchBox.addEventListener("input", () => {
         searchBox.value.trim().toLowerCase();
 
     const rows =
-    document.querySelectorAll(
-        "#activityTableBody tr"
-    );
+        document.querySelectorAll(
+            "#activityTableBody tr"
+        );
 
     rows.forEach(row => {
 
@@ -175,15 +175,23 @@ searchBox.addEventListener("input", () => {
         const category =
             row.cells[1].innerText.toLowerCase();
 
-        row.style.display =
+        if (
 
             date.includes(keyword) ||
 
             category.includes(keyword)
 
-            ? ""
+        ) {
 
-            : "none";
+            row.style.display = "";
+
+        }
+
+        else {
+
+            row.style.display = "none";
+
+        }
 
     });
 

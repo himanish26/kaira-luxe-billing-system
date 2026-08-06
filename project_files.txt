@@ -10,7 +10,6 @@
 ./README.md
 ./src/.DS_Store
 ./src/database/activityExporter.js
-./src/database/activityLogService.js
 ./src/database/activityService.js
 ./src/database/billService.js
 ./src/database/database.js

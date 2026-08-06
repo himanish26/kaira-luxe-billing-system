@@ -95,3 +95,55 @@
     width:260px;
 
 }
+
+.activity-table-container{
+
+    width:100%;
+
+    max-height:430px;
+
+    overflow-y:auto;
+
+    overflow-x:auto;
+
+    background:#fff;
+
+    border-radius:16px;
+
+    box-shadow:0 8px 20px rgba(0,0,0,.08);
+
+}
+
+.activity-table-container table{
+
+    width:100%;
+
+    border-collapse:collapse;
+
+}
+
+.activity-table-container thead th{
+
+    position:sticky;
+
+    top:0;
+
+    background:#8B004B;
+
+    color:#fff;
+
+    z-index:20;
+
+}
+
+.activity-table-container tbody tr:nth-child(even){
+
+    background:#f8f8f8;
+
+}
+
+.activity-table-container tbody tr:hover{
+
+    background:#e8f2ff;
+
+}
