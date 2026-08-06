@@ -141,13 +141,9 @@ async function searchActivities(searchText) {
 
             WHERE
 
-                category LIKE ?
+            activity_date LIKE ?
 
-                OR action LIKE ?
-
-                OR details LIKE ?
-
-                OR user_name LIKE ?
+            OR category LIKE ?
 
             ORDER BY id DESC
 
@@ -155,8 +151,6 @@ async function searchActivities(searchText) {
 
             [
 
-                `%${searchText}%`,
-                `%${searchText}%`,
                 `%${searchText}%`,
                 `%${searchText}%`
 

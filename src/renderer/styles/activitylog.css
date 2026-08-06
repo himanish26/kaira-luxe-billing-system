@@ -1,56 +1,82 @@
 /* ==========================================
-   ACTIVITY LOG
+   ACTIVITY TABLE
 ========================================== */
 
-.activity-toolbar{
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:space-between;
-
-    gap:25px;
-
-    margin-bottom:30px;
-
-}
-
-.activity-search{
-
-    width:700px;
-
-}
-
-.activity-search input{
+#activityTable{
 
     width:100%;
 
-    height:62px;
-
-    padding:0 22px;
-
-    font-size:22px;
-
-    border:2px solid #e4e4e4;
-
-    border-radius:16px;
-
-    background:#fff;
-
-    transition:.25s;
+    border-collapse:collapse;
 
 }
 
-.activity-search input:focus{
+#activityTable th{
+
+    padding:18px;
+
+    font-size:20px;
+
+    font-weight:700;
+
+}
+
+#activityTable td{
+
+    padding:18px;
+
+    font-size:18px;
+
+    text-align:center;
+
+    border-bottom:1px solid #eee;
+
+}
+
+#activityTable td:nth-child(3),
+
+#activityTable td:nth-child(4){
+
+    text-align:left;
+
+}
+
+#activityTable tbody tr:nth-child(even){
+
+    background:#f8f8f8;
+
+}
+
+#activityTable tbody tr:hover{
+
+    background:#e8f2ff;
+
+}
+
+#activitySearch{
+
+    width:550px;
+
+    height:65px;
+
+    padding:0 20px;
+
+    margin-bottom:25px;
+
+    font-size:24px;
+
+    font-weight:600;
+
+    border:2px solid #8b0035;
+
+    border-radius:12px;
 
     outline:none;
 
-    border-color:var(--primary);
+}
 
-    box-shadow:
+#activitySearch:focus{
 
-        0 0 0 4px rgba(139,0,75,.10);
+    box-shadow:0 0 10px rgba(122,0,44,.25);
 
 }
 
@@ -58,28 +84,14 @@
 
     display:flex;
 
-    gap:18px;
+    justify-content:center;
+
+    margin-top:30px;
 
 }
 
-.activity-category-bar{
+#exportActivityBtn{
 
-    display:flex;
-
-    gap:14px;
-
-    flex-wrap:wrap;
-
-    margin-bottom:35px;
-
-}
-
-.activity-actions button{
-
-    min-width:240px;
-
-    height:62px;
-
-    font-size:22px;
+    width:260px;
 
 }

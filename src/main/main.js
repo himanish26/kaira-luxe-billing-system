@@ -1,5 +1,20 @@
 const {
 
+    app,
+
+    BrowserWindow,
+
+    ipcMain,
+
+    dialog
+
+} = require("electron");
+
+const path = require("path");
+const fs = require("fs");
+
+const {
+
     getProductByBarcode,
     getInventorySummary,
     getAllProducts,
@@ -12,76 +27,28 @@ const resetInventory =
     require("../database/resetInventory");
 
 const {
-    exportReport
-} = require(
-    "../database/reportService"
-);
-
-const {
-
-    saveBill,
-    getNextBillNumber,
-    getBills,
-    getBillDetails,
-    updatePaymentAllocation,
-    getPaymentCorrections,
-    getDashboardSummary
-
-} = require("../database/billService");
-
-const {
-
-    getSettings,
-
-    saveSettings
-
-} = require("../database/settingsService");
-
-const {
-
-    logActivity,
-    getActivities,
-    searchActivities,
-    archiveActivities
-
-} = require("../database/activityService");
-
-const {
-
-    exportActivityLog
-
-} = require("../database/activityExporter");
-
-const importProducts =
-    require('../database/importProducts');
-
-const {
-    downloadProductMasterTemplate
-} = require("../database/productMasterExporter");
-
-const {
-    app,
-    BrowserWindow,
-    ipcMain,
-    dialog
-} = require('electron');
-
-const path = require('path');
-
-const ExcelJS = require("exceljs");
-const fs = require("fs");
-
-const {
-    printBill,
-    saveBillPdf,
-    printTestReceipt
-} = require("./printer");
-
-const {
     getSystemStatus
 } = require("./statusService");
 
 require('../database/database');
+
+const {
+
+    saveBill,
+
+    getNextBillNumber,
+
+    getBills,
+
+    getBillDetails,
+
+    updatePaymentAllocation,
+
+    getPaymentCorrections,
+
+    getDashboardSummary
+
+} = require("../database/billService");
 
 const {
 
@@ -94,6 +61,14 @@ const {
     restoreBackup
 
 } = require("../services/backupService");
+
+const {
+
+    getSettings,
+
+    saveSettings
+
+} = require("../database/settingsService");
 
 const {
 
@@ -151,27 +126,52 @@ const {
 
 const {
 
+    logActivity,
+    getActivities,
+    searchActivities,
+    archiveActivities
+
+} = require("../database/activityService");
+
+const {
+
+    exportActivityLog
+
+} = require("../database/activityExporter");
+
+const {
+
+    logApplicationStarted,
+
+    logApplicationClosed
+
+} = require("../database/logService");
+
+const {
+
     startBackupScheduler
 
 } = require("../services/backupScheduler");
 
 let mainWindow;
 
+let isAppQuitting = false;
+
 function createWindow() {
 
     mainWindow = new BrowserWindow({
-        
+
         width: 1400,
 
         height: 900,
 
-        title: 'Kaira Luxe Billing System',
+        title: "Kaira Luxe Billing System",
 
         webPreferences: {
 
             preload: path.join(
                 __dirname,
-                'preload.js'
+                "preload.js"
             )
 
         }
@@ -179,17 +179,90 @@ function createWindow() {
     });
 
     mainWindow.loadFile(
+
         path.join(
+
             __dirname,
-            '../renderer/index.html'
+
+            "../renderer/index.html"
+
         )
+
+    );
+
+    mainWindow.on(
+
+        "close",
+
+        async (event) => {
+
+            if (isAppQuitting) {
+
+                return;
+
+            }
+
+            event.preventDefault();
+
+            const result = await dialog.showMessageBox(
+
+                mainWindow,
+
+                {
+
+                    type: "question",
+
+                    buttons: [
+
+                        "Cancel",
+
+                        "Exit"
+
+                    ],
+
+                    defaultId: 1,
+
+                    cancelId: 0,
+
+                    title: "Exit KAIRA LUXE BILLING SYSTEM",
+
+                    message: "Are you sure you want to exit KAIRA LUXE BILLING SYSTEM?"
+
+                }
+
+            );
+
+            if (result.response === 1) {
+
+                isAppQuitting = true;
+
+                try {
+
+                    await logApplicationClosed();
+
+                }
+
+                catch (error) {
+
+                    console.error(error);
+
+                }
+
+                mainWindow.close();
+
+            }
+
+        }
+
     );
 
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
 
     createWindow();
+
+    await logApplicationStarted();
 
     verifyInstalledVersion();
 

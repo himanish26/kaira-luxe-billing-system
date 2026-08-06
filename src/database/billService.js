@@ -611,25 +611,31 @@ function updatePaymentAllocation(data) {
 
                                     db.run(
 
-                                        "COMMIT",
+    "COMMIT",
 
-                                        (err)=>{
+    async (err) => {
 
-                                            if(err){
+        if (err) {
 
-                                                reject(err);
+            reject(err);
 
-                                            }
+        }
 
-                                            else{
+        else {
 
-                                                resolve(true);
+            await logPaymentCorrected(
 
-                                            }
+                data.bill_no
 
-                                        }
+            );
 
-                                    );
+            resolve(true);
+
+        }
+
+    }
+
+);
 
                                 }
 

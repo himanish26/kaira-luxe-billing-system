@@ -62,7 +62,6 @@ function startBackupScheduler() {
                 }
 
             }
-            
 
             catch (error) {
 

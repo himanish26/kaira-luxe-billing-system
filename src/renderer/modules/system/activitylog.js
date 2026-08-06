@@ -7,43 +7,31 @@ async function showActivityLogPage() {
     const activities =
         await window.electronAPI.getActivities();
 
-    let html = "";
+    let rows = "";
 
     activities.forEach(activity => {
 
-        html += `
+rows += `
 
-<div class="activity-item">
+<tr>
 
-    <div class="activity-time">
+    <td>
 
-        ${activity.activity_time}
+    ${activity.activity_date}<br>
 
-    </div>
+    ${activity.activity_time.toUpperCase()}
 
-    <div class="activity-content">
+    </td>
 
-        <div class="activity-category">
+    <td>${activity.category}</td>
 
-            ${activity.category}
+    <td>${activity.action}</td>
 
-        </div>
+    <td>${activity.details || ""}</td>
 
-        <div class="activity-action">
+    <td>${activity.status}</td>
 
-            ${activity.action}
-
-        </div>
-
-        <div class="activity-details">
-
-            ${activity.details || ""}
-
-        </div>
-
-    </div>
-
-</div>
+</tr>
 
 `;
 
@@ -70,36 +58,57 @@ async function showActivityLogPage() {
         <input
             id="activitySearch"
             type="text"
-            placeholder="🔍 Search activities..." />
+            placeholder="🔍 Search by Date or Category..." />
 
     </div>
 
-    <div class="activity-actions">
+    
+
+</div>
+
+<div class="table-container">
+
+    <table id="historyTable">
+
+    <thead>
+
+        <tr>
+
+            <th>Date & Time</th>
+
+            <th>Category</th>
+
+            <th>Action</th>
+
+            <th>Details</th>
+
+            <th>Status</th>
+
+        </tr>
+
+    </thead>
+
+    <tbody id="activityTableBody">
+
+        ${rows}
+
+    </tbody>
+
+</table>
+
+</div>
+
+<div class="activity-actions">
 
         <button
             id="exportActivityBtn"
-            class="primary-btn">
+            class="export-report-btn">
 
             📤 Export to Excel
 
         </button>
 
     </div>
-
-</div>
-
-<div
-    id="activityCategoryBar"
-    class="activity-category-bar">
-
-</div>
-
-
-<div class="activity-log-container">
-
-    ${html}
-
-</div>
 
 `
 
@@ -141,89 +150,43 @@ async function showActivityLogPage() {
 
         }
 
-    );
-
-    document
-    .getElementById(
-        "archiveActivityBtn"
-    )
-    .addEventListener(
-
-        "click",
-
-        async () => {
-
-            const confirmation =
-    await window
-        .electronAPI
-        .showMessageBox({
-
-            type: "warning",
-
-            title: "Archive Activity Log",
-
-            buttons: [
-
-                "Cancel",
-
-                "Archive"
-
-            ],
-
-            defaultId: 1,
-
-            cancelId: 0,
-
-            message:
-
-`This will
-
-• Export the Activity Log to Excel
-
-• Remove all archived activities
-
-A new archive entry will be created automatically.
-
-Do you want to continue?`
-
-        });
-
-if (confirmation.response !== 1) {
-
-    return;
-
-}
-
-const result =
-    await window
-        .electronAPI
-        .archiveActivities();
-
-            if (result.cancelled) {
-
-    return;
-
-}
-
-if (result.success) { 
-
-                await window
-                .electronAPI
-                .showMessageBox({
-
-                    type: "info",
-
-                    title: "Archive Complete",
-
-                    message:
-                        "Activity Log archived successfully."
-
-                });
-
-            }
-
-        }
+        
 
     );
+
+    const searchBox =
+document.getElementById("activitySearch");
+
+searchBox.addEventListener("input", () => {
+
+    const keyword =
+        searchBox.value.trim().toLowerCase();
+
+    const rows =
+    document.querySelectorAll(
+        "#activityTableBody tr"
+    );
+
+    rows.forEach(row => {
+
+        const date =
+            row.cells[0].innerText.toLowerCase();
+
+        const category =
+            row.cells[1].innerText.toLowerCase();
+
+        row.style.display =
+
+            date.includes(keyword) ||
+
+            category.includes(keyword)
+
+            ? ""
+
+            : "none";
+
+    });
+
+});
 
 }

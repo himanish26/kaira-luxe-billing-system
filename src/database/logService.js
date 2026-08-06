@@ -76,6 +76,24 @@ async function logActivityArchived(fileName) {
 
 }
 
+async function logApplicationClosed() {
+
+    return logActivity({
+
+        category: "SYSTEM",
+
+        action: "Application Closed",
+
+        details: "Kaira Luxe Billing System closed",
+
+        user_name: "Administrator",
+
+        status: "SUCCESS"
+
+    });
+
+}
+
 /* ===========================================
    BILLING
 =========================================== */
@@ -308,6 +326,8 @@ async function logBusinessDayClosed(date) {
 module.exports = {
 
     logApplicationStarted,
+
+    logApplicationClosed,
 
     logApplicationUpdated,
 
