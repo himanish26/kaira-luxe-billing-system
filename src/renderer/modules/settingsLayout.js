@@ -460,6 +460,23 @@ document
 
     );
 
+document
+    .getElementById("testPrinterBtn")
+    .addEventListener("click", async () => {
+        try {
+            const selectedPrinter = printerSelect.value;
+            const result = await window.electronAPI.testPrinter(selectedPrinter); // or ipcRenderer.invoke("printer:test", selectedPrinter)
+            if (result && result.success) {
+                alert("✅ Test print sent successfully.");
+            } else {
+                alert("🔴 Print failed: " + (result?.error || "Unknown error"));
+            }
+        } catch (err) {
+            console.error(err);
+            alert("🔴 Failed to trigger test print.");
+        }
+    });
+
 const backButton =
     document.getElementById("settingsPageBackBtn");
 

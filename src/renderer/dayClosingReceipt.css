@@ -1,39 +1,108 @@
-body{
-
-    margin:0;
-
-    padding:0;
-
-    background:#fff;
-
-    font-family:Consolas,
-                "Courier New",
-                monospace;
-
+/* 80mm Thermal Printer Page Setup */
+@page {
+  size: 80mm auto; /* 80mm paper roll width, auto height */
+  margin: 0;       /* Removes browser header/footer (date, title, URL) */
 }
 
-.receipt{
-
-    width:80mm;
-
-    margin:auto;
-
-    padding:10px;
-
-    color:#000;
-
-    font-size:13px;
-
-    line-height:1.4;
-
-    white-space:pre-wrap;
-
+* {
+  box-sizing: border-box;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
 }
 
-pre{
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  /* System sans-serif renders sharply on thermal printheads */
+  font-family: Arial, Helvetica, sans-serif;
+  color: #000000;
+  -webkit-font-smoothing: antialiased;
+}
 
-    margin:0;
+.receipt {
+  /* Printable area for 80mm paper is 72mm */
+  width: 72mm;
+  margin: 0 auto;
+  padding: 4mm 2mm;
+  font-size: 13px;
+  line-height: 1.25;
+}
 
-    font-family:inherit;
+/* Header */
+.header {
+  text-align: center;
+  margin-bottom: 6px;
+}
 
+.title {
+  font-size: 20px;
+  font-weight: 900;
+  margin: 0 0 2px 0;
+  letter-spacing: 0.5px;
+}
+
+.subtitle {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+/* Crisp Thermal Dividers (Pure Black) */
+.line-dashed {
+  border-top: 1px dashed #000000;
+  margin: 6px 0;
+}
+
+.line-solid {
+  border-top: 1.5px solid #000000;
+  margin: 6px 0;
+}
+
+/* Row Alignments */
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 3px 0;
+  white-space: nowrap; /* Prevents unwanted line wraps on numbers */
+}
+
+.row.bold {
+  font-weight: 700;
+}
+
+.row.net-sale {
+  font-size: 16px;
+  font-weight: 900;
+  padding: 2px 0;
+}
+
+.status-row {
+  font-size: 12px;
+}
+
+/* Footer */
+.footer {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 900;
+  margin-top: 6px;
+  letter-spacing: 1px;
+}
+
+/* Print Overrides */
+@media print {
+  html, body {
+    width: 80mm;
+    height: auto;
+  }
+  
+  .receipt {
+    width: 72mm;
+    padding: 2mm 1mm;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
 }

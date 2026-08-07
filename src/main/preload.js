@@ -114,6 +114,7 @@ contextBridge.exposeInMainWorld(
         summary
 
     ),
+    testPrinter: (printerName) => ipcRenderer.invoke("printer:test", printerName),
 
         saveBillPdf: (billData) =>
             ipcRenderer.invoke(

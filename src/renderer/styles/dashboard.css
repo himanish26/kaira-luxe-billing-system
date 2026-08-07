@@ -27,6 +27,23 @@
     color: white;
 }
 
+.dashboard-grid button{
+
+    background:#fff;
+    border:2px solid #8B004B;
+    border-radius:20px;
+    transition:.2s;
+}
+
+.dashboard-grid button:hover{
+
+    background:#8B004B;
+    color:#fff;
+    transform:translateY(-2px);
+    box-shadow:0 10px 20px rgba(139,0,75,.15);
+
+}
+
 
 /* ==========================
    DASHBOARD HEADER

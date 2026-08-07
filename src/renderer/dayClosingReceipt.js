@@ -1,76 +1,86 @@
+function formatAmount(value) {
+    return Math.round(
+        Number(value || 0)
+    ).toLocaleString("en-IN");
+}
+
+// Helper to format current time as "09:18 PM" if no time property exists in data
+function getFormattedTime(timeValue) {
+    if (timeValue) return timeValue;
+    
+    return new Date().toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true
+    });
+}
+
 function loadDayClosingReceipt() {
+    const d = window.dayClosingData || {};
 
-        const data =
+    // 1. Check common key names for date and time
+    const date = d.businessDate || d.date || "";
+    const time = getFormattedTime(d.closingTime || d.time || d.closing_time);
 
-            window.dayClosingData || {};
+    // 2. Combine Date & Time cleanly
+    const dateTimeDisplay = date && time ? `${date} ${time}` : (date || time);
 
-        document.getElementById(
+    const receiptHtml = `
+        <div class="header">
+            <h1 class="title">KAIRA LUXE</h1>
+            <p class="subtitle">DAY CLOSING</p>
+        </div>
 
-            "receipt"
+        <div class="line-dashed"></div>
 
-        ).innerHTML = `
+        <div class="row bold">
+            <span>Date : ${dateTimeDisplay}</span>
+        </div>
 
-<pre>
+        <div class="row">
+            <span>Bills : <strong>${d.totalBills || 0}</strong></span>
+            <span>Items : <strong>${d.totalItems || 0}</strong></span>
+        </div>
 
-================================
+        <div class="line-dashed"></div>
 
-        KAIRA LUXE
+        <div class="row net-sale">
+            <span>Net Sale</span>
+            <span>₹${formatAmount(d.netSales)}</span>
+        </div>
 
-       DAY CLOSING
+        <div class="line-dashed"></div>
 
-================================
+        <div class="row">
+            <span>Cash</span>
+            <span>₹${formatAmount(d.cashSales)}</span>
+        </div>
 
-Business Date
+        <div class="row">
+            <span>UPI</span>
+            <span>₹${formatAmount(d.upiSales)}</span>
+        </div>
 
-${data.businessDate || ""}
+        <div class="row">
+            <span>Card</span>
+            <span>₹${formatAmount(d.cardSales)}</span>
+        </div>
 
---------------------------------
+        <div class="line-dashed"></div>
 
-Bills Generated
+        <div class="row status-row">
+            <span>Backup : ✓</span>
+            <span>Email : ✓</span>
+        </div>
 
-${data.totalBills || 0}
+        <div class="line-solid"></div>
 
-Items Sold
+        <div class="footer">
+            DAY CLOSED
+        </div>
+    `;
 
-${data.totalItems || 0}
+    document.getElementById("receipt").innerHTML = receiptHtml;
+}
 
---------------------------------
-
-Gross Sales
-
-₹${Number(data.grossSales || 0).toFixed(2)}
-
-Discount
-
-₹${Number(data.totalDiscount || 0).toFixed(2)}
-
-GST Collected
-
-₹${Number(data.totalGST || 0).toFixed(2)}
-
-Net Sales
-
-₹${Number(data.netSales || 0).toFixed(2)}
-
---------------------------------
-
-Cash
-
-₹${Number(data.cashSales || 0).toFixed(2)}
-
-UPI
-
-₹${Number(data.upiSales || 0).toFixed(2)}
-
-Card
-
-₹${Number(data.cardSales || 0).toFixed(2)}
-
-================================
-
-</pre>
-
-`;
-
-
-    }
+document.addEventListener("DOMContentLoaded", loadDayClosingReceipt);

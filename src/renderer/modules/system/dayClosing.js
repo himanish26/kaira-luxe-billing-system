@@ -14,7 +14,7 @@ function showDayClosingPage() {
 
         content: `
 
-<div class="settings-card">
+<div class="settings-card day-closing-card">
 
     <div class="day-closing-summary">
 
@@ -108,7 +108,7 @@ function showDayClosingPage() {
 
     <button
         id="startDayClosingBtn"
-        class="primary-btn">
+        class="export-report-btn">
 
         🌙 CLOSE BUSINESS DAY
 
@@ -215,6 +215,24 @@ async function startDayClosing() {
             document
                 .getElementById("dcBusinessDate")
                 .textContent;
+
+                summary.closingTime =
+
+    new Date().toLocaleTimeString(
+
+        "en-IN",
+
+        {
+
+            hour: "2-digit",
+
+            minute: "2-digit",
+
+            hour12: true
+
+        }
+
+    );
 
         await window
             .electronAPI

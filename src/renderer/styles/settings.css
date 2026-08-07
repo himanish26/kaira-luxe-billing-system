@@ -986,3 +986,11 @@ body{
     border-radius:10px;
 
 }
+
+.day-closing-card:hover{
+
+    transform:none;
+
+    box-shadow:0 10px 30px rgba(0,0,0,.08);
+
+}
