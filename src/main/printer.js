@@ -304,12 +304,112 @@ async function printTestReceipt(printerName) {
 
 }
 
+async function printDayClosingReceipt(dayClosingData) {
+
+    return new Promise((resolve, reject) => {
+
+        const printWindow = new BrowserWindow({
+
+            show: false,
+
+            width: 320,
+
+            height: 900,
+
+            webPreferences: {
+
+                nodeIntegration: true,
+
+                contextIsolation: false
+
+            }
+
+        });
+
+        printWindow.loadFile(
+
+            path.join(
+
+                __dirname,
+
+                "../renderer/dayClosingReceipt.html"
+
+            )
+
+        );
+
+        printWindow.webContents.once(
+
+            "did-finish-load",
+
+            async () => {
+
+                await printWindow.webContents.executeJavaScript(
+
+`window.dayClosingData = ${JSON.stringify(dayClosingData)};`
+
+                );
+
+                await printWindow.webContents.executeJavaScript(
+
+    "if(window.loadDayClosingReceipt){ loadDayClosingReceipt(); }"
+
+);
+
+                setTimeout(() => {
+
+                    printWindow.webContents.print(
+
+                        {
+
+                            silent: true,
+
+                            printBackground: true
+
+                        },
+
+                        (success, error) => {
+
+                            printWindow.close();
+
+                            if (success) {
+
+                                resolve({
+
+                                    success: true
+
+                                });
+
+                            }
+
+                            else {
+
+                                reject(error);
+
+                            }
+
+                        }
+
+                    );
+
+                }, 300);
+
+            }
+
+        );
+
+    });
+
+}
+
 module.exports = {
 
     printBill,
 
     saveBillPdf,
 
-    printTestReceipt
+    printTestReceipt,
+
+    printDayClosingReceipt
 
 };

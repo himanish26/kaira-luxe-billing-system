@@ -12,6 +12,17 @@ const {
 
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
+
+const ExcelJS = require("exceljs");
+
+const {
+    exportReport
+} = require("../database/reportService");
+
+const {
+    downloadProductMasterTemplate
+} = require("../database/productMasterExporter");
 
 const {
 
@@ -155,6 +166,19 @@ const {
 
 const {
 
+    printBill,
+
+    saveBillPdf,
+
+    printTestReceipt,
+
+    printDayClosingReceipt
+
+} = require("./printer");
+
+
+const {
+
     getDayClosingSummary
 
 } = require("../database/dayClosingService");
@@ -264,15 +288,9 @@ function createWindow() {
 
 }
 
-app.whenReady().then(async () => {
+app.whenReady().then(() => {
 
     createWindow();
-
-    await logApplicationStarted();
-
-    verifyInstalledVersion();
-
-    startBackupScheduler();
 
 });
 
@@ -568,6 +586,53 @@ ipcMain.handle(
 
     }
 );
+
+ipcMain.handle(
+
+    "print-day-closing",
+
+    async (
+
+        event,
+
+        dayClosingData
+
+    ) => {
+
+        try {
+
+            await printDayClosingReceipt(
+
+                dayClosingData
+
+            );
+
+            return {
+
+                success: true
+
+            };
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            return {
+
+                success: false,
+
+                error: error.message
+
+            };
+
+        }
+
+    }
+
+);
+
 
 /* ===========================================
    TEST PRINTER

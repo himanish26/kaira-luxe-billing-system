@@ -13,6 +13,7 @@
 ./src/database/activityService.js
 ./src/database/billService.js
 ./src/database/database.js
+./src/database/dayClosingService.js
 ./src/database/excelExporter.js
 ./src/database/importProducts.js
 ./src/database/logService.js
@@ -48,6 +49,9 @@
 ./src/renderer/assets/icons/icon.svg
 ./src/renderer/assets/icons/installer.ico
 ./src/renderer/assets/logo.png
+./src/renderer/dayClosingReceipt.css
+./src/renderer/dayClosingReceipt.html
+./src/renderer/dayClosingReceipt.js
 ./src/renderer/index.html
 ./src/renderer/modules/.DS_Store
 ./src/renderer/modules/inventory.js

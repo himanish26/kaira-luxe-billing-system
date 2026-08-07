@@ -1,0 +1,39 @@
+body{
+
+    margin:0;
+
+    padding:0;
+
+    background:#fff;
+
+    font-family:Consolas,
+                "Courier New",
+                monospace;
+
+}
+
+.receipt{
+
+    width:80mm;
+
+    margin:auto;
+
+    padding:10px;
+
+    color:#000;
+
+    font-size:13px;
+
+    line-height:1.4;
+
+    white-space:pre-wrap;
+
+}
+
+pre{
+
+    margin:0;
+
+    font-family:inherit;
+
+}

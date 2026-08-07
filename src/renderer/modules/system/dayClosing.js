@@ -102,6 +102,20 @@ function showDayClosingPage() {
 
 </div>
 
+</div>
+
+<div style="text-align:center;margin-top:40px;">
+
+    <button
+        id="startDayClosingBtn"
+        class="primary-btn">
+
+        🌙 CLOSE BUSINESS DAY
+
+    </button>
+
+</div>
+
 `
 
     });
@@ -169,5 +183,134 @@ function showDayClosingPage() {
     }
 
 })();
+
+
+
+document
+    .getElementById(
+        "startDayClosingBtn"
+    )
+    .addEventListener(
+
+        "click",
+
+        startDayClosing
+
+    );
+
+}
+
+
+
+async function startDayClosing() {
+
+    try {
+
+        const summary =
+            await window
+                .electronAPI
+                .getDayClosingSummary();
+
+        summary.businessDate =
+            document
+                .getElementById("dcBusinessDate")
+                .textContent;
+
+        await window
+            .electronAPI
+            .printDayClosing(summary);
+
+        alert("✅ Day Closing Receipt Printed");
+
+    }
+
+    catch(error){
+
+        console.error(error);
+
+        alert(error.message);
+
+    }
+
+}
+
+/* ==========================================
+   START DAY CLOSING
+========================================== */
+
+async function startDayClosing() {
+
+    try {
+
+        const summary =
+
+            await window
+                .electronAPI
+                .getDayClosingSummary();
+
+        summary.businessDate =
+
+            document
+                .getElementById(
+                    "dcBusinessDate"
+                )
+                .textContent;
+
+        const result =
+
+            await window
+                .electronAPI
+                .printDayClosing(
+                    summary
+                );
+
+        if (result.success) {
+
+            await window
+                .electronAPI
+                .showMessageBox({
+
+                    type: "info",
+
+                    title: "Day Closing",
+
+                    message:
+                        "Day Closing Receipt printed successfully."
+
+                });
+
+        }
+
+        else {
+
+            throw new Error(
+
+                result.error ||
+
+                "Printing failed."
+
+            );
+
+        }
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        await window
+            .electronAPI
+            .showMessageBox({
+
+                type: "error",
+
+                title: "Printing Failed",
+
+                message: error.message
+
+            });
+
+    }
 
 }

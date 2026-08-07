@@ -105,6 +105,16 @@ contextBridge.exposeInMainWorld(
                 billData
             ),
 
+    printDayClosing: (summary) =>
+
+    ipcRenderer.invoke(
+
+        "print-day-closing",
+
+        summary
+
+    ),
+
         saveBillPdf: (billData) =>
             ipcRenderer.invoke(
                 "save-bill-pdf",
