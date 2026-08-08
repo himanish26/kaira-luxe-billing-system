@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="src/renderer/assets/branding/logo.png" width="110" alt="KAIRA LUXE Logo">
+    <img src="src/renderer/Assets/branding/logo.png" width="2200" alt="KAIRA LUXE Logo">
 </p>
 A modern offline-first Point of Sale system built with Electron & SQLite.
 </p>
