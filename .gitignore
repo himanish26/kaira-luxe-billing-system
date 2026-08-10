@@ -24,3 +24,5 @@ out/
 google-credentials.json
 
 google-token.json
+
+.env

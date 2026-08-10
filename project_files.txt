@@ -1,6 +1,10 @@
 ./.DS_Store
+./.env
+./.env.example
 ./.gitignore
+./billing_test.db
 ./billing.db
+./billing.db(1).sql
 ./electron-builder.yml
 ./export_project_files.command
 ./google-credentials.json
@@ -94,6 +98,7 @@
 ./src/services/backupService.js
 ./src/services/checksumService.js
 ./src/services/downloadService.js
+./src/services/emailService.js
 ./src/services/googleDriveService.js
 ./src/services/googleOAuthService.js
 ./src/services/installerService.js

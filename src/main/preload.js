@@ -79,6 +79,22 @@ contextBridge.exposeInMainWorld(
 
     ),
 
+    getBusinessDayStatus: () =>
+
+    ipcRenderer.invoke(
+
+        "get-business-day-status"
+
+    ),
+
+closeBusinessDay: () =>
+
+    ipcRenderer.invoke(
+
+        "close-business-day"
+
+    ),
+
         getBillDetails: (billNo) =>
             ipcRenderer.invoke(
                 "get-bill-details",

@@ -235,9 +235,43 @@ Berhampur-760001',
         console.log("All Tables Created Successfully");
     });
 
-    
-
 }
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS day_closing (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                business_date TEXT NOT NULL UNIQUE,
+
+                closed_at TEXT NOT NULL,
+
+                total_bills INTEGER NOT NULL,
+
+                total_items INTEGER NOT NULL,
+
+                net_sales REAL NOT NULL,
+
+                cash_sales REAL NOT NULL,
+
+                upi_sales REAL NOT NULL,
+
+                card_sales REAL NOT NULL,
+
+                backup_status TEXT NOT NULL DEFAULT 'PENDING',
+
+                email_status TEXT NOT NULL DEFAULT 'PENDING',
+
+                closed_by TEXT NOT NULL DEFAULT 'Administrator',
+
+                remarks TEXT
+
+            )
+        `);
+
+        runDatabaseMigrations();
+
+        console.log("All Tables Created Successfully");
 
 function runDatabaseMigrations() {
 

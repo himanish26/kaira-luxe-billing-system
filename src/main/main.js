@@ -1,3 +1,9 @@
+require("dotenv").config();
+
+const {
+    verifyEmailConnection
+} = require("../services/emailService");
+
 const {
 
     app,
@@ -179,7 +185,9 @@ const {
 
 const {
 
-    getDayClosingSummary
+    getDayClosingSummary,
+    isBusinessDayClosed,
+    closeBusinessDay
 
 } = require("../database/dayClosingService");
 
@@ -460,19 +468,45 @@ ipcMain.handle(
 
         try {
 
+            const closed =
+                await isBusinessDayClosed();
+
+            if (closed) {
+
+                return {
+
+                    success: false,
+
+                    businessDayClosed: true,
+
+                    error:
+                        "Business Day is already closed. No further billing is allowed today."
+
+                };
+
+            }
+
+
             await saveBill(billData);
 
             return {
+
                 success: true
+
             };
 
-        } catch (error) {
+        }
+
+        catch (error) {
 
             console.error(error);
 
             return {
+
                 success: false,
+
                 error: error.message
+
             };
 
         }
@@ -1762,6 +1796,81 @@ ipcMain.handle(
     async () => {
 
         return await getDayClosingSummary();
+
+    }
+
+);
+
+
+ipcMain.handle(
+
+    "get-business-day-status",
+
+    async () => {
+
+        try {
+
+            const closed =
+                await isBusinessDayClosed();
+
+            return {
+
+                closed: !!closed,
+
+                closing:
+                    closed || null
+
+            };
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            return {
+
+                closed: false,
+
+                error: error.message
+
+            };
+
+        }
+
+    }
+
+);
+
+
+ipcMain.handle(
+
+    "close-business-day",
+
+    async () => {
+
+        try {
+
+            return await closeBusinessDay();
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "Close Business Day Error:",
+                error
+            );
+
+            return {
+
+                success: false,
+
+                error: error.message
+
+            };
+
+        }
 
     }
 

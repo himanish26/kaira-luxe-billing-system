@@ -200,58 +200,6 @@ document
 
 }
 
-
-
-async function startDayClosing() {
-
-    try {
-
-        const summary =
-            await window
-                .electronAPI
-                .getDayClosingSummary();
-
-        summary.businessDate =
-            document
-                .getElementById("dcBusinessDate")
-                .textContent;
-
-                summary.closingTime =
-
-    new Date().toLocaleTimeString(
-
-        "en-IN",
-
-        {
-
-            hour: "2-digit",
-
-            minute: "2-digit",
-
-            hour12: true
-
-        }
-
-    );
-
-        await window
-            .electronAPI
-            .printDayClosing(summary);
-
-        alert("✅ Day Closing Receipt Printed");
-
-    }
-
-    catch(error){
-
-        console.error(error);
-
-        alert(error.message);
-
-    }
-
-}
-
 /* ==========================================
    START DAY CLOSING
 ========================================== */
@@ -260,11 +208,123 @@ async function startDayClosing() {
 
     try {
 
+        /*
+         * STEP 1
+         * Confirm with operator.
+         */
+
+        const confirmation =
+
+            await window
+                .electronAPI
+                .showMessageBox({
+
+                    type: "warning",
+
+                    title:
+                        "Close Business Day",
+
+                    buttons: [
+
+                        "Cancel",
+
+                        "Close Business Day"
+
+                    ],
+
+                    defaultId: 1,
+
+                    cancelId: 0,
+
+                    message:
+                        "Are you sure you want to close the current business day?",
+
+                    detail:
+                        "Once closed, no new bills can be generated for today."
+
+                });
+
+
+        if (
+            confirmation.response !== 1
+        ) {
+
+            return;
+
+        }
+
+
+        /*
+         * STEP 2
+         * Close business day.
+         *
+         * This now performs:
+         * - day_closing insert
+         * - database backup
+         * - backup verification
+         * - backup_status update
+         * - activity log
+         */
+
+        const result =
+
+            await window
+                .electronAPI
+                .closeBusinessDay();
+
+
+        if (
+            result.alreadyClosed
+        ) {
+
+            await window
+                .electronAPI
+                .showMessageBox({
+
+                    type: "info",
+
+                    title:
+                        "Business Day Already Closed",
+
+                    message:
+                        "Today's business day has already been closed.",
+
+                    detail:
+                        `Closed at: ${result.closedAt}`
+
+                });
+
+            return;
+
+        }
+
+
+        if (
+            !result.success
+        ) {
+
+            throw new Error(
+
+                result.error ||
+                result.message ||
+                "Business Day could not be closed."
+
+            );
+
+        }
+
+
+        /*
+         * STEP 3
+         * Get the final summary for printing.
+         */
+
         const summary =
 
             await window
                 .electronAPI
                 .getDayClosingSummary();
+
 
         summary.businessDate =
 
@@ -274,7 +334,34 @@ async function startDayClosing() {
                 )
                 .textContent;
 
-        const result =
+
+        summary.closingTime =
+
+            new Date().toLocaleTimeString(
+
+                "en-IN",
+
+                {
+
+                    hour: "2-digit",
+
+                    minute: "2-digit",
+
+                    hour12: true
+
+                }
+
+            );
+
+
+        /*
+         * STEP 4
+         * Print existing Day Closing receipt.
+         *
+         * Receipt design is untouched.
+         */
+
+        const printResult =
 
             await window
                 .electronAPI
@@ -282,40 +369,71 @@ async function startDayClosing() {
                     summary
                 );
 
-        if (result.success) {
 
-            await window
-                .electronAPI
-                .showMessageBox({
-
-                    type: "info",
-
-                    title: "Day Closing",
-
-                    message:
-                        "Day Closing Receipt printed successfully."
-
-                });
-
-        }
-
-        else {
+        if (
+            !printResult.success
+        ) {
 
             throw new Error(
 
-                result.error ||
-
-                "Printing failed."
+                printResult.error ||
+                "Day Closing completed, but receipt printing failed."
 
             );
 
         }
 
+
+        /*
+         * STEP 5
+         * Disable button for this session.
+         */
+
+        const button =
+            document.getElementById(
+                "startDayClosingBtn"
+            );
+
+        if (button) {
+
+            button.disabled = true;
+
+            button.textContent =
+                "✓ BUSINESS DAY CLOSED";
+
+        }
+
+
+        /*
+         * STEP 6
+         * Final confirmation.
+         */
+
+        await window
+            .electronAPI
+            .showMessageBox({
+
+                type: "info",
+
+                title:
+                    "Day Closing Complete",
+
+                message:
+                    "Business Day closed successfully.",
+
+                detail:
+                    "Database backup completed and verified.\n\nNo further bills can be generated for today."
+
+            });
+
     }
 
     catch (error) {
 
-        console.error(error);
+        console.error(
+            "Day Closing Error:",
+            error
+        );
 
         await window
             .electronAPI
@@ -323,9 +441,11 @@ async function startDayClosing() {
 
                 type: "error",
 
-                title: "Printing Failed",
+                title:
+                    "Day Closing Failed",
 
-                message: error.message
+                message:
+                    error.message
 
             });
 
