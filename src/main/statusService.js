@@ -2,6 +2,10 @@ const db = require("../database/database");
 const https = require("https");
 const { BrowserWindow } = require("electron");
 
+const {
+    getBackupHistory
+} = require("../services/backupService");
+
 /* ==========================================
    DATABASE STATUS
 ========================================== */
@@ -183,6 +187,88 @@ async function getPrinterStatus() {
 }
 
 /* ==========================================
+   BACKUP STATUS
+========================================== */
+
+async function getLatestBackupStatus() {
+
+    try {
+
+        const backups =
+            await getBackupHistory();
+
+        if (!backups || backups.length === 0) {
+
+            return {
+
+                status: "Never"
+
+            };
+
+        }
+
+        const latest =
+            backups[0];
+
+        const createdAt =
+            new Date(latest.createdAt);
+
+        const formattedDate =
+            createdAt.toLocaleDateString(
+                "en-IN",
+                {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric"
+                }
+            );
+
+        const formattedTime =
+            createdAt.toLocaleTimeString(
+                "en-IN",
+                {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: true
+                }
+            ).toUpperCase();
+
+        return {
+
+            status:
+                `${formattedDate} • ${formattedTime}`,
+
+            fileName:
+                latest.fileName,
+
+            createdAt:
+                latest.createdAt,
+
+            size:
+                latest.size
+
+        };
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Unable to read backup status:",
+            error
+        );
+
+        return {
+
+            status: "Unavailable"
+
+        };
+
+    }
+
+}
+
+/* ==========================================
    SYSTEM STATUS
 ========================================== */
 
@@ -202,11 +288,7 @@ async function getSystemStatus() {
 
         printer: await getPrinterStatus(),
 
-        backup: {
-
-            status: "Never"
-
-        }
+        backup: await getLatestBackupStatus()
 
     };
 

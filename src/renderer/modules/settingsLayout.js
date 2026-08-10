@@ -528,9 +528,10 @@ function updateScannerUI() {
     expectedScan.textContent =
         TEST_CODES[type];
 
-    scannerOutput.value = "";
+    scannerOutput.disabled =
+        false;
 
-    scannerOutput.focus();
+    scannerOutput.value = "";
 
     scannerStatus.textContent =
         "🟡 Waiting for Scan";
@@ -538,61 +539,69 @@ function updateScannerUI() {
     scannerStatus.className =
         "status-badge status-warning";
 
-if (type === "barcode") {
+    scannerOutput.focus();
 
-    scannerPreview.innerHTML =
-        '<svg id="barcodeSvg"></svg>';
+    if (type === "barcode") {
 
-    JsBarcode(
+        scannerPreview.innerHTML =
+            '<svg id="barcodeSvg"></svg>';
 
-        "#barcodeSvg",
+        JsBarcode(
 
-        TEST_CODES.barcode,
+            "#barcodeSvg",
 
-        {
+            TEST_CODES.barcode,
 
-            format: "CODE128",
+            {
 
-            width: 2,
+                format: "CODE128",
 
-            height: 60,
+                width: 2,
 
-            displayValue: true,
+                height: 60,
 
-            margin: 10
+                displayValue: true,
 
-        }
+                margin: 10
 
-    );
+            }
 
-}
+        );
 
-else {
+    }
 
-    scannerPreview.innerHTML =
-        '<div id="qrCode"></div>';
+    else {
 
-    new QRCode(
+        scannerPreview.innerHTML =
+            '<div id="qrCode"></div>';
 
-        document.getElementById("qrCode"),
+        new QRCode(
 
-        {
+            document.getElementById("qrCode"),
 
-            text: TEST_CODES.qr,
+            {
 
-            width: 180,
+                text: TEST_CODES.qr,
 
-            height: 180
+                width: 180,
 
-        }
+                height: 180
 
-    );
+            }
 
-}
+        );
+
+    }
 
 }
 
 function validateScanner() {
+
+    if (scannerOutput.disabled) {
+
+        return;
+
+    }
 
     const scannedValue =
         scannerOutput.value.trim();
@@ -605,10 +614,33 @@ function validateScanner() {
         scannerStatus.innerHTML =
             "🟢 Scanner Test Passed";
 
-    } else {
+        scannerStatus.className =
+            "status-badge status-success";
+
+        scannerOutput.disabled =
+            true;
+
+        setTimeout(
+
+            () => {
+
+                updateScannerUI();
+
+            },
+
+            3000
+
+        );
+
+    }
+
+    else {
 
         scannerStatus.innerHTML =
             "🔴 Invalid Scan";
+
+        scannerStatus.className =
+            "status-badge status-error";
 
     }
 
