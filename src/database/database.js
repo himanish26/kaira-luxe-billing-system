@@ -209,6 +209,8 @@ function createTables() {
 
                 receipt_message TEXT,
 
+                default_printer TEXT,
+
                 backup_location TEXT,
 
                 auto_backup_time TEXT DEFAULT '21:30',
@@ -343,6 +345,17 @@ if (!existingColumns.includes("auto_backup_time")) {
     `);
 
     console.log("✓ Added column: auto_backup_time");
+
+}
+
+if (!existingColumns.includes("default_printer")) {
+
+    db.run(`
+        ALTER TABLE settings
+        ADD COLUMN default_printer TEXT
+    `);
+
+    console.log("✓ Added column: default_printer");
 
 }
 
@@ -1029,5 +1042,32 @@ db.serialize(() => {
 
 });
 
+function closeDatabase() {
+
+    return new Promise((resolve, reject) => {
+
+        db.close((err) => {
+
+            if (err) {
+
+                reject(err);
+
+                return;
+
+            }
+
+            console.log(
+                "✓ Database Connection Closed"
+            );
+
+            resolve();
+
+        });
+
+    });
+
+}
+
 module.exports = db;
 module.exports.databaseReady = databaseReady;
+module.exports.closeDatabase = closeDatabase;

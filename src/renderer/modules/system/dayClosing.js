@@ -1,4 +1,4 @@
-function showDayClosingPage() {
+async function showDayClosingPage() {
 
     renderSettingsPage({
 
@@ -114,6 +114,18 @@ function showDayClosingPage() {
 
     </button>
 
+    <br>
+
+    <button
+        id="reopenDayBtn"
+        class="export-report-btn"
+        disabled
+        style="margin-top:15px;">
+
+        🔓 DAY RE-OPEN
+
+    </button>
+
 </div>
 
 `
@@ -186,17 +198,76 @@ function showDayClosingPage() {
 
 
 
-document
-    .getElementById(
+const startDayClosingBtn =
+    document.getElementById(
         "startDayClosingBtn"
-    )
-    .addEventListener(
-
-        "click",
-
-        startDayClosing
-
     );
+
+const reopenDayBtn =
+    document.getElementById(
+        "reopenDayBtn"
+    );
+
+if (startDayClosingBtn) {
+
+    startDayClosingBtn.addEventListener(
+        "click",
+        startDayClosing
+    );
+
+}
+
+if (reopenDayBtn) {
+
+    reopenDayBtn.addEventListener(
+        "click",
+        reopenBusinessDay
+    );
+
+}
+
+try {
+
+    const status =
+        await window.electronAPI
+            .getBusinessDayStatus();
+
+    if (status.closed) {
+
+        startDayClosingBtn.disabled =
+            true;
+
+        startDayClosingBtn.textContent =
+            "✓ BUSINESS DAY CLOSED";
+
+        reopenDayBtn.disabled =
+            false;
+
+    }
+
+    else {
+
+        startDayClosingBtn.disabled =
+            false;
+
+        startDayClosingBtn.textContent =
+            "🌙 CLOSE BUSINESS DAY";
+
+        reopenDayBtn.disabled =
+            true;
+
+    }
+
+}
+
+catch (error) {
+
+    console.error(
+        "Business Day Status Error:",
+        error
+    );
+
+}
 
 }
 
@@ -389,19 +460,32 @@ async function startDayClosing() {
          * Disable button for this session.
          */
 
-        const button =
-            document.getElementById(
-                "startDayClosingBtn"
-            );
+        const closeButton =
+    document.getElementById(
+        "startDayClosingBtn"
+    );
 
-        if (button) {
+const reopenButton =
+    document.getElementById(
+        "reopenDayBtn"
+    );
 
-            button.disabled = true;
+if (closeButton) {
 
-            button.textContent =
-                "✓ BUSINESS DAY CLOSED";
+    closeButton.disabled =
+        true;
 
-        }
+    closeButton.textContent =
+        "✓ BUSINESS DAY CLOSED";
+
+}
+
+if (reopenButton) {
+
+    reopenButton.disabled =
+        false;
+
+}
 
 
         /*
@@ -448,6 +532,127 @@ async function startDayClosing() {
                     error.message
 
             });
+
+    }
+
+}
+
+/* ==========================================
+   RE-OPEN BUSINESS DAY
+========================================== */
+
+async function reopenBusinessDay() {
+
+    try {
+
+        requireAdminAuthorization(
+            async () => {
+
+                try {
+
+                    const result =
+                        await window.electronAPI
+                            .reopenBusinessDay();
+
+                    if (!result.success) {
+
+                        await window.electronAPI
+                            .showMessageBox({
+
+                                type: "error",
+
+                                title:
+                                    "Day Re-open Failed",
+
+                                message:
+                                    result.message ||
+                                    result.error ||
+                                    "Business Day could not be re-opened."
+
+                            });
+
+                        return;
+
+                    }
+
+                    await window.electronAPI
+                        .showMessageBox({
+
+                            type: "info",
+
+                            title:
+                                "Business Day Re-opened",
+
+                            message:
+                                "Business Day re-opened successfully.",
+
+                            detail:
+                                "Billing is now available again."
+
+                        });
+
+                    const closeButton =
+                        document.getElementById(
+                            "startDayClosingBtn"
+                        );
+
+                    const reopenButton =
+                        document.getElementById(
+                            "reopenDayBtn"
+                        );
+
+                    if (closeButton) {
+
+                        closeButton.disabled =
+                            false;
+
+                        closeButton.textContent =
+                            "🌙 CLOSE BUSINESS DAY";
+
+                    }
+
+                    if (reopenButton) {
+
+                        reopenButton.disabled =
+                            true;
+
+                    }
+
+                }
+
+                catch (error) {
+
+                    console.error(
+                        "Day Re-open Error:",
+                        error
+                    );
+
+                    await window.electronAPI
+                        .showMessageBox({
+
+                            type: "error",
+
+                            title:
+                                "Day Re-open Failed",
+
+                            message:
+                                error.message
+
+                        });
+
+                }
+
+            }
+        );
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Day Re-open Authorization Error:",
+            error
+        );
 
     }
 

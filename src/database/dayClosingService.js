@@ -9,7 +9,8 @@ const {
 } = require("../services/backupService");
 
 const {
-    logBusinessDayClosed
+    logBusinessDayClosed,
+    logBusinessDayReopened
 } = require("./logService");
 
 /* ===========================================
@@ -136,10 +137,24 @@ async function closeBusinessDay() {
 
 
     const closedAt =
-        new Date().toISOString();
+    new Date().toISOString();
 
-    const summary =
-        await getDayClosingSummary();
+const closedAtDisplay =
+    new Date(closedAt).toLocaleString(
+        "en-IN",
+        {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: true
+        }
+    );
+
+const summary =
+    await getDayClosingSummary();
 
     return new Promise((resolve, reject) => {
 
@@ -428,6 +443,97 @@ async function isBusinessDayClosed() {
 }
 
 /* ===========================================
+   RE-OPEN BUSINESS DAY
+=========================================== */
+
+async function reopenBusinessDay() {
+
+    const existingClosure =
+        await isBusinessDayClosed();
+
+    if (!existingClosure) {
+
+        return {
+
+            success: false,
+
+            alreadyOpen: true,
+
+            message:
+                "Business Day is already open."
+
+        };
+
+    }
+
+    return new Promise((resolve, reject) => {
+
+        db.run(
+
+            `
+            DELETE FROM day_closing
+            WHERE id = ?
+            `,
+
+            [
+                existingClosure.id
+            ],
+
+            async function (error) {
+
+                if (error) {
+
+                    reject(error);
+
+                    return;
+
+                }
+
+                if (this.changes !== 1) {
+
+                    resolve({
+
+                        success: false,
+
+                        message:
+                            "Business Day could not be re-opened."
+
+                    });
+
+                    return;
+
+                }
+
+                await logBusinessDayReopened(
+    existingClosure.business_date
+);
+
+console.log(
+    "✓ Business Day re-opened:",
+    existingClosure.business_date
+);
+
+resolve({
+
+    success: true,
+
+    businessDate:
+        existingClosure.business_date,
+
+    message:
+        "Business Day re-opened successfully."
+
+});
+
+            }
+
+        );
+
+    });
+
+}
+
+/* ===========================================
    MODULE EXPORTS
 =========================================== */
 
@@ -437,6 +543,8 @@ module.exports = {
 
     closeBusinessDay,
 
-    isBusinessDayClosed
+    isBusinessDayClosed,
+
+    reopenBusinessDay
 
 };

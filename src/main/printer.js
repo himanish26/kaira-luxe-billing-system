@@ -17,7 +17,7 @@ async function printBill(billData){
 
             show: false,
 
-            width: 320,
+            width: 302,
 
             height: 800,
 
@@ -48,7 +48,9 @@ async function printBill(billData){
 
                 const settings = await getSettings();
 
-await printWindow.webContents.executeJavaScript(
+                const printerName = settings.default_printer;
+
+                await printWindow.webContents.executeJavaScript(
     `window.receiptData = ${JSON.stringify(billData)};
      window.storeSettings = ${JSON.stringify(settings)};`
 );
@@ -63,12 +65,22 @@ await printWindow.webContents.executeJavaScript(
                     printWindow.webContents.print(
 
                         {
+    silent: true,
 
-                            silent: true,
+    printBackground: true,
 
-                            printBackground: true
+    deviceName: printerName,
 
-                        },
+    margins: {
+        marginType: "none"
+    },
+
+    landscape: false,
+
+    scaleFactor: 100,
+
+    usePrinterDefaultPageSize: true
+},
 
                         (success, error) => {
 
@@ -100,8 +112,6 @@ await printWindow.webContents.executeJavaScript(
 
 }
 
-
-
 async function saveBillPdf(billData){
 
     console.log("SAVE PDF FUNCTION CALLED");
@@ -112,7 +122,7 @@ async function saveBillPdf(billData){
 
             show: false,
 
-            width: 320,
+            width: 302,
 
             height: 800,
 
@@ -210,9 +220,9 @@ async function printTestReceipt(printerName) {
 
             show: false,
 
-            width: 320,
+            width: 302,
 
-            height: 500,
+            height: 1000,
 
             webPreferences: {
 
@@ -224,77 +234,197 @@ async function printTestReceipt(printerName) {
 
         });
 
-       printWindow.loadFile(
+        printWindow.loadFile(
 
-    path.join(
+            path.join(
+                __dirname,
+                "../renderer/receipt.html"
+            )
 
-        __dirname,
-
-        "../renderer/testReceipt.html"
-
-    )
-
-);
+        );
 
         printWindow.webContents.once(
 
             "did-finish-load",
 
-        async () => {
+            async () => {
 
-                await printWindow.webContents.executeJavaScript(
+                try {
 
-        `window.testReceiptData = ${JSON.stringify({
+                    const settings =
+                        await getSettings();
 
-            printerName,
+                    const testReceipt = {
 
-            date: new Date().toLocaleDateString(),
+                        testPrint: true,
 
-            time: new Date().toLocaleTimeString()
+                        bill_no: "TEST-PRINT",
 
-        })};`
+                        bill_date:
+                            new Date().toLocaleDateString(
+                                "en-IN"
+                            ),
 
-        );
+                        bill_time:
+                            new Date().toLocaleTimeString(
+                                "en-IN"
+                            ),
 
-                setTimeout(() => {
+                        customer_name:
+                            "PRINTER TEST",
 
-                    printWindow.webContents.print(
+                        customer_mobile:
+                            "",
 
-                        {
+                        total_items: 1,
 
-                            silent: true,
+                        total_qty: 1,
 
-                            printBackground: true,
+                        gross_amount: 100,
 
-                            deviceName: printerName
+                        discount_amount: 0,
 
-                        },
+                        taxable_amount: 84.75,
 
-                        (success, error) => {
+                        cgst_amount: 7.63,
 
-                            printWindow.close();
+                        sgst_amount: 7.63,
 
-                            if (success) {
+                        gst_amount: 15.25,
 
-                                resolve({
+                        net_amount: 100,
 
-                                    success: true
+                        cash_amount: 100,
 
-                                });
+                        upi_amount: 0,
+
+                        card_amount: 0,
+
+                        items: [
+
+                            {
+
+                                barcode: "8901234567890",
+
+                                brand: "TEST",
+
+                                product_name:
+                                    "PRINTER TEST ITEM",
+
+                                category:
+                                    "TEST",
+
+                                size: "FREE",
+
+                                colour: "TEST",
+
+                                qty: 1,
+
+                                mrp: 100,
+
+                                discount: 0,
+
+                                discount_percent: 0,
+
+                                gross_amount: 100,
+
+                                discount_amount: 0,
+
+                                taxable_amount: 84.75,
+
+                                gst_rate: 18,
+
+                                gst_amount: 15.25,
+
+                                net_amount: 100
 
                             }
 
-                            else {
+                        ]
 
-                                reject(error);
+                    };
 
-                            }
+                    await printWindow.webContents.executeJavaScript(
 
-                        }
+                        `window.receiptData = ${JSON.stringify(testReceipt)};
+                         window.storeSettings = ${JSON.stringify(settings)};`
 
                     );
 
-                },300);
+                    await printWindow.webContents.executeJavaScript(
+
+                        "if(window.loadReceipt){ loadReceipt(); }"
+
+                    );
+
+                    setTimeout(() => {
+
+                            printWindow.webContents.print(
+
+    {
+
+        silent: true,
+
+        printBackground: true,
+
+        deviceName: printerName,
+
+        margins: {
+    marginType: "none"
+},
+
+landscape: false,
+
+scaleFactor: 100,
+
+usePrinterDefaultPageSize: true,
+
+     
+
+    },
+
+                            (success, error) => {
+
+                                printWindow.close();
+
+                                if (success) {
+
+                                    resolve({
+
+                                        success: true
+
+                                    });
+
+                                }
+
+                                else {
+
+                                    reject(
+
+                                        error ||
+                                        new Error(
+                                            "Printer test failed."
+                                        )
+
+                                    );
+
+                                }
+
+                            }
+
+                        );
+
+                    }, 500);
+
+                }
+
+                catch (error) {
+
+                    printWindow.close();
+
+                    reject(error);
+
+                }
 
             }
 
@@ -361,12 +491,20 @@ async function printDayClosingReceipt(dayClosingData) {
                     printWindow.webContents.print(
 
                         {
+    silent: true,
 
-                            silent: true,
+    printBackground: true,
 
-                            printBackground: true
+    margins: {
+    marginType: "none"
+},
 
-                        },
+landscape: false,
+
+scaleFactor: 100,
+
+usePrinterDefaultPageSize: true
+},
 
                         (success, error) => {
 

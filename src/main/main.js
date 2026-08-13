@@ -89,6 +89,9 @@ const {
 
 } = require("../database/settingsService");
 
+const importProducts =
+    require("../database/importProducts");
+
 const {
 
     connectGoogleDrive
@@ -191,7 +194,8 @@ const {
 
     getDayClosingSummary,
     isBusinessDayClosed,
-    closeBusinessDay
+    closeBusinessDay,
+    reopenBusinessDay
 
 } = require("../database/dayClosingService");
 
@@ -438,7 +442,7 @@ return result;
 
         success: false,
 
-        message: error.stack
+        error: error.message
 
     };
 
@@ -814,6 +818,39 @@ ipcMain.handle(
         }
 
     }
+);
+
+ipcMain.handle(
+
+    "email:test",
+
+    async () => {
+
+        try {
+
+            return await verifyEmailConnection();
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "Email Test Error:",
+                error
+            );
+
+            return {
+
+                success: false,
+
+                error: error.message
+
+            };
+
+        }
+
+    }
+
 );
 
 ipcMain.handle(
@@ -1989,4 +2026,38 @@ ipcMain.handle(
 
     }
 
+);
+
+ipcMain.handle(
+    "reopen-business-day",
+    async () => {
+
+        try {
+
+            const result =
+                await reopenBusinessDay();
+
+            return result;
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "Business Day Re-open Error:",
+                error
+            );
+
+            return {
+
+                success: false,
+
+                error:
+                    error.message
+
+            };
+
+        }
+
+    }
 );

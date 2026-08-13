@@ -95,6 +95,14 @@ closeBusinessDay: () =>
 
     ),
 
+    reopenBusinessDay: () =>
+
+    ipcRenderer.invoke(
+
+        "reopen-business-day"
+
+    ),
+
         getBillDetails: (billNo) =>
             ipcRenderer.invoke(
                 "get-bill-details",
@@ -160,6 +168,11 @@ saveSettings: (settings) =>
         "save-settings",
         settings
     ),
+
+emailTest: () =>
+    ipcRenderer.invoke(
+        "email:test"
+    ),    
 
 getPrinters: () =>
     ipcRenderer.invoke(

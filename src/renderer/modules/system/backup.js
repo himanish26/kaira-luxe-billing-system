@@ -111,6 +111,18 @@ function showBackupPage() {
 
     </div>
 
+        <div
+        class="settings-card"
+        id="testEmailCard">
+
+        <div class="settings-icon">📧</div>
+
+        <h2>Test Email</h2>
+
+        <p>Test SMTP email connection</p>
+
+    </div>
+
 </div>
 
 `
@@ -296,6 +308,36 @@ alert(
     });
 
 });
+
+    document
+    .getElementById("testEmailCard")
+    .addEventListener(
+        "click",
+        async () => {
+
+            const result =
+                await window.electronAPI.emailTest();
+
+            if (result.success) {
+
+                alert(
+                    "Email connection successful.\n\n" +
+                    "SMTP server is reachable."
+                );
+
+            }
+
+            else {
+
+                alert(
+                    "Email connection failed.\n\n" +
+                    result.error
+                );
+
+            }
+
+        }
+    );
 
 async function showAutomaticBackupPage() {
 

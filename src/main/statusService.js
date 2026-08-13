@@ -6,6 +6,10 @@ const {
     getBackupHistory
 } = require("../services/backupService");
 
+const {
+    getSettings
+} = require("../database/settingsService");
+
 /* ==========================================
    DATABASE STATUS
 ========================================== */
@@ -135,12 +139,28 @@ async function getPrinterStatus() {
 
         }
 
-        const defaultPrinter =
-            printers.find(
-                p => p.isDefault
-            );
+        const settings =
+            await getSettings();
 
-        if (!defaultPrinter) {
+            console.log(
+    "PRINTER DEBUG - Kaira Luxe Billing System settings:",
+    settings
+);
+
+        const configuredPrinter =
+            settings.default_printer;
+
+        console.log(
+    "PRINTER DEBUG - configured printer:",
+    configuredPrinter
+);
+
+console.log(
+    "PRINTER DEBUG - installed printers:",
+    printers
+);
+
+        if (!configuredPrinter) {
 
             return {
 
@@ -150,13 +170,34 @@ async function getPrinterStatus() {
 
         }
 
-        if (defaultPrinter.status === 0) {
+        const selectedPrinter =
+            printers.find(
+                printer =>
+                    printer.name ===
+                    configuredPrinter
+            );
+
+        if (!selectedPrinter) {
+
+            return {
+
+                status: "No Printer",
+
+                name:
+                    configuredPrinter
+
+            };
+
+        }
+
+        if (selectedPrinter.status === 0) {
 
             return {
 
                 status: "Ready",
 
-                name: defaultPrinter.name
+                name:
+                    selectedPrinter.name
 
             };
 
@@ -166,7 +207,8 @@ async function getPrinterStatus() {
 
             status: "Offline",
 
-            name: defaultPrinter.name
+            name:
+                selectedPrinter.name
 
         };
 
@@ -174,7 +216,10 @@ async function getPrinterStatus() {
 
     catch (error) {
 
-        console.error(error);
+        console.error(
+            "Printer Status Error:",
+            error
+        );
 
         return {
 

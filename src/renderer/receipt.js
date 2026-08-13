@@ -117,11 +117,16 @@ payments.forEach(payment => {
 });
 
     const tbody =
-        document.getElementById("items");
+    document.getElementById("items");
 
-    tbody.innerHTML = "";
+tbody.innerHTML = "";
 
-    bill.items.forEach(item => {
+let totalQty = 0;
+
+bill.items.forEach(item => {
+
+    totalQty +=
+        Number(item.qty) || 0;
 
         const tr =
             document.createElement("tr");
@@ -163,6 +168,16 @@ ${item.brand} • ${item.size} • ${item.colour}
         tbody.appendChild(tr);
 
     });
+
+    const totalQtyElement =
+    document.getElementById("totalQty");
+
+if (totalQtyElement) {
+
+    totalQtyElement.innerText =
+        totalQty;
+
+}
 
     const settings = window.storeSettings;
 

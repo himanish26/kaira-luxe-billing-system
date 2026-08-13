@@ -20,6 +20,10 @@ const {
 } = require("../database/settingsService");
 
 const {
+    closeDatabase
+} = require("../database/database");
+
+const {
 
     logBackupCreated,
 
@@ -576,6 +580,15 @@ const backupDatabase = path.join(
     "billing.db.bak"
 );
 
+// Close the active SQLite connection
+// before replacing the live database file.
+
+await closeDatabase();
+
+console.log(
+    "STEP 0 : Database connection closed."
+);
+
 // Backup current database
 
 if (fs.existsSync(liveDatabase)) {
@@ -583,6 +596,10 @@ if (fs.existsSync(liveDatabase)) {
     fs.renameSync(
         liveDatabase,
         backupDatabase
+    );
+
+    console.log(
+        "STEP 0A : Existing database backed up."
     );
 
 }

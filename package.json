@@ -13,6 +13,17 @@
   },
   "author": "Himanish Patnaik",
   "license": "Single Device Commercial",
+   "build": {
+    "appId": "com.kairaluxe.billing",
+    "productName": "KAIRA LUXE BILLING SYSTEM",
+    "win": {
+      "target": "nsis",
+      "icon": "src/renderer/Assets/icons/icon.ico"
+    },
+    "nsis": {
+      "installerIcon": "src/renderer/Assets/icons/installer.ico"
+    }
+  },
   "type": "commonjs",
   "dependencies": {
     "@google-cloud/local-auth": "^3.0.1",

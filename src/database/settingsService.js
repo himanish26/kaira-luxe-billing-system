@@ -42,17 +42,19 @@ function saveSettings(settings) {
 
             `UPDATE settings
 
-             SET
+SET
 
-                receipt_message = ?,
+    receipt_message = ?,
 
-                backup_location = ?,
+    default_printer = ?,
 
-                auto_backup_time = ?,
+    backup_location = ?,
 
-                last_updated = ?
+    auto_backup_time = ?,
 
-            WHERE id = 1`,
+    last_updated = ?
+
+WHERE id = 1`,
 
             [
                 settings.receipt_message,

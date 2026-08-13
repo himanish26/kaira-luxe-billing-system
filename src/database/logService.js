@@ -323,6 +323,24 @@ async function logBusinessDayClosed(date) {
 
 }
 
+async function logBusinessDayReopened(date) {
+
+    return logActivity({
+
+        category: "DAY CLOSING",
+
+        action: "Business Day Re-opened",
+
+        details: date,
+
+        user_name: "Administrator",
+
+        status: "SUCCESS"
+
+    });
+
+}
+
 module.exports = {
 
     logApplicationStarted,
@@ -355,6 +373,8 @@ module.exports = {
 
     logBusinessDayOpened,
 
-    logBusinessDayClosed
+    logBusinessDayClosed,
+
+    logBusinessDayReopened
 
 };
