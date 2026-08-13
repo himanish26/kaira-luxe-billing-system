@@ -253,6 +253,14 @@ restoreBackup: (
 
 ),
 
+restartApp: (
+    restoreFileName
+) =>
+    ipcRenderer.invoke(
+        "app:restart",
+        restoreFileName
+    ),
+
 checkForUpdates: () =>
 
     ipcRenderer.invoke(

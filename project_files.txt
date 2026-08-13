@@ -2,9 +2,8 @@
 ./.env
 ./.env.example
 ./.gitignore
-./billing_test.db
 ./billing.db
-./billing.db(1).sql
+./database_schema.sql
 ./electron-builder.yml
 ./export_project_files.command
 ./google-credentials.json

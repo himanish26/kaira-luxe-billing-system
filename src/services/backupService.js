@@ -25,8 +25,6 @@ const {
 
     logBackupFailed,
 
-    logRestoreCompleted,
-
     logRestoreFailed
 
 } = require("../database/logService");
@@ -102,9 +100,9 @@ async function createBackup() {
 );
 
     const databasePath = path.join(
-        process.cwd(),
-        "billing.db"
-    );
+    app.getPath("userData"),
+    "billing.db"
+);
 
     return new Promise((resolve, reject) => {
 
@@ -251,7 +249,7 @@ archive.append(
 
 
 const logsFolder = path.join(
-    process.cwd(),
+    app.getPath("userData"),
     "logs"
 );
 
@@ -568,13 +566,13 @@ console.log(
             extractedDatabase
         );
 
-        const liveDatabase = path.join(
-    process.cwd(),
+    const liveDatabase = path.join(
+    app.getPath("userData"),
     "billing.db"
 );
 
 const backupDatabase = path.join(
-    process.cwd(),
+    app.getPath("userData"),
     "billing.db.bak"
 );
 
@@ -603,6 +601,17 @@ console.log(
     "STEP 1 : Database copied."
 );
 
+// Ensure the restored database is writable.
+
+fs.chmodSync(
+    liveDatabase,
+    0o644
+);
+
+console.log(
+    "STEP 1B : Database permissions restored."
+);
+
 // Verify restore
 
 const logsExist = entries.some(
@@ -618,9 +627,9 @@ const logsExist = entries.some(
 if (logsExist) {
 
     const logsFolder = path.join(
-        process.cwd(),
-        "logs"
-    );
+    app.getPath("userData"),
+    "logs"
+);
 
     ensureDirectory(logsFolder);
 
@@ -628,7 +637,7 @@ if (logsExist) {
 
         "Logs/",
 
-        process.cwd(),
+        app.getPath("userData"),
 
         true
 
@@ -704,17 +713,6 @@ console.log(
     "Restart required."
 );
 
-try {
-
-    await logRestoreCompleted();
-
-}
-
-catch (error) {
-
-    console.error(error);
-
-}
 
 return {
 

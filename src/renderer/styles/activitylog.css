@@ -118,7 +118,9 @@
 
     width:100%;
 
-    border-collapse:collapse;
+    border-collapse:separate;
+
+    border-spacing:0;
 
 }
 
@@ -128,11 +130,13 @@
 
     top:0;
 
+    z-index:30;
+
     background:#8B004B;
 
     color:#fff;
 
-    z-index:20;
+    background-clip:padding-box;
 
 }
 

@@ -36,12 +36,17 @@ h3 {
 }
 
 table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.10);
-    border-radius: 16px;
-    overflow: hidden;
+
+    width:100%;
+
+    border-collapse:collapse;
+
+    background:white;
+
+    box-shadow:0 4px 15px rgba(0,0,0,0.10);
+
+    border-radius:16px;
+
 }
 
 th {

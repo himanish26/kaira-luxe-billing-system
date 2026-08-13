@@ -168,6 +168,10 @@ await window.electronAPI.showMessageBox({
 
 });
 
+await window.electronAPI.restartApp(
+    result.filePath
+);
+
             });
 
         }

@@ -1,11 +1,22 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const path = require("path");
+const sqlite3 = require("sqlite3").verbose();
+const { app } = require("electron");
 
-const dbPath = path.join(__dirname, '../../billing.db');
+const dbPath = path.join(app.getPath("userData"), "billing.db");
+
+let databaseReadyResolve;
+
+let databaseReadyReject;
+
+const databaseReady = new Promise((resolve, reject) => {
+    databaseReadyResolve = resolve;
+    databaseReadyReject = reject;
+});
 
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
         console.error('Database Connection Error:', err.message);
+        databaseReadyReject(err);
     } else {
         console.log('Database Connected Successfully');
 
@@ -158,6 +169,28 @@ function createTables() {
                 username TEXT,
                 password_hash TEXT,
                 role TEXT
+            )
+        `);
+
+                db.run(`
+            CREATE TABLE IF NOT EXISTS activities (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                activity_date TEXT,
+
+                activity_time TEXT,
+
+                category TEXT,
+
+                action TEXT,
+
+                details TEXT,
+
+                user_name TEXT,
+
+                status TEXT
+
             )
         `);
 
@@ -961,4 +994,40 @@ function initializeOpeningStock() {
 
 initializeOpeningStock();
 
+// ============================================================
+// DATABASE READY CHECKPOINT
+// All database initialization operations queued above must
+// complete before the application is allowed to use the DB.
+// ============================================================
+
+db.serialize(() => {
+
+    db.get(
+        `SELECT 1`,
+        [],
+        (err) => {
+
+            if (err) {
+
+                console.error(
+                    'Database Initialization Failed:',
+                    err.message
+                );
+
+                databaseReadyReject(err);
+                return;
+            }
+
+            console.log(
+                '✓ Database Initialization Complete'
+            );
+
+            databaseReadyResolve();
+
+        }
+    );
+
+});
+
 module.exports = db;
+module.exports.databaseReady = databaseReady;

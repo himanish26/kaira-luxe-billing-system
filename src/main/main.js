@@ -47,7 +47,9 @@ const {
     getSystemStatus
 } = require("./statusService");
 
-require('../database/database');
+const {
+    databaseReady
+} = require("../database/database");
 
 const {
 
@@ -160,7 +162,9 @@ const {
 
     logApplicationStarted,
 
-    logApplicationClosed
+    logApplicationClosed,
+
+    logRestoreCompleted
 
 } = require("../database/logService");
 
@@ -296,9 +300,91 @@ function createWindow() {
 
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
 
-    createWindow();
+    try {
+
+        await databaseReady;
+
+        const restoreIndex =
+            process.argv.indexOf(
+                "--restore-completed"
+            );
+
+        const restoreFileName =
+            restoreIndex !== -1 &&
+            process.argv[restoreIndex + 1]
+                ? path.basename(
+                    process.argv[restoreIndex + 1]
+                )
+                : null;
+
+        console.log(
+            "✓ Kaira Luxe Billing System database ready. Starting application."
+        );
+
+        if (restoreFileName) {
+
+            try {
+
+                await logRestoreCompleted(
+                    restoreFileName
+                );
+
+            }
+            catch (error) {
+
+                console.error(
+                    "Restore Activity Log Error:",
+                    error
+                );
+
+            }
+
+        }
+
+        try {
+
+            await logApplicationStarted();
+
+        }
+        catch (error) {
+
+            console.error(
+                "Application Start Activity Log Error:",
+                error
+            );
+
+        }
+
+        createWindow();
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "✗ Kaira Luxe Billing System database initialization failed:",
+            error
+        );
+
+        await dialog.showMessageBox({
+
+            type: "error",
+
+            title: "Database Initialization Failed",
+
+            message:
+                "Kaira Luxe Billing System could not initialize its database.",
+
+            detail:
+                error.message
+
+        });
+
+        app.quit();
+
+    }
 
 });
 
@@ -1282,6 +1368,35 @@ ipcMain.handle(
 
     }
 
+);
+
+ipcMain.handle(
+    "app:restart",
+    (
+        event,
+        restoreFileName
+    ) => {
+
+        const relaunchArgs = [
+            ...process.argv.slice(1)
+        ];
+
+        if (restoreFileName) {
+
+            relaunchArgs.push(
+                "--restore-completed",
+                restoreFileName
+            );
+
+        }
+
+        app.relaunch({
+            args: relaunchArgs
+        });
+
+        app.exit(0);
+
+    }
 );
 
 ipcMain.handle(

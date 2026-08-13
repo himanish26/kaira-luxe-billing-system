@@ -339,6 +339,8 @@ if (storeCard){
     settingsScreen.style.display = "none";
 
     settingsPage.style.display = "block";
+
+    resetScrollPosition();
         
     settingsPageContent.innerHTML = `
 
@@ -753,6 +755,8 @@ const adminUnlockBtn =
 
         settingsScreen.style.display = "block";
 
+        resetScrollPosition();
+
     });
 
 }
@@ -1022,6 +1026,8 @@ if (settingsDashboardBtn){
 
         dashboardScreen.style.display = "block";
 
+        resetScrollPosition();
+
         await loadDashboardSummary();
 
     });
@@ -1039,6 +1045,8 @@ if (reportsDashboardBtn){
         reportsScreen.style.display = "none";
 
         dashboardScreen.style.display = "block";
+
+        resetScrollPosition();
 
         loadDashboardSummary();
 
@@ -1276,6 +1284,8 @@ gst_amount:
 
     dashboardScreen.style.display = "block";
 
+    resetScrollPosition();
+
     await loadDashboardSummary();
 
     loadNextBillNumber();
@@ -1318,6 +1328,8 @@ if (backBtn) {
 
     dashboardScreen.style.display = "block";
 
+    resetScrollPosition();
+
     loadDashboardSummary();
 
     return;
@@ -1342,6 +1354,7 @@ if (backBtn) {
 
     newBillScreen.style.display = "none";
     dashboardScreen.style.display = "block";
+    resetScrollPosition();
     loadDashboardSummary();
 
 });
@@ -1484,6 +1497,8 @@ if (mobile !== "" && mobile.length !== 10) {
 
     paymentScreen.style.display = "block";
 
+    resetScrollPosition();
+
     document.getElementById("paymentBillNo").innerText =
         document.getElementById("currentBillNo").innerText;
 
@@ -1507,6 +1522,8 @@ if (paymentBackBtn) {
         paymentScreen.style.display = "none";
 
         newBillScreen.style.display = "block";
+
+        resetScrollPosition();
 
     });
 
@@ -1536,6 +1553,8 @@ billHistoryScreen.style.display = "none";
 
 dashboardScreen.style.display = "block";
 
+resetScrollPosition();
+
 loadDashboardSummary();
         }
     );
@@ -1552,6 +1571,8 @@ if (viewBillBackBtn) {
         document.getElementById("viewBillScreen").style.display = "none";
 
         billHistoryScreen.style.display = "block";
+
+        resetScrollPosition();
 
     });
 
@@ -1582,6 +1603,8 @@ function openSettingsPage(title, html){
     settingsScreen.style.display = "none";
 
     settingsPage.style.display = "block";
+
+    resetScrollPosition();
 
 }
 
@@ -2251,6 +2274,8 @@ async function viewBill(billNo){
 
     // Show View Bill Screen
     document.getElementById("viewBillScreen").style.display = "block";
+
+    resetScrollPosition();
 
     // Bill Details
     document.getElementById("viewBillNo").innerText =
@@ -3022,6 +3047,16 @@ initializeKeyboardShortcuts();
    SCREEN NAVIGATION
 ===================================== */
 
+function resetScrollPosition() {
+
+    window.scrollTo(0, 0);
+
+    document.documentElement.scrollTop = 0;
+
+    document.body.scrollTop = 0;
+
+}
+
 function hideAllScreens() {
 
     dashboardScreen.style.display = "none";
@@ -3040,6 +3075,8 @@ function hideAllScreens() {
 
     document.getElementById("viewBillScreen").style.display = "none";
 
+    resetScrollPosition();
+
 }
 
 function showScreen(screen) {
@@ -3047,7 +3084,5 @@ function showScreen(screen) {
     hideAllScreens();
 
     screen.style.display = "block";
-
-    document.documentElement.scrollTop = 0;
 
 }
