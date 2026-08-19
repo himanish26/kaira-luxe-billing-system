@@ -1819,7 +1819,8 @@ function addProductToBill(product){
 
              qty: 1,
 
-             discount: 0,
+             discount:
+                Number(product.discount || 0),
 
              gst_rate: Number(product.gst_rate)
 
@@ -1876,9 +1877,10 @@ const net =
 <input
 type="number"
 min="0"
-max="10"
+max="${Number(item.discount) > 0 ? Number(item.discount) : 10}"
 value="${item.discount}"
 class="discount-input"
+${Number(item.discount) > 0 ? "disabled" : ""}
 onchange="updateDiscount(${index}, this.value)"
 >
 
@@ -1939,6 +1941,21 @@ function removeItem(index){
 }
 
 function updateDiscount(index, value){
+
+    const existingDiscount =
+        Number(billItems[index].discount || 0);
+
+    if(existingDiscount > 0){
+
+        alert(
+            `Maximum Discount Already Applied: ${existingDiscount}%`
+        );
+
+        renderBill();
+
+        return;
+
+    }
 
     let discount =
         Number(value);

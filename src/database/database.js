@@ -57,6 +57,8 @@ function createTables() {
 
     mrp REAL,
 
+    discount REAL DEFAULT 0,
+
     selling_price REAL,
 
     cost_price REAL,
@@ -363,6 +365,41 @@ if (!existingColumns.includes("default_printer")) {
 );
 
 }
+
+db.all(
+    "PRAGMA table_info(products)",
+    [],
+    (err, columns) => {
+
+        if (err) {
+
+            console.error(
+                "Products Migration Error:",
+                err
+            );
+
+            return;
+
+        }
+
+        const existingColumns =
+            columns.map(c => c.name);
+
+        if (!existingColumns.includes("discount")) {
+
+            db.run(`
+                ALTER TABLE products
+                ADD COLUMN discount REAL DEFAULT 0
+            `);
+
+            console.log(
+                "✓ Added column: products.discount"
+            );
+
+        }
+
+    }
+);
 
 db.run(`
     CREATE TABLE IF NOT EXISTS payment_corrections (

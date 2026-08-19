@@ -24,6 +24,7 @@ async function downloadProductMasterTemplate(filePath) {
         { header: "Size", key: "size", width: 12 },
         { header: "Colour", key: "colour", width: 15 },
         { header: "MRP", key: "mrp", width: 12 },
+        { header: "Discount", key: "discount", width: 12 },
         { header: "Selling Price", key: "selling_price", width: 15 },
         { header: "Cost Price", key: "cost_price", width: 15 },
         { header: "GST Rate", key: "gst_rate", width: 12 },
@@ -51,8 +52,9 @@ sheet.addRow({
     style_code: "JM-BR101",
     size: "M",
     colour: "White",
-    mrp: 399,
-    selling_price: 399,
+mrp: 399,
+discount: 0,
+selling_price: 399,
     cost_price: 220,
     gst_rate: 5,
     hsn_code: "621210",
@@ -75,6 +77,7 @@ sheet.addRow({
     size: "L",
     colour: "White",
     mrp: 499,
+    discount: 0,
     selling_price: 499,
     cost_price: 280,
     gst_rate: 5,
@@ -98,6 +101,7 @@ sheet.addRow({
     size: "34B",
     colour: "Skin",
     mrp: 899,
+    discount: 0,
     selling_price: 899,
     cost_price: 520,
     gst_rate: 5,
@@ -121,6 +125,7 @@ sheet.addRow({
     size: "Free",
     colour: "Black",
     mrp: 199,
+    discount: 0,
     selling_price: 199,
     cost_price: 95,
     gst_rate: 5,
@@ -144,6 +149,7 @@ sheet.addRow({
     size: "M",
     colour: "Pink",
     mrp: 349,
+    discount: 0,
     selling_price: 349,
     cost_price: 180,
     gst_rate: 5,
@@ -167,6 +173,7 @@ sheet.addRow({
     size: "36C",
     colour: "Beige",
     mrp: 999,
+    discount: 0,
     selling_price: 999,
     cost_price: 590,
     gst_rate: 5,
@@ -190,6 +197,7 @@ sheet.addRow({
     size: "L",
     colour: "Black",
     mrp: 399,
+    discount: 0,
     selling_price: 399,
     cost_price: 210,
     gst_rate: 5,
@@ -277,6 +285,10 @@ instructions.addRow([
 
 instructions.addRow([
     "• Selling Price"
+]);
+
+instructions.addRow([
+    "• Discount"
 ]);
 
 instructions.addRow([

@@ -610,6 +610,20 @@
 
 }
 
+.discount-input:disabled{
+
+    background:#f1f1f1;
+
+    color:#555;
+
+    border:2px solid #999;
+
+    cursor:not-allowed;
+
+    font-weight:700;
+
+}
+
 #billSearch{
 
     width:550px;

@@ -40,6 +40,7 @@ function importProducts(filePath) {
                     size,
                     colour,
                     mrp,
+                    discount,
                     selling_price,
                     cost_price,
                     gst_rate,
@@ -50,7 +51,7 @@ function importProducts(filePath) {
                     active
                 )
                 VALUES
-                (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 `,
                 [
                     product.barcode,
@@ -70,6 +71,7 @@ function importProducts(filePath) {
                     product.size,
                     product.colour,
                     product.mrp,
+                    product.discount ?? 0,
                     product.selling_price,
                     product.cost_price,
                     product.gst_rate,
