@@ -994,3 +994,31 @@ body{
     box-shadow:0 10px 30px rgba(0,0,0,.08);
 
 }
+
+.klbs-modal-ok{
+
+    background:#8B0040;
+
+    color:#fff;
+
+    border:none;
+
+    font-size:20px;
+
+    font-weight:700;
+
+    min-width:180px;
+
+    height:55px;
+
+    border-radius:10px;
+
+    cursor:pointer;
+
+}
+
+.klbs-modal-ok:hover{
+
+    background:#A0004A;
+
+}

@@ -38,50 +38,154 @@ function saveSettings(settings) {
 
     return new Promise((resolve, reject) => {
 
-        db.run(
+        db.get(
+            `SELECT * FROM settings WHERE id = 1`,
+            [],
+            (getErr, current) => {
 
-            `UPDATE settings
+                if (getErr) {
 
-SET
+                    reject(getErr);
 
-    receipt_message = ?,
-
-    default_printer = ?,
-
-    backup_location = ?,
-
-    auto_backup_time = ?,
-
-    last_updated = ?
-
-WHERE id = 1`,
-
-            [
-                settings.receipt_message,
-
-                settings.backup_location,
-
-                settings.auto_backup_time,
-
-                settings.last_updated
-            ],
-
-            function(err){
-
-                if(err){
-
-                    reject(err);
+                    return;
 
                 }
 
-                else{
+                const updated = {
 
-    logSettingsChanged()
-        .catch(console.error);
+                    receipt_message:
+                        settings.receipt_message !== undefined
+                            ? settings.receipt_message
+                            : current.receipt_message,
 
-    resolve(true);
+                    default_printer:
+                        settings.default_printer !== undefined
+                            ? settings.default_printer
+                            : current.default_printer,
 
-}
+                    backup_location:
+                        settings.backup_location !== undefined
+                            ? settings.backup_location
+                            : current.backup_location,
+
+                    auto_backup_time:
+                        settings.auto_backup_time !== undefined
+                            ? settings.auto_backup_time
+                            : current.auto_backup_time,
+
+                    smtp_host:
+                        settings.smtp_host !== undefined
+                            ? settings.smtp_host
+                            : current.smtp_host,
+
+                    smtp_port:
+                        settings.smtp_port !== undefined
+                            ? settings.smtp_port
+                            : current.smtp_port,
+
+                    smtp_secure:
+                        settings.smtp_secure !== undefined
+                            ? settings.smtp_secure
+                            : current.smtp_secure,
+
+                    smtp_user:
+                        settings.smtp_user !== undefined
+                            ? settings.smtp_user
+                            : current.smtp_user,
+
+                    smtp_password:
+                        settings.smtp_password !== undefined
+                            ? settings.smtp_password
+                            : current.smtp_password,
+
+                    smtp_from:
+                        settings.smtp_from !== undefined
+                            ? settings.smtp_from
+                            : current.smtp_from,
+
+                    last_updated:
+                        settings.last_updated !== undefined
+                            ? settings.last_updated
+                            : current.last_updated
+
+                };
+
+                db.run(
+
+                    `UPDATE settings
+
+                    SET
+
+                        receipt_message = ?,
+
+                        default_printer = ?,
+
+                        backup_location = ?,
+
+                        auto_backup_time = ?,
+
+                        smtp_host = ?,
+
+                        smtp_port = ?,
+
+                        smtp_secure = ?,
+
+                        smtp_user = ?,
+
+                        smtp_password = ?,
+
+                        smtp_from = ?,
+
+                        last_updated = ?
+
+                    WHERE id = 1`,
+
+                    [
+
+                        updated.receipt_message,
+
+                        updated.default_printer,
+
+                        updated.backup_location,
+
+                        updated.auto_backup_time,
+
+                        updated.smtp_host,
+
+                        updated.smtp_port,
+
+                        updated.smtp_secure,
+
+                        updated.smtp_user,
+
+                        updated.smtp_password,
+
+                        updated.smtp_from,
+
+                        updated.last_updated
+
+                    ],
+
+                    function(err) {
+
+                        if (err) {
+
+                            reject(err);
+
+                        }
+
+                        else {
+
+                            logSettingsChanged()
+                                .catch(console.error);
+
+                            resolve(true);
+
+                        }
+
+                    }
+
+                );
 
             }
 

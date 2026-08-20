@@ -733,6 +733,15 @@ const adminCancelBtn =
 const adminUnlockBtn =
     document.getElementById("adminUnlockBtn");
 
+const productNotFoundDialog =
+    document.getElementById("productNotFoundDialog");
+
+const productNotFoundMessage =
+    document.getElementById("productNotFoundMessage");
+
+const productNotFoundOkBtn =
+    document.getElementById("productNotFoundOkBtn");    
+
     let unlockBtn;
 
     let editReceiptBtn;
@@ -771,7 +780,13 @@ function requireAdminAuthorization(callback){
 
     adminDialog.style.display = "flex";
 
-    adminPassword.focus();
+    requestAnimationFrame(() => {
+
+        adminPassword.focus();
+
+        adminPassword.select();
+
+    });
 
 }
 
@@ -806,6 +821,63 @@ function hideProcessingDialog(){
 
     document.getElementById("processingDialog").style.display =
         "none";
+
+}
+
+function showProductNotFoundDialog(barcode) {
+
+    productNotFoundOpen = true;
+
+    const barcodeInput =
+        document.getElementById("barcodeInput");
+
+    if (barcodeInput) {
+
+        barcodeInput.blur();
+
+        barcodeInput.disabled = true;
+
+    }
+
+    productNotFoundMessage.innerText =
+        "Barcode: " + barcode;
+
+    productNotFoundDialog.style.display =
+        "flex";
+
+}
+
+if (productNotFoundOkBtn) {
+
+    productNotFoundOkBtn.addEventListener(
+        "click",
+        () => {
+
+            productNotFoundOpen = false;
+
+            productNotFoundDialog.style.display =
+                "none";
+
+            const barcodeInput =
+                document.getElementById(
+                    "barcodeInput"
+                );
+
+            if (barcodeInput) {
+
+                barcodeInput.disabled = false;
+
+                requestAnimationFrame(() => {
+
+                    barcodeInput.focus();
+                    barcodeInput.select();
+
+                });
+
+            }
+
+        }
+    );
 
 }
 
@@ -1698,6 +1770,8 @@ let billItems = [];
 let allBills = [];
 let currentViewedBill = null;
 
+let productNotFoundOpen = false;
+
 const barcodeInput =
     document.getElementById(
         "barcodeInput"
@@ -1750,6 +1824,10 @@ if (barcodeInput) {
                 return;
             }
 
+            if (productNotFoundOpen) {
+                return;
+            }
+
             const barcode =
                 barcodeInput.value.trim();
 
@@ -1762,25 +1840,31 @@ if (barcodeInput) {
                     .electronAPI
                     .getProduct(barcode);
 
-            console.log(product);
 
-            if (!product) {
+if (!product) {
 
-    alert(
-        "Product Not Found"
-    );
-            
     barcodeInput.value = "";
+
+    showProductNotFoundDialog(
+        barcode
+    );
 
     return;
 
 }
 
+
 addProductToBill(product);
 
 barcodeInput.value = "";
 
-barcodeInput.focus();
+requestAnimationFrame(() => {
+
+    barcodeInput.focus();
+
+    barcodeInput.select();
+
+});
 
 }
 );
