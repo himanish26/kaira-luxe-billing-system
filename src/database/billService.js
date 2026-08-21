@@ -251,7 +251,7 @@ function saveBill(billData) {
 
                             if(pending===0){
 
-                                commit();
+                                createSaleInventoryTransactions();
 
                             }
 
@@ -262,6 +262,130 @@ function saveBill(billData) {
                 });
 
             }
+
+function createSaleInventoryTransactions(){
+
+    let pending =
+        billData.items.length;
+
+    if(pending === 0){
+
+        commit();
+
+        return;
+
+    }
+
+    const now =
+        new Date().toISOString();
+
+    billData.items.forEach(item => {
+
+        db.get(
+
+            `
+            SELECT id
+            FROM products
+            WHERE barcode = ?
+            `,
+
+            [item.barcode],
+
+            (err, product) => {
+
+                if(err){
+
+                    db.run("ROLLBACK");
+
+                    reject(err);
+
+                    return;
+
+                }
+
+                if(!product){
+
+                    db.run("ROLLBACK");
+
+                    reject(
+                        new Error(
+                            `Product not found for barcode: ${item.barcode}`
+                        )
+                    );
+
+                    return;
+
+                }
+
+                db.run(
+
+                    `
+                    INSERT INTO inventory_transactions
+                    (
+                        product_id,
+                        barcode,
+                        transaction_type,
+                        quantity,
+                        reference_type,
+                        reference_id,
+                        remarks,
+                        created_by,
+                        created_at
+                    )
+                    VALUES
+                    (
+                        ?,
+                        ?,
+                        'SALE',
+                        ?,
+                        'BILL',
+                        ?,
+                        ?,
+                        'Administrator',
+                        ?
+                    )
+                    `,
+
+                    [
+                        product.id,
+                        item.barcode,
+                        -Math.abs(Number(item.qty)),
+                        billData.bill_no,
+                        `Sale against bill ${billData.bill_no}`,
+                        now
+                    ],
+
+                    (insertErr) => {
+
+                        if(insertErr){
+
+                            db.run("ROLLBACK");
+
+                            reject(insertErr);
+
+                            return;
+
+                        }
+
+                        pending--;
+
+                        if(pending === 0){
+
+                            commit();
+
+                        }
+
+                    }
+
+                );
+
+            }
+
+        );
+
+    });
+
+}
 
             function commit(){
 

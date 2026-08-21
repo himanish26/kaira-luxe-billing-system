@@ -121,6 +121,7 @@ window.productMasterTemplate = `
                 <th>Collection</th>
                 <th>Product</th>
                 <th>Size</th>
+                <th>Qty</th>
                 <th>MRP</th>
 
             </tr>

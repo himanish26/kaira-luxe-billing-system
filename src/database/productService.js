@@ -10,9 +10,22 @@ function getProductByBarcode(barcode) {
 
         db.get(
             `
-            SELECT *
-            FROM products
-            WHERE barcode = ?
+            SELECT
+                p.*,
+
+                COALESCE(
+                    SUM(it.quantity),
+                    0
+                ) AS current_stock
+
+            FROM products p
+
+            LEFT JOIN inventory_transactions it
+                ON it.product_id = p.id
+
+            WHERE p.barcode = ?
+
+            GROUP BY p.id
             `,
             [barcode],
             (err, row) => {
@@ -75,9 +88,22 @@ function getAllProducts() {
 
         db.all(
             `
-            SELECT *
-            FROM products
-            ORDER BY product_name
+            SELECT
+                p.*,
+
+COALESCE(
+    SUM(it.quantity),
+    0
+) AS current_stock
+
+            FROM products p
+
+            LEFT JOIN inventory_transactions it
+                ON it.product_id = p.id
+
+            GROUP BY p.id
+
+            ORDER BY p.product_name
             `,
             [],
             (err, rows) => {
@@ -89,9 +115,7 @@ function getAllProducts() {
 
             }
         );
-
     });
-
 }
 
 
@@ -105,28 +129,41 @@ function searchProducts(keyword) {
 
         db.all(
             `
-            SELECT *
-            FROM products
+            SELECT
+                p.*,
+
+COALESCE( 
+    SUM(it.quantity), 
+    0 
+) AS current_stock
+            FROM products p
+
+            LEFT JOIN inventory_transactions it
+                ON it.product_id = p.id
+
             WHERE
-                barcode LIKE ?
-                OR product_name LIKE ?
-                OR brand LIKE ?
-                OR segment LIKE ?
-                OR category LIKE ?
-                OR season LIKE ?
-                OR collection LIKE ?
-                OR style_code LIKE ?
-            ORDER BY product_name
+                p.barcode LIKE ?
+                OR p.product_name LIKE ?
+                OR p.brand LIKE ?
+                OR p.segment LIKE ?
+                OR p.category LIKE ?
+                OR p.season LIKE ?
+                OR p.collection LIKE ?
+                OR p.style_code LIKE ?
+
+            GROUP BY p.id
+
+            ORDER BY p.product_name
             `,
             [
-                `%${keyword}%`, // barcode
-                `%${keyword}%`, // product_name
-                `%${keyword}%`, // brand
-                `%${keyword}%`, // segment
-                `%${keyword}%`, // category
-                `%${keyword}%`, // season
-                `%${keyword}%`, // collection
-                `%${keyword}%`  // style_code
+                `%${keyword}%`,
+                `%${keyword}%`,
+                `%${keyword}%`,
+                `%${keyword}%`,
+                `%${keyword}%`,
+                `%${keyword}%`,
+                `%${keyword}%`,
+                `%${keyword}%`
             ],
             (err, rows) => {
 
@@ -137,9 +174,7 @@ function searchProducts(keyword) {
 
             }
         );
-
     });
-
 }
 
 /* ===========================================

@@ -740,7 +740,16 @@ const productNotFoundMessage =
     document.getElementById("productNotFoundMessage");
 
 const productNotFoundOkBtn =
-    document.getElementById("productNotFoundOkBtn");    
+    document.getElementById("productNotFoundOkBtn");  
+
+const insufficientStockDialog =
+    document.getElementById("insufficientStockDialog");
+
+const insufficientStockMessage =
+    document.getElementById("insufficientStockMessage");
+
+const insufficientStockOkBtn =
+    document.getElementById("insufficientStockOkBtn");
 
     let unlockBtn;
 
@@ -870,6 +879,71 @@ if (productNotFoundOkBtn) {
                 requestAnimationFrame(() => {
 
                     barcodeInput.focus();
+                    barcodeInput.select();
+
+                });
+
+            }
+
+        }
+    );
+
+}
+
+/* =====================================
+   INSUFFICIENT STOCK DIALOG
+===================================== */
+
+function showInsufficientStockDialog(
+    productName,
+    availableStock,
+    currentBillQty
+) {
+
+    const barcodeInput =
+        document.getElementById("barcodeInput");
+
+    if (barcodeInput) {
+
+        barcodeInput.blur();
+
+        barcodeInput.disabled = true;
+
+    }
+
+    insufficientStockMessage.innerText =
+        `${productName}\n\n` +
+        `Available Stock: ${availableStock}\n` +
+        `Already Added to Bill: ${currentBillQty}`;
+
+    insufficientStockDialog.style.display =
+        "flex";
+
+}
+
+
+if (insufficientStockOkBtn) {
+
+    insufficientStockOkBtn.addEventListener(
+        "click",
+        () => {
+
+            insufficientStockDialog.style.display =
+                "none";
+
+            const barcodeInput =
+                document.getElementById(
+                    "barcodeInput"
+                );
+
+            if (barcodeInput) {
+
+                barcodeInput.disabled = false;
+
+                requestAnimationFrame(() => {
+
+                    barcodeInput.focus();
+
                     barcodeInput.select();
 
                 });
@@ -1870,24 +1944,49 @@ requestAnimationFrame(() => {
 );
 
 }
-function addProductToBill(product){
+function addProductToBill(product) {
 
-    const existingItem =
-        billItems.find(item =>
-            item.barcode === product.barcode
+    const availableStock =
+        Number(
+            product.current_stock ??
+            product.opening_stock ??
+            0
         );
 
-    if(existingItem){
+    const existingItem =
+        billItems.find(
+            item =>
+                item.barcode === product.barcode
+        );
+
+    const currentBillQty =
+        existingItem
+            ? Number(existingItem.qty)
+            : 0;
+
+if (currentBillQty >= availableStock) {
+
+    showInsufficientStockDialog(
+        product.product_name,
+        availableStock,
+        currentBillQty
+    );
+
+    return false;
+
+}
+
+    if (existingItem) {
 
         existingItem.qty++;
 
     }
 
-    else{
+    else {
 
         billItems.push({
 
-             barcode: product.barcode,
+            barcode: product.barcode,
 
             brand: product.brand,
 
@@ -1895,18 +1994,18 @@ function addProductToBill(product){
 
             product_name: product.product_name,
 
-             size: product.size,
+            size: product.size,
 
-             colour: product.colour,
+            colour: product.colour,
 
-             mrp: Number(product.mrp),
+            mrp: Number(product.mrp),
 
-             qty: 1,
+            qty: 1,
 
-             discount:
+            discount:
                 Number(product.discount || 0),
 
-             gst_rate: Number(product.gst_rate)
+            gst_rate: Number(product.gst_rate)
 
         });
 
@@ -1914,13 +2013,15 @@ function addProductToBill(product){
 
     renderBill();
 
-loadPaymentSummary();
+    loadPaymentSummary();
 
-document.getElementById("cashAmount").value = 0;
-document.getElementById("upiAmount").value = 0;
-document.getElementById("cardAmount").value = 0;
+    document.getElementById("cashAmount").value = 0;
+    document.getElementById("upiAmount").value = 0;
+    document.getElementById("cardAmount").value = 0;
 
-calculatePayment();
+    calculatePayment();
+
+    return true;
 }
 
 function renderBill(){
