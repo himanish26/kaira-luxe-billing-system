@@ -1,34 +1,91 @@
 const nodemailer = require("nodemailer");
 
+const {
+    getSettings
+} = require("../database/settingsService");
+
 
 /* ===========================================
-   EMAIL CONFIGURATION
+   GET SMTP SETTINGS
 =========================================== */
 
-const transporter = nodemailer.createTransport({
+async function getSmtpSettings() {
 
-    host: process.env.SMTP_HOST,
+    const settings =
+        await getSettings();
 
-    port:
-        Number(
-            process.env.SMTP_PORT ||
-            587
-        ),
+    return {
 
-    secure:
-        process.env.SMTP_SECURE === "true",
+        host:
+            settings?.smtp_host ||
+            process.env.SMTP_HOST ||
+            "smtp.gmail.com",
 
-    auth: {
+        port:
+            Number(
+                settings?.smtp_port ||
+                process.env.SMTP_PORT ||
+                587
+            ),
+
+        secure:
+            settings?.smtp_secure !== null &&
+            settings?.smtp_secure !== undefined
+                ? Number(settings.smtp_secure) === 1
+                : process.env.SMTP_SECURE === "true",
 
         user:
+            settings?.smtp_user ||
             process.env.SMTP_USER,
 
-        pass:
-            process.env.SMTP_PASSWORD
+        password:
+            settings?.smtp_password ||
+            process.env.SMTP_PASSWORD,
 
-    }
+        from:
+            settings?.smtp_from ||
+            process.env.SMTP_FROM ||
+            settings?.smtp_user ||
+            process.env.SMTP_USER
 
-});
+    };
+
+}
+
+
+/* ===========================================
+   CREATE SMTP TRANSPORTER
+=========================================== */
+
+async function createTransporter() {
+
+    const smtp =
+        await getSmtpSettings();
+
+    return nodemailer.createTransport({
+
+        host:
+            smtp.host,
+
+        port:
+            smtp.port,
+
+        secure:
+            smtp.secure,
+
+        auth: {
+
+            user:
+                smtp.user,
+
+            pass:
+                smtp.password
+
+        }
+
+    });
+
+}
 
 
 /* ===========================================
@@ -49,12 +106,17 @@ async function sendEmail({
 
 }) {
 
+    const transporter =
+        await createTransporter();
+
+    const smtp =
+        await getSmtpSettings();
+
     const info =
         await transporter.sendMail({
 
             from:
-                process.env.SMTP_FROM ||
-                process.env.SMTP_USER,
+                smtp.from,
 
             to,
 
@@ -68,7 +130,6 @@ async function sendEmail({
 
         });
 
-
     return {
 
         success: true,
@@ -80,19 +141,33 @@ async function sendEmail({
 
 }
 
+
+/* ===========================================
+   VERIFY EMAIL CONNECTION
+=========================================== */
+
 async function verifyEmailConnection() {
 
     try {
 
+        const transporter =
+            await createTransporter();
+
         await transporter.verify();
 
-        console.log("✓ SMTP connection verified successfully.");
+        console.log(
+            "✓ SMTP connection verified successfully."
+        );
 
         return {
+
             success: true
+
         };
 
-    } catch (error) {
+    }
+
+    catch (error) {
 
         console.error(
             "✗ SMTP connection failed:",
@@ -100,8 +175,12 @@ async function verifyEmailConnection() {
         );
 
         return {
+
             success: false,
-            error: error.message
+
+            error:
+                error.message
+
         };
 
     }
@@ -116,6 +195,7 @@ async function verifyEmailConnection() {
 module.exports = {
 
     sendEmail,
+
     verifyEmailConnection
 
 };

@@ -313,56 +313,157 @@ Berhampur-760001',
 function runDatabaseMigrations() {
 
     db.all(
-    "PRAGMA table_info(settings)",
-    [],
-    (err, columns) => {
+        "PRAGMA table_info(settings)",
+        [],
+        (err, columns) => {
 
-        if (err) {
+            if (err) {
 
-            console.error("Migration Error:", err);
-            return;
+                console.error(
+                    "Migration Error:",
+                    err
+                );
+
+                return;
+
+            }
+
+            const existingColumns =
+                columns.map(c => c.name);
+
+
+            if (!existingColumns.includes("backup_location")) {
+
+                db.run(`
+                    ALTER TABLE settings
+                    ADD COLUMN backup_location TEXT
+                `);
+
+                console.log(
+                    "✓ Added column: backup_location"
+                );
+
+            }
+
+
+            if (!existingColumns.includes("auto_backup_time")) {
+
+                db.run(`
+                    ALTER TABLE settings
+                    ADD COLUMN auto_backup_time
+                    TEXT DEFAULT '21:30'
+                `);
+
+                console.log(
+                    "✓ Added column: auto_backup_time"
+                );
+
+            }
+
+
+            if (!existingColumns.includes("default_printer")) {
+
+                db.run(`
+                    ALTER TABLE settings
+                    ADD COLUMN default_printer TEXT
+                `);
+
+                console.log(
+                    "✓ Added column: default_printer"
+                );
+
+            }
+
+
+            if (!existingColumns.includes("smtp_host")) {
+
+                db.run(`
+                    ALTER TABLE settings
+                    ADD COLUMN smtp_host
+                    TEXT DEFAULT 'smtp.gmail.com'
+                `);
+
+                console.log(
+                    "✓ Added column: smtp_host"
+                );
+
+            }
+
+
+            if (!existingColumns.includes("smtp_port")) {
+
+                db.run(`
+                    ALTER TABLE settings
+                    ADD COLUMN smtp_port
+                    INTEGER DEFAULT 587
+                `);
+
+                console.log(
+                    "✓ Added column: smtp_port"
+                );
+
+            }
+
+
+            if (!existingColumns.includes("smtp_secure")) {
+
+                db.run(`
+                    ALTER TABLE settings
+                    ADD COLUMN smtp_secure
+                    INTEGER DEFAULT 0
+                `);
+
+                console.log(
+                    "✓ Added column: smtp_secure"
+                );
+
+            }
+
+
+            if (!existingColumns.includes("smtp_user")) {
+
+                db.run(`
+                    ALTER TABLE settings
+                    ADD COLUMN smtp_user TEXT
+                `);
+
+                console.log(
+                    "✓ Added column: smtp_user"
+                );
+
+            }
+
+
+            if (!existingColumns.includes("smtp_password")) {
+
+                db.run(`
+                    ALTER TABLE settings
+                    ADD COLUMN smtp_password TEXT
+                `);
+
+                console.log(
+                    "✓ Added column: smtp_password"
+                );
+
+            }
+
+
+            if (!existingColumns.includes("smtp_from")) {
+
+                db.run(`
+                    ALTER TABLE settings
+                    ADD COLUMN smtp_from TEXT
+                `);
+
+                console.log(
+                    "✓ Added column: smtp_from"
+                );
+
+            }
 
         }
 
-        const existingColumns =
-            columns.map(c => c.name);
-
-        if (!existingColumns.includes("backup_location")) {
-
-    db.run(`
-        ALTER TABLE settings
-        ADD COLUMN backup_location TEXT
-    `);
-
-    console.log("✓ Added column: backup_location");
-
-}
-
-if (!existingColumns.includes("auto_backup_time")) {
-
-    db.run(`
-        ALTER TABLE settings
-        ADD COLUMN auto_backup_time
-        TEXT DEFAULT '21:30'
-    `);
-
-    console.log("✓ Added column: auto_backup_time");
-
-}
-
-if (!existingColumns.includes("default_printer")) {
-
-    db.run(`
-        ALTER TABLE settings
-        ADD COLUMN default_printer TEXT
-    `);
-
-    console.log("✓ Added column: default_printer");
-
-}
-
-    }
-);
+    );
 
 }
 
@@ -1042,7 +1143,135 @@ function initializeOpeningStock() {
 
 }
 
-initializeOpeningStock();
+async function initializeSmtpSettings() {
+
+    return new Promise((resolve, reject) => {
+
+        db.get(
+            `
+            SELECT
+                smtp_host,
+                smtp_port,
+                smtp_secure,
+                smtp_user,
+                smtp_password,
+                smtp_from
+            FROM settings
+            WHERE id = 1
+            `,
+            [],
+            (err, settings) => {
+
+                if (err) {
+
+                    reject(err);
+
+                    return;
+
+                }
+
+                const smtpUser =
+                    settings.smtp_user ||
+                    process.env.SMTP_USER;
+
+                const smtpPassword =
+                    settings.smtp_password ||
+                    process.env.SMTP_PASSWORD;
+
+                const smtpFrom =
+                    settings.smtp_from ||
+                    process.env.SMTP_FROM;
+
+                if (
+                    settings.smtp_user &&
+                    settings.smtp_password
+                ) {
+
+                    resolve();
+
+                    return;
+
+                }
+
+                db.run(
+                    `
+                    UPDATE settings
+
+                    SET
+                        smtp_host = ?,
+                        smtp_port = ?,
+                        smtp_secure = ?,
+                        smtp_user = ?,
+                        smtp_password = ?,
+                        smtp_from = ?
+
+                    WHERE id = 1
+                    `,
+                    [
+                        settings.smtp_host ||
+                            process.env.SMTP_HOST ||
+                            "smtp.gmail.com",
+
+                        settings.smtp_port ||
+                            Number(
+                                process.env.SMTP_PORT ||
+                                587
+                            ),
+
+                        settings.smtp_secure !== null &&
+                        settings.smtp_secure !== undefined
+                            ? settings.smtp_secure
+                            : (
+                                process.env.SMTP_SECURE === "true"
+                                    ? 1
+                                    : 0
+                            ),
+
+                        smtpUser,
+
+                        smtpPassword,
+
+                        smtpFrom
+
+                    ],
+                    (updateErr) => {
+
+                        if (updateErr) {
+
+                            reject(updateErr);
+
+                            return;
+
+                        }
+
+                        console.log(
+                            "✓ SMTP settings initialized."
+                        );
+
+                        resolve();
+
+                    }
+                );
+
+            }
+        );
+
+    });
+
+}
+
+initializeSmtpSettings()
+    .then(() => initializeOpeningStock())
+    .catch(error => {
+
+        console.error(
+            "SMTP Settings Initialization Failed:",
+            error.message
+        );
+
+        databaseReadyReject(error);
+
+    });
 
 // ============================================================
 // DATABASE READY CHECKPOINT

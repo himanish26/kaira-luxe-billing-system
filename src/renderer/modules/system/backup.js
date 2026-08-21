@@ -2,7 +2,40 @@
    BACKUP
 ===================================== */
 
-function showBackupPage() {
+async function showBackupPage() {
+
+    const settings =
+        await window.electronAPI.getSettings();
+
+    const backupTime =
+        settings.auto_backup_time || "21:30";
+
+    const [hour24, minute] =
+        backupTime.split(":");
+
+    let hour =
+        parseInt(hour24);
+
+    let meridian =
+        "AM";
+
+    if (hour >= 12) {
+
+        meridian = "PM";
+
+    }
+
+    hour =
+        hour % 12;
+
+    if (hour === 0) {
+
+        hour = 12;
+
+    }
+
+    const formattedBackupTime =
+        `${String(hour).padStart(2, "0")}:${minute} ${meridian}`;
 
     renderSettingsPage({
 
@@ -20,31 +53,6 @@ function showBackupPage() {
 
 <div class="settings-grid">
 
-
-
-    <div
-        class="settings-card"
-        id="googleDriveStatusCard">
-
-        <div class="settings-icon">☁️</div>
-
-        <h2>Google Drive Status</h2>
-
-        <p>
-
-    🔴 Not Connected
-
-    <br><br>
-
-    Secure cloud backup
-
-    <br>
-
-    not configured
-
-</p>
-
-    </div>
 
     <div
         class="settings-card"
@@ -99,7 +107,7 @@ function showBackupPage() {
 
     </div>
 
-    <div
+        <div
         class="settings-card"
         id="autoBackupCard">
 
@@ -107,7 +115,10 @@ function showBackupPage() {
 
         <h2>Automatic Backup</h2>
 
-        <p>Configure automatic backups</p>
+        <p>
+            Daily at
+            <strong>${formattedBackupTime}</strong>
+        </p>
 
     </div>
 

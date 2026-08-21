@@ -123,42 +123,11 @@ async function getPrinterStatus() {
 
     try {
 
-        const printers =
-            await BrowserWindow
-                .getFocusedWindow()
-                ?.webContents
-                .getPrintersAsync();
-
-        if (!printers || printers.length === 0) {
-
-            return {
-
-                status: "No Printer"
-
-            };
-
-        }
-
         const settings =
             await getSettings();
 
-            console.log(
-    "PRINTER DEBUG - Kaira Luxe Billing System settings:",
-    settings
-);
-
         const configuredPrinter =
             settings.default_printer;
-
-        console.log(
-    "PRINTER DEBUG - configured printer:",
-    configuredPrinter
-);
-
-console.log(
-    "PRINTER DEBUG - installed printers:",
-    printers
-);
 
         if (!configuredPrinter) {
 
@@ -170,47 +139,186 @@ console.log(
 
         }
 
-        const selectedPrinter =
-            printers.find(
-                printer =>
-                    printer.name ===
-                    configuredPrinter
-            );
+        const { execFile } =
+            require("child_process");
 
-        if (!selectedPrinter) {
+        return await new Promise(
+            (resolve) => {
 
-            return {
+                const command =
+                    `Get-CimInstance Win32_Printer | ` +
+                    `Where-Object { $_.Name -eq '${configuredPrinter.replace(/'/g, "''")}' } | ` +
+                    `Select-Object Name, PrinterStatus, WorkOffline, DetectedErrorState | ` +
+                    `ConvertTo-Json -Compress`;
 
-                status: "No Printer",
+                execFile(
 
-                name:
-                    configuredPrinter
+                    "powershell.exe",
 
-            };
+                    [
 
-        }
+                        "-NoProfile",
 
-        if (selectedPrinter.status === 0) {
+                        "-Command",
 
-            return {
+                        command
 
-                status: "Ready",
+                    ],
 
-                name:
-                    selectedPrinter.name
+                    (
 
-            };
+                        error,
 
-        }
+                        stdout,
 
-        return {
+                        stderr
 
-            status: "Offline",
+                    ) => {
 
-            name:
-                selectedPrinter.name
+                        if (error) {
 
-        };
+                            console.error(
+                                "Windows Printer Status Error:",
+                                error,
+                                stderr
+                            );
+
+                            resolve({
+
+                                status: "Unavailable",
+
+                                name:
+                                    configuredPrinter
+
+                            });
+
+                            return;
+
+                        }
+
+                        const output =
+                            stdout.trim();
+
+                        if (!output) {
+
+                            resolve({
+
+                                status:
+                                    "No Printer",
+
+                                name:
+                                    configuredPrinter
+
+                            });
+
+                            return;
+
+                        }
+
+                        let printer;
+
+                        try {
+
+                            printer =
+                                JSON.parse(output);
+
+                        }
+
+                        catch (parseError) {
+
+                            console.error(
+                                "Printer Status Parse Error:",
+                                parseError,
+                                output
+                            );
+
+                            resolve({
+
+                                status:
+                                    "Unavailable",
+
+                                name:
+                                    configuredPrinter
+
+                            });
+
+                            return;
+
+                        }
+
+                        if (!printer) {
+
+                            resolve({
+
+                                status:
+                                    "No Printer",
+
+                                name:
+                                    configuredPrinter
+
+                            });
+
+                            return;
+
+                        }
+
+                        const isOffline =
+                            printer.WorkOffline === true;
+
+                        const hasError =
+                            printer.DetectedErrorState !== 0 &&
+                            printer.DetectedErrorState !== null;
+
+                        if (isOffline || hasError) {
+
+                            resolve({
+
+                                status:
+                                    "Offline",
+
+                                name:
+                                    printer.Name ||
+                                    configuredPrinter,
+
+                                printerStatus:
+                                    printer.PrinterStatus,
+
+                                workOffline:
+                                    printer.WorkOffline,
+
+                                detectedErrorState:
+                                    printer.DetectedErrorState
+
+                            });
+
+                            return;
+
+                        }
+
+                        resolve({
+
+                            status:
+                                "Ready",
+
+                            name:
+                                printer.Name ||
+                                configuredPrinter,
+
+                            printerStatus:
+                                printer.PrinterStatus,
+
+                            workOffline:
+                                printer.WorkOffline
+
+                        });
+
+                    }
+
+                );
+
+            }
+
+        );
 
     }
 
@@ -223,7 +331,8 @@ console.log(
 
         return {
 
-            status: "Unavailable"
+            status:
+                "Unavailable"
 
         };
 

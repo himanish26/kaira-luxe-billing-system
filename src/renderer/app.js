@@ -3140,7 +3140,7 @@ setInterval(() => {
     loadDashboardSummary();
     loadSystemStatus();
 
-}, 30000);
+}, 10000);
 
 initializeKeyboardShortcuts();
 

@@ -2,6 +2,8 @@
    SETTINGS PAGE LAYOUT
 ===================================== */
 
+let deviceStatusRefreshInterval = null;
+
 function renderSettingsPage({
 
     title,
@@ -90,6 +92,16 @@ backButton.onclick = () => {
 }
 
 function showDeviceSettings() {
+
+        if (deviceStatusRefreshInterval) {
+
+        clearInterval(
+            deviceStatusRefreshInterval
+        );
+
+        deviceStatusRefreshInterval = null;
+
+    }
 
     settingsScreen.style.display = "none";
 
@@ -358,23 +370,43 @@ const printerStatus =
 
 }
 
-window.electronAPI
-    .getPrinters()
-    .then(result => {
+async function loadPrinters() {
 
-        console.log(result);
+    try {
+
+        const [
+            result,
+            settings
+        ] = await Promise.all([
+
+            window.electronAPI.getPrinters(),
+
+            window.electronAPI.getSettings()
+
+        ]);
+
+        console.log(
+            "Installed Printers:",
+            result
+        );
+
+        console.log(
+            "Saved Printer Setting:",
+            settings.default_printer
+        );
 
         if (!result.success) {
 
-    printerStatus.textContent =
-        "🔴 Unable to load printers";
+            printerStatus.textContent =
+                "🔴 Unable to load printers";
 
-    printerStatus.className =
-        "status-badge status-error";
+            printerStatus.className =
+                "status-badge status-error";
 
-    return;
+            return;
 
-}
+        }
+
         printerSelect.innerHTML = "";
 
         result.printers.forEach(printer => {
@@ -382,52 +414,63 @@ window.electronAPI
             const option =
                 document.createElement("option");
 
-            option.value = printer.name;
+            option.value =
+                printer.name;
 
             option.textContent =
-                printer.displayName || printer.name;
-
-            if (printer.isDefault) {
-                option.selected = true;
-            }
-
+                printer.displayName ||
+                printer.name;
 
             printerSelect.appendChild(option);
 
         });
 
-        refreshPrinterStatus();
+        if (settings.default_printer) {
 
-    if (
+            const savedPrinterExists =
+                result.printers.some(
+                    printer =>
+                        printer.name ===
+                        settings.default_printer
+                );
 
-    !result.printers.some(
+            if (savedPrinterExists) {
 
-        p => p.isDefault
+                printerSelect.value =
+                    settings.default_printer;
 
-    )
+            }
 
-) {
+        }
 
-    printerStatus.textContent =
-        "🟢 Ready";
+        await refreshPrinterStatus();
 
-    printerStatus.className =
-        "status-badge status-success";
+    }
+
+    catch (err) {
+
+        console.error(
+            "Printer Loading Error:",
+            err
+        );
+
+        printerStatus.textContent =
+            "🔴 Unable to load printers";
+
+        printerStatus.className =
+            "status-badge status-error";
+
+    }
 
 }
 
-    })
-    .catch(err => {
+loadPrinters();
 
-    console.error(err);
-
-    printerStatus.textContent =
-        "🔴 Unable to load printers";
-
-    printerStatus.className =
-        "status-badge status-error";
-
-});
+deviceStatusRefreshInterval =
+    setInterval(
+        refreshPrinterStatus,
+        10000
+    );
 
 document
     .getElementById("savePrinterBtn")
@@ -494,7 +537,19 @@ if (backButton) {
 
     backButton.onclick = () => {
 
+        if (deviceStatusRefreshInterval) {
+
+            clearInterval(
+                deviceStatusRefreshInterval
+            );
+
+            deviceStatusRefreshInterval =
+                null;
+
+        }
+
         settingsPage.style.display = "none";
+
         settingsScreen.style.display = "block";
 
     };

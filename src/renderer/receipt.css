@@ -49,6 +49,24 @@ body {
 
 }
 
+.invoice-title{
+
+    text-align:center;
+
+    font-size:14px;
+
+    font-weight:700;
+
+    padding:4px 0;
+
+    margin:5px 0;
+
+    border-top:1px solid #000;
+
+    border-bottom:1px solid #000;
+
+}
+
 .header p{
 
     margin:2px 0;

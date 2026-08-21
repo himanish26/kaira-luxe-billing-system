@@ -211,6 +211,8 @@ function createWindow() {
 
         height: 900,
 
+        show: false,
+
         title: "Kaira Luxe Billing System",
 
         webPreferences: {
@@ -235,6 +237,15 @@ function createWindow() {
         )
 
     );
+
+    mainWindow.once("ready-to-show", () => {
+
+    mainWindow.maximize();
+
+    mainWindow.show();
+
+});
+
 
     mainWindow.on(
 
@@ -358,8 +369,9 @@ app.whenReady().then(async () => {
                 "Application Start Activity Log Error:",
                 error
             );
-
         }
+
+        startBackupScheduler();
 
         createWindow();
 

@@ -105,46 +105,79 @@ function showSystemPage() {
 
     });
 
-    document
-    .getElementById("backupCard")
-    .addEventListener(
+    const backupCard =
+    document.getElementById("backupCard");
+
+if (backupCard) {
+
+    backupCard.addEventListener(
         "click",
         showBackupPage
     );
 
-    document
-    .getElementById("dayClosingCard")
-    .addEventListener(
+}
+
+
+const dayClosingCard =
+    document.getElementById("dayClosingCard");
+
+if (dayClosingCard) {
+
+    dayClosingCard.addEventListener(
         "click",
         showDayClosingPage
     );
 
-document
-    .getElementById("activityLogCard")
-    .addEventListener(
+}
+
+
+const activityLogCard =
+    document.getElementById("activityLogCard");
+
+if (activityLogCard) {
+
+    activityLogCard.addEventListener(
         "click",
         showActivityLogPage
     );
 
-document
-    .getElementById("diagnosticsCard")
-    .addEventListener(
+}
+
+
+const diagnosticsCard =
+    document.getElementById("diagnosticsCard");
+
+if (diagnosticsCard) {
+
+    diagnosticsCard.addEventListener(
         "click",
         showDiagnosticsPage
     );
 
-document
-    .getElementById("exportCard")
-    .addEventListener(
+}
+
+
+const exportCard =
+    document.getElementById("exportCard");
+
+if (exportCard) {
+
+    exportCard.addEventListener(
         "click",
         showExportDataPage
     );
 
-document
-    .getElementById("updatesCard")
-    .addEventListener(
+}
+
+
+const updatesCard =
+    document.getElementById("updatesCard");
+
+if (updatesCard) {
+
+    updatesCard.addEventListener(
         "click",
         showUpdatesPage
     );
 
-}
+}}
