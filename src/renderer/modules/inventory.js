@@ -399,6 +399,297 @@ Please import a Product Master Excel file before creating new bills.`
 }
 
 /* ===========================================
+   STOCK INWARD / OUTWARD
+=========================================== */
+
+let currentStockTransactionType = null;
+let currentStockProduct = null;
+
+
+function openStockTransaction(type) {
+
+    currentStockTransactionType = type;
+    currentStockProduct = null;
+
+    const modal =
+        document.getElementById("stockTransactionModal");
+
+    const title =
+        document.getElementById("stockModalTitle");
+
+    const barcode =
+        document.getElementById("stockTransactionBarcode");
+
+    const productDetails =
+        document.getElementById("stockProductDetails");
+
+    const quantityGroup =
+        document.getElementById("stockQuantityGroup");
+
+    const inwardFields =
+        document.getElementById("stockInwardFields");
+
+    const outwardFields =
+        document.getElementById("stockOutwardFields");
+
+    const qty =
+        document.getElementById("stockTransactionQty");
+
+    const invoice =
+        document.getElementById("stockInvoiceNo");
+
+    const inwardRemarks =
+        document.getElementById("stockInwardRemarks");
+
+    const outwardReason =
+        document.getElementById("stockOutwardReason");
+
+    const outwardRemarks =
+        document.getElementById("stockOutwardRemarks");
+
+    const confirmBtn =
+        document.getElementById("confirmStockTransactionBtn");
+
+
+    barcode.value = "";
+    qty.value = "";
+
+    invoice.value = "";
+    inwardRemarks.value = "";
+
+    outwardReason.value = "";
+    outwardRemarks.value = "";
+
+
+    productDetails.style.display = "none";
+    quantityGroup.style.display = "none";
+
+    confirmBtn.disabled = true;
+
+
+    if (type === "INWARD") {
+
+        title.textContent = "📥 Stock Inward";
+
+        inwardFields.style.display = "block";
+
+        outwardFields.style.display = "none";
+
+    } else {
+
+        title.textContent = "📤 Stock Outward";
+
+        inwardFields.style.display = "none";
+
+        outwardFields.style.display = "block";
+
+    }
+
+
+    modal.style.display = "flex";
+
+    setTimeout(() => {
+
+        barcode.focus();
+
+    }, 100);
+
+}
+
+
+/* ===========================================
+   CLOSE STOCK MODAL
+=========================================== */
+
+function closeStockTransaction() {
+
+    const modal =
+        document.getElementById("stockTransactionModal");
+
+    modal.style.display = "none";
+
+    currentStockTransactionType = null;
+    currentStockProduct = null;
+
+}
+
+
+/* ===========================================
+   LOOKUP STOCK PRODUCT
+=========================================== */
+
+async function lookupStockProduct() {
+
+    const barcodeInput =
+        document.getElementById(
+            "stockTransactionBarcode"
+        );
+
+    const barcode =
+        barcodeInput.value.trim();
+
+    if (!barcode) return;
+
+
+    try {
+
+const product =
+    await window.electronAPI.getInventoryProduct(
+        barcode
+    );
+
+
+        if (!product) {
+
+            currentStockProduct = null;
+
+            document.getElementById(
+                "stockProductDetails"
+            ).style.display = "none";
+
+            document.getElementById(
+                "stockQuantityGroup"
+            ).style.display = "none";
+
+            document.getElementById(
+                "confirmStockTransactionBtn"
+            ).disabled = true;
+
+
+            alert(
+                "Product not found. Contact ADMINISTRATOR."
+            );
+
+            barcodeInput.focus();
+
+            return;
+
+        }
+
+
+        currentStockProduct = product;
+
+
+        document.getElementById(
+            "stockProductName"
+        ).textContent =
+            product.product_name;
+
+
+        document.getElementById(
+            "stockProductBarcode"
+        ).textContent =
+            product.barcode;
+
+
+        document.getElementById(
+            "stockCurrentQty"
+        ).textContent =
+            product.current_stock ??
+            product.opening_stock ??
+            0;
+
+
+        document.getElementById(
+            "stockProductDetails"
+        ).style.display = "block";
+
+
+        document.getElementById(
+            "stockQuantityGroup"
+        ).style.display = "block";
+
+
+        document.getElementById(
+            "stockTransactionQty"
+        ).focus();
+
+
+        validateStockTransaction();
+
+    } catch (err) {
+
+        console.error(err);
+
+        alert(
+            "Unable to find product. Please try again."
+        );
+
+    }
+
+}
+
+
+/* ===========================================
+   VALIDATE STOCK TRANSACTION
+=========================================== */
+
+function validateStockTransaction() {
+
+    const confirmBtn =
+        document.getElementById(
+            "confirmStockTransactionBtn"
+        );
+
+    const qty =
+        Number(
+            document.getElementById(
+                "stockTransactionQty"
+            ).value
+        );
+
+
+    if (!currentStockProduct) {
+
+        confirmBtn.disabled = true;
+
+        return;
+
+    }
+
+
+    if (!Number.isInteger(qty) || qty <= 0) {
+
+        confirmBtn.disabled = true;
+
+        return;
+
+    }
+
+
+    if (
+        currentStockTransactionType === "OUTWARD"
+    ) {
+
+        const reason =
+            document.getElementById(
+                "stockOutwardReason"
+            ).value;
+
+        const currentStock =
+            Number(
+                currentStockProduct.current_stock ??
+                currentStockProduct.opening_stock ??
+                0
+            );
+
+
+        if (!reason || qty > currentStock) {
+
+            confirmBtn.disabled = true;
+
+            return;
+
+        }
+
+    }
+
+
+    confirmBtn.disabled = false;
+
+}
+
+/* ===========================================
    BUTTON EVENTS
 =========================================== */
 
@@ -418,6 +709,40 @@ function initializeInventoryEvents() {
 
     const resetBtn =
     document.getElementById("resetInventoryBtn");
+
+        const stockInwardBtn =
+        document.getElementById("stockInwardBtn");
+
+    const stockOutwardBtn =
+        document.getElementById("stockOutwardBtn");
+
+    const closeStockModalBtn =
+        document.getElementById("closeStockModalBtn");
+
+    const cancelStockTransactionBtn =
+        document.getElementById(
+            "cancelStockTransactionBtn"
+        );
+
+    const stockTransactionBarcode =
+        document.getElementById(
+            "stockTransactionBarcode"
+        );
+
+    const stockTransactionQty =
+        document.getElementById(
+            "stockTransactionQty"
+        );
+
+    const stockOutwardReason =
+        document.getElementById(
+            "stockOutwardReason"
+        );
+
+    const confirmStockTransactionBtn =
+        document.getElementById(
+            "confirmStockTransactionBtn"
+        );
 
     const searchBox =
         document.getElementById("inventorySearch");
@@ -494,6 +819,94 @@ function initializeInventoryEvents() {
             });
 
         };
+
+            /* STOCK INWARD */
+
+    if (stockInwardBtn) {
+
+        stockInwardBtn.onclick = () => {
+
+            openStockTransaction("INWARD");
+
+        };
+
+    }
+
+
+    /* STOCK OUTWARD */
+
+    if (stockOutwardBtn) {
+
+        stockOutwardBtn.onclick = () => {
+
+            openStockTransaction("OUTWARD");
+
+        };
+
+    }
+
+
+    /* CLOSE / CANCEL MODAL */
+
+    if (closeStockModalBtn) {
+
+        closeStockModalBtn.onclick =
+            closeStockTransaction;
+
+    }
+
+    if (cancelStockTransactionBtn) {
+
+        cancelStockTransactionBtn.onclick =
+            closeStockTransaction;
+
+    }
+
+
+    /* BARCODE LOOKUP */
+
+    if (stockTransactionBarcode) {
+
+        stockTransactionBarcode.addEventListener(
+            "keydown",
+            (e) => {
+
+                if (e.key === "Enter") {
+
+                    e.preventDefault();
+
+                    lookupStockProduct();
+
+                }
+
+            }
+        );
+
+    }
+
+
+    /* VALIDATE QUANTITY */
+
+    if (stockTransactionQty) {
+
+        stockTransactionQty.addEventListener(
+            "input",
+            validateStockTransaction
+        );
+
+    }
+
+
+    /* VALIDATE OUTWARD REASON */
+
+    if (stockOutwardReason) {
+
+        stockOutwardReason.addEventListener(
+            "change",
+            validateStockTransaction
+        );
+
+    }
     
     if (searchBox) {
 
@@ -513,5 +926,246 @@ function initializeInventoryEvents() {
 });
 
     }
+
+/* ===========================================
+   CONFIRM STOCK TRANSACTION
+=========================================== */
+
+if (confirmStockTransactionBtn)
+
+confirmStockTransactionBtn.onclick = async () => {
+
+    if (!currentStockProduct) {
+
+        alert(
+            "Please scan a valid product first."
+        );
+
+        return;
+
+    }
+
+
+    const transactionQty =
+        Number(
+            stockTransactionQty.value
+        );
+
+
+    if (
+        !Number.isInteger(transactionQty) ||
+        transactionQty <= 0
+    ) {
+
+        alert(
+            "Please enter a valid quantity."
+        );
+
+        return;
+
+    }
+
+
+    confirmStockTransactionBtn.disabled = true;
+
+
+    try {
+
+        let result;
+
+
+        /* ===============================
+           STOCK INWARD
+        =============================== */
+
+        if (
+            currentStockTransactionType ===
+            "INWARD"
+        ) {
+
+            result =
+                await window.electronAPI.stockInward({
+
+                    productId:
+                        currentStockProduct.id,
+
+                    barcode:
+                        currentStockProduct.barcode,
+
+                    quantity:
+                        transactionQty,
+
+invoiceNo:
+    document.getElementById(
+        "stockInvoiceNo"
+    ).value.trim(),
+
+remarks:
+    document.getElementById(
+        "stockInwardRemarks"
+    ).value.trim()
+
+                });
+
+        }
+
+
+        /* ===============================
+           STOCK OUTWARD
+        =============================== */
+
+        else if (
+            currentStockTransactionType ===
+            "OUTWARD"
+        ) {
+
+            const reason =
+                stockOutwardReason.value;
+
+
+            if (!reason) {
+
+                alert(
+                    "Please select a reason."
+                );
+
+                confirmStockTransactionBtn.disabled =
+                    false;
+
+                return;
+
+            }
+
+
+            result =
+                await window.electronAPI.stockOutward({
+
+                    productId:
+                        currentStockProduct.id,
+
+                    barcode:
+                        currentStockProduct.barcode,
+
+                    quantity:
+                        transactionQty,
+
+                    reason:
+                        reason,
+
+remarks:
+    document.getElementById(
+        "stockOutwardRemarks"
+    ).value.trim()
+
+                });
+
+        }
+
+
+if (!result) {
+    throw new Error(
+        "Transaction could not be completed."
+    );
+}
+
+/* ===========================================
+   ACTIVITY LOG
+=========================================== */
+
+const invoiceNo =
+    document.getElementById(
+        "stockInvoiceNo"
+    ).value.trim();
+
+const inwardRemarks =
+    document.getElementById(
+        "stockInwardRemarks"
+    ).value.trim();
+
+const outwardRemarks =
+    document.getElementById(
+        "stockOutwardRemarks"
+    ).value.trim();
+
+
+const activityDetails =
+    currentStockTransactionType === "INWARD"
+        ? `Stock Inward | Product: ${currentStockProduct.product_name} | Barcode: ${currentStockProduct.barcode} | Quantity: ${transactionQty}${invoiceNo ? ` | Invoice: ${invoiceNo}` : ""}${inwardRemarks ? ` | Remarks: ${inwardRemarks}` : ""}`
+        : `Stock Outward | Product: ${currentStockProduct.product_name} | Barcode: ${currentStockProduct.barcode} | Quantity: ${transactionQty} | Reason: ${stockOutwardReason.value}${outwardRemarks ? ` | Remarks: ${outwardRemarks}` : ""}`;
+
+await window.electronAPI.logActivity({
+
+    category: "Inventory",
+
+    action:
+        currentStockTransactionType === "INWARD"
+            ? "Stock Inward"
+            : "Stock Outward",
+
+    details: activityDetails,
+
+    user_name: "Administrator",
+
+    status: "Success"
+
+});
+
+/* ===========================================
+   TRANSACTION SAVED SUCCESSFULLY
+=========================================== */
+
+const successMessage =
+    currentStockTransactionType === "INWARD"
+        ? "Stock inward completed successfully."
+        : "Stock outward completed successfully.";
+
+/* Close modal immediately after successful save */
+
+closeStockTransaction();
+
+/* Refresh inventory separately.
+   A refresh error must NOT make a saved transaction
+   appear as failed. */
+
+try {
+
+    await loadProducts();
+
+} catch (refreshError) {
+
+    console.error(
+        "INVENTORY REFRESH ERROR:",
+        refreshError
+    );
+
+}
+
+/* Show success only after transaction is safely saved */
+
+alert(successMessage);
+
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "STOCK TRANSACTION ERROR:",
+            error
+        );
+
+
+        alert(
+            error.message ||
+            "Unable to complete stock transaction."
+        );
+
+
+        confirmStockTransactionBtn.disabled =
+            false;
+
+    }
+
+};
 
 }

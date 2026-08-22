@@ -151,6 +151,35 @@ closeBusinessDay: () =>
                 "export-inventory"
             ),
 
+                    exportInventory: () =>
+            ipcRenderer.invoke(
+                "export-inventory"
+            ),
+
+
+        /* INVENTORY TRANSACTIONS */
+
+        getInventoryProduct: (barcode) =>
+            ipcRenderer.invoke(
+                "get-inventory-product",
+                barcode
+            ),
+
+        stockInward: (data) =>
+            ipcRenderer.invoke(
+                "stock-inward",
+                data
+            ),
+
+        stockOutward: (data) =>
+            ipcRenderer.invoke(
+                "stock-outward",
+                data
+            ),
+
+
+
+
             downloadProductMasterTemplate: () =>
                 ipcRenderer.invoke(
                     "download-product-master-template"

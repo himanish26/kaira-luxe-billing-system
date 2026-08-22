@@ -26,3 +26,15 @@ google-credentials.json
 google-token.json
 
 .env
+
+# Local Database
+billing.db
+*.db
+
+# Local Product Import / Test Files
+*.xlsx
+*.xls
+
+# Accidental / Local Command Files
+findstr
+{

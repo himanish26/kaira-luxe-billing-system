@@ -2,7 +2,11 @@ const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 const { app } = require("electron");
 
-const dbPath = path.join(app.getPath("userData"), "billing.db");
+// Development database path
+// Keeps Electron and DB Browser pointed at the same billing.db
+const dbPath = path.join(__dirname, "..", "..", "billing.db");
+
+console.log("Database Path:", dbPath);
 
 let databaseReadyResolve;
 
@@ -239,6 +243,38 @@ db.run(`
     
 `);
 
+        db.run(`
+            CREATE TABLE IF NOT EXISTS day_closing (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                business_date TEXT NOT NULL UNIQUE,
+
+                closed_at TEXT NOT NULL,
+
+                total_bills INTEGER NOT NULL,
+
+                total_items INTEGER NOT NULL,
+
+                net_sales REAL NOT NULL,
+
+                cash_sales REAL NOT NULL,
+
+                upi_sales REAL NOT NULL,
+
+                card_sales REAL NOT NULL,
+
+                backup_status TEXT NOT NULL DEFAULT 'PENDING',
+
+                email_status TEXT NOT NULL DEFAULT 'PENDING',
+
+                closed_by TEXT NOT NULL DEFAULT 'Administrator',
+
+                remarks TEXT
+
+            )
+        `);
+
 
 
         db.run(`
@@ -273,42 +309,6 @@ Berhampur-760001',
     });
 
 }
-
-        db.run(`
-            CREATE TABLE IF NOT EXISTS day_closing (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                business_date TEXT NOT NULL UNIQUE,
-
-                closed_at TEXT NOT NULL,
-
-                total_bills INTEGER NOT NULL,
-
-                total_items INTEGER NOT NULL,
-
-                net_sales REAL NOT NULL,
-
-                cash_sales REAL NOT NULL,
-
-                upi_sales REAL NOT NULL,
-
-                card_sales REAL NOT NULL,
-
-                backup_status TEXT NOT NULL DEFAULT 'PENDING',
-
-                email_status TEXT NOT NULL DEFAULT 'PENDING',
-
-                closed_by TEXT NOT NULL DEFAULT 'Administrator',
-
-                remarks TEXT
-
-            )
-        `);
-
-        runDatabaseMigrations();
-
-        console.log("All Tables Created Successfully");
 
 function runDatabaseMigrations() {
 
@@ -460,6 +460,38 @@ function runDatabaseMigrations() {
                 );
 
             }
+
+            db.run(`
+                CREATE TABLE IF NOT EXISTS day_closing (
+
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                    business_date TEXT NOT NULL UNIQUE,
+
+                    closed_at TEXT NOT NULL,
+
+                    total_bills INTEGER NOT NULL,
+
+                    total_items INTEGER NOT NULL,
+
+                    net_sales REAL NOT NULL,
+
+                    cash_sales REAL NOT NULL,
+
+                    upi_sales REAL NOT NULL,
+
+                    card_sales REAL NOT NULL,
+
+                    backup_status TEXT NOT NULL DEFAULT 'PENDING',
+
+                    email_status TEXT NOT NULL DEFAULT 'PENDING',
+
+                    closed_by TEXT NOT NULL DEFAULT 'Administrator',
+
+                    remarks TEXT
+
+                )
+            `);
 
         }
 
@@ -1260,19 +1292,6 @@ async function initializeSmtpSettings() {
 
 }
 
-initializeSmtpSettings()
-    .then(() => initializeOpeningStock())
-    .catch(error => {
-
-        console.error(
-            "SMTP Settings Initialization Failed:",
-            error.message
-        );
-
-        databaseReadyReject(error);
-
-    });
-
 // ============================================================
 // DATABASE READY CHECKPOINT
 // All database initialization operations queued above must
@@ -1284,7 +1303,7 @@ db.serialize(() => {
     db.get(
         `SELECT 1`,
         [],
-        (err) => {
+       async (err) => {
 
             if (err) {
 
@@ -1297,11 +1316,30 @@ db.serialize(() => {
                 return;
             }
 
-            console.log(
-                '✓ Database Initialization Complete'
-            );
+try {
 
-            databaseReadyResolve();
+    await initializeSmtpSettings();
+
+    await initializeOpeningStock();
+
+    console.log(
+        '✓ Database Initialization Complete'
+    );
+
+    databaseReadyResolve();
+
+}
+
+catch (error) {
+
+    console.error(
+        "Database Initialization Failed:",
+        error.message
+    );
+
+    databaseReadyReject(error);
+
+}
 
         }
     );

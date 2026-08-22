@@ -167,6 +167,22 @@ window.productMasterTemplate = `
 
     </button>
 
+    <button
+        id="stockInwardBtn"
+        class="dashboard-btn">
+
+        📥 Stock Inward
+
+    </button>
+
+    <button
+        id="stockOutwardBtn"
+        class="dashboard-btn">
+
+        📤 Stock Outward
+
+    </button>
+
 </div>
 
 <div class="inventory-actions">
@@ -199,6 +215,257 @@ window.productMasterTemplate = `
         🗑 RESET INVENTORY
 
     </button>
+
+</div>
+
+<!-- =========================================================
+     STOCK TRANSACTION MODAL
+========================================================= -->
+
+<div
+    id="stockTransactionModal"
+    class="stock-transaction-modal"
+    style="display:none;">
+
+    <div class="stock-transaction-modal-content">
+
+        <div class="stock-modal-header">
+
+            <h2 id="stockModalTitle">
+                Stock Transaction
+            </h2>
+
+            <button
+                id="closeStockModalBtn"
+                class="stock-modal-close"
+                type="button">
+
+                ×
+
+            </button>
+
+        </div>
+
+
+        <!-- BARCODE -->
+
+        <div class="stock-form-group">
+
+            <label>
+                Scan / Enter Barcode
+            </label>
+
+            <input
+                type="text"
+                id="stockTransactionBarcode"
+                class="stock-transaction-input"
+                placeholder="Scan barcode here..."
+                autocomplete="off">
+
+        </div>
+
+
+        <!-- PRODUCT DETAILS -->
+
+        <div
+            id="stockProductDetails"
+            class="stock-product-details"
+            style="display:none;">
+
+            <div class="stock-product-row">
+
+                <span>Product</span>
+
+                <strong
+                    id="stockProductName">
+
+                    -
+
+                </strong>
+
+            </div>
+
+
+            <div class="stock-product-row">
+
+                <span>Barcode</span>
+
+                <strong
+                    id="stockProductBarcode">
+
+                    -
+
+                </strong>
+
+            </div>
+
+
+            <div class="stock-product-row">
+
+                <span>Current Stock</span>
+
+                <strong
+                    id="stockCurrentQty">
+
+                    0
+
+                </strong>
+
+            </div>
+
+        </div>
+
+
+        <!-- QUANTITY -->
+
+        <div
+            id="stockQuantityGroup"
+            class="stock-form-group"
+            style="display:none;">
+
+            <label id="stockQuantityLabel">
+                Quantity
+            </label>
+
+            <input
+                type="number"
+                id="stockTransactionQty"
+                class="stock-transaction-input"
+                min="1"
+                step="1"
+                placeholder="Enter quantity">
+
+        </div>
+
+
+        <!-- INWARD FIELDS -->
+
+        <div
+            id="stockInwardFields"
+            style="display:none;">
+
+            <div class="stock-form-group">
+
+                <label>
+                    Invoice Number
+                    <span class="optional-field">
+                        (Optional)
+                    </span>
+                </label>
+
+                <input
+                    type="text"
+                    id="stockInvoiceNo"
+                    class="stock-transaction-input"
+                    placeholder="Enter invoice number">
+
+            </div>
+
+
+            <div class="stock-form-group">
+
+                <label>
+                    Remarks
+                    <span class="optional-field">
+                        (Optional)
+                    </span>
+                </label>
+
+                <textarea
+                    id="stockInwardRemarks"
+                    class="stock-transaction-input stock-remarks"
+                    placeholder="Enter remarks"></textarea>
+
+            </div>
+
+        </div>
+
+
+        <!-- OUTWARD FIELDS -->
+
+        <div
+            id="stockOutwardFields"
+            style="display:none;">
+
+            <div class="stock-form-group">
+
+                <label>
+                    Reason
+                </label>
+
+                <select
+                    id="stockOutwardReason"
+                    class="stock-transaction-input">
+
+                    <option value="">
+                        Select Reason
+                    </option>
+
+                    <option value="DAMAGE">
+                        Damage
+                    </option>
+
+                    <option value="SUPPLIER_RETURN">
+                        Supplier Return
+                    </option>
+
+                    <option value="ADJUSTMENT">
+                        Stock Adjustment
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="stock-form-group">
+
+                <label>
+                    Remarks
+                    <span class="optional-field">
+                        (Optional)
+                    </span>
+                </label>
+
+                <textarea
+                    id="stockOutwardRemarks"
+                    class="stock-transaction-input stock-remarks"
+                    placeholder="Enter remarks"></textarea>
+
+            </div>
+
+        </div>
+
+
+        <!-- ACTIONS -->
+
+        <div class="stock-modal-actions">
+
+            <button
+                id="cancelStockTransactionBtn"
+                class="dashboard-btn"
+                type="button">
+
+                Cancel
+
+            </button>
+
+
+            <button
+                id="confirmStockTransactionBtn"
+                class="dashboard-btn"
+                type="button"
+                disabled>
+
+                Confirm
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
 
 </div>
 

@@ -89,8 +89,15 @@ const {
 
 } = require("../database/settingsService");
 
-const importProducts =
-    require("../database/importProducts");
+const {
+
+    importProducts
+
+} = require(
+    "../database/importProducts"
+);
+
+const inventoryTransactionService = require("../database/inventoryTransactionService");
 
 const {
 
@@ -481,6 +488,97 @@ ipcMain.handle(
             console.error(error);
 
             return null;
+
+        }
+
+    }
+);
+
+/* ============================================================
+   INVENTORY TRANSACTION HANDLERS
+============================================================ */
+
+
+/* GET PRODUCT FOR STOCK INWARD / OUTWARD */
+
+ipcMain.handle(
+    "get-inventory-product",
+
+    async (event, barcode) => {
+
+        try {
+
+            return await inventoryTransactionService
+                .getInventoryProductByBarcode(barcode);
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "GET INVENTORY PRODUCT ERROR:",
+                error
+            );
+
+            throw error;
+
+        }
+
+    }
+);
+
+
+/* STOCK INWARD */
+
+ipcMain.handle(
+    "stock-inward",
+
+    async (event, data) => {
+
+        try {
+
+            return await inventoryTransactionService
+                .stockInward(data);
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "STOCK INWARD ERROR:",
+                error
+            );
+
+            throw error;
+
+        }
+
+    }
+);
+
+
+/* STOCK OUTWARD */
+
+ipcMain.handle(
+    "stock-outward",
+
+    async (event, data) => {
+
+        try {
+
+            return await inventoryTransactionService
+                .stockOutward(data);
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "STOCK OUTWARD ERROR:",
+                error
+            );
+
+            throw error;
 
         }
 
