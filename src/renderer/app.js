@@ -1420,6 +1420,14 @@ gst_amount:
 
     billItems = [];
 
+    familyFriendsDiscountActive = false;
+
+    ffPinVerified = false;
+
+    if (familyFriendsBtn) {
+        familyFriendsBtn.classList.remove("active");
+    }
+
     renderBill();
 
     document.getElementById("customerName").value = "";
@@ -1467,6 +1475,14 @@ if (backBtn) {
     document.getElementById("customerMobile").value = "";
 
     document.getElementById("barcodeInput").value = "";
+
+    familyFriendsDiscountActive = false;
+
+    ffPinVerified = false;
+
+    if (familyFriendsBtn) {
+        familyFriendsBtn.classList.remove("active");
+    }
 
     loadNextBillNumber();
 
@@ -1844,7 +1860,12 @@ let billItems = [];
 let allBills = [];
 let currentViewedBill = null;
 
+let ffPinVerified = false;
+
 let productNotFoundOpen = false;
+
+let saleType = "SALE";
+let familyFriendsDiscountActive = false;
 
 const barcodeInput =
     document.getElementById(
@@ -1856,6 +1877,566 @@ const customerName =
 
 const customerMobile =
     document.getElementById("customerMobile");
+
+const saleReturnType =
+    document.getElementById("saleTypeDropdown");
+
+const familyFriendsBtn =
+    document.getElementById("familyFriendsBtn");
+
+if (saleReturnType) {
+
+    saleReturnType.addEventListener(
+        "change",
+        () => {
+        
+
+            saleType = saleReturnType.value;
+
+            if (saleType === "RETURN") {
+
+                alert(
+                    "Return billing will be activated in the next Return module."
+                );
+
+                saleReturnType.value = "SALE";
+
+                saleType = "SALE";
+
+            }
+
+        }
+    );
+
+}
+
+const ffPinDialog =
+    document.getElementById("ffPinDialog");
+
+const ffPinInput =
+    document.getElementById("ffPinInput");
+
+const ffPinError =
+    document.getElementById("ffPinError");
+
+const ffPinCancelBtn =
+    document.getElementById("ffPinCancelBtn");
+
+const ffPinVerifyBtn =
+    document.getElementById("ffPinVerifyBtn");
+
+
+if (familyFriendsBtn) {
+
+    familyFriendsBtn.addEventListener(
+        "click",
+        async () => {
+
+            /*
+             * If F&F is already active for this bill,
+             * switch it OFF and restore original discounts.
+             */
+            if (familyFriendsDiscountActive) {
+
+                familyFriendsDiscountActive = false;
+
+                ffPinVerified = false;
+
+                familyFriendsBtn.classList.remove(
+                    "active"
+                );
+
+                removeFamilyFriendsDiscount();
+
+                return;
+
+            }
+
+
+            /*
+             * Do not allow F&F without scanned products.
+             */
+            if (!billItems.length) {
+
+                alert(
+                    "Please add at least one product before applying Family & Friends Discount."
+                );
+
+                return;
+
+            }
+
+
+            /*
+             * Open PIN authorization popup.
+             */
+            ffPinInput.value = "";
+
+            ffPinError.innerText = "";
+
+            ffPinDialog.style.display = "flex";
+
+            setTimeout(() => {
+
+                ffPinInput.focus();
+
+            }, 50);
+
+        }
+    );
+
+}
+
+
+/* CANCEL PIN ENTRY */
+
+if (ffPinCancelBtn) {
+
+    ffPinCancelBtn.addEventListener(
+        "click",
+        () => {
+
+            ffPinInput.value = "";
+
+            ffPinError.innerText = "";
+
+            ffPinDialog.style.display = "none";
+
+        }
+    );
+
+}
+
+
+/* VERIFY F&F PIN */
+
+async function verifyFamilyFriendsPin() {
+
+    const enteredPin =
+        ffPinInput.value.trim();
+
+
+    if (!/^\d{4}$/.test(enteredPin)) {
+
+        ffPinError.innerText =
+            "Please enter a valid 4-digit PIN.";
+
+        return;
+
+    }
+
+
+    try {
+
+        const settings =
+            await window.electronAPI.getSettings();
+
+
+        if (
+            !settings ||
+            enteredPin !== String(settings.ff_pin || "")
+        ) {
+
+            ffPinError.innerText =
+                "Incorrect PIN.";
+
+            ffPinInput.value = "";
+
+            ffPinInput.focus();
+
+            return;
+
+        }
+
+
+/*
+ * PIN verified.
+ * Never log or store the entered PIN.
+ */
+ffPinVerified = true;
+
+ffPinInput.value = "";
+
+ffPinError.innerText = "";
+
+ffPinDialog.style.display = "none";
+
+
+/*
+ * Open the brand-wise F&F discount popup.
+ */
+openFamilyFriendsDiscountDialog();
+
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "F&F PIN verification error:",
+            error
+        );
+
+        ffPinError.innerText =
+            "Unable to verify PIN.";
+
+    }
+
+}
+
+
+if (ffPinVerifyBtn) {
+
+    ffPinVerifyBtn.addEventListener(
+        "click",
+        verifyFamilyFriendsPin
+    );
+
+}
+
+
+/* ALLOW ENTER KEY TO VERIFY */
+
+if (ffPinInput) {
+
+    ffPinInput.addEventListener(
+        "keydown",
+        (event) => {
+
+            if (event.key === "Enter") {
+
+                verifyFamilyFriendsPin();
+
+            }
+
+        }
+    );
+
+}
+
+const ffDiscountDialog =
+    document.getElementById("ffDiscountDialog");
+
+const ffDiscountBrandList =
+    document.getElementById("ffDiscountBrandList");
+
+const ffDiscountError =
+    document.getElementById("ffDiscountError");
+
+const ffDiscountCancelBtn =
+    document.getElementById("ffDiscountCancelBtn");
+
+const ffDiscountApplyBtn =
+    document.getElementById("ffDiscountApplyBtn");
+
+
+function openFamilyFriendsDiscountDialog() {
+
+    if (!ffDiscountBrandList) {
+        return;
+    }
+
+    ffDiscountError.innerText = "";
+
+    /*
+     * Group currently scanned products by brand.
+     */
+    const brandGroups = {};
+
+    billItems.forEach(item => {
+
+        const brand =
+            String(
+                item.brand || "Other"
+            ).trim() || "Other";
+
+
+        if (!brandGroups[brand]) {
+
+            brandGroups[brand] = [];
+
+        }
+
+
+        brandGroups[brand].push(item);
+
+    });
+
+
+    ffDiscountBrandList.innerHTML = "";
+
+
+    Object.keys(brandGroups)
+        .sort()
+        .forEach(brand => {
+
+            const items =
+                brandGroups[brand];
+
+
+            const standardDiscount =
+                Math.max(
+                    ...items.map(
+                        item =>
+                            Number(
+                                item.master_discount || 0
+                            )
+                    )
+                );
+
+
+            const itemNames =
+                items.map(item =>
+                    item.product_name ||
+                    item.productName ||
+                    item.name ||
+                    item.barcode ||
+                    "Product"
+                ).join(", ");
+
+
+            const row =
+                document.createElement("div");
+
+
+            row.className =
+                "ff-brand-row";
+
+
+            row.innerHTML = `
+
+                <div class="ff-brand-info">
+
+                    <div class="ff-brand-name">
+                        ${escapeHtml(brand)}
+                    </div>
+
+                    <div class="ff-brand-items">
+                        ${items.length} item(s): 
+                        ${escapeHtml(itemNames)}
+                    </div>
+
+                    <div class="ff-standard-discount">
+                        Current Standard Discount:
+                        <strong>
+                            ${standardDiscount}%
+                        </strong>
+                    </div>
+
+                </div>
+
+
+                <div class="ff-final-discount-area">
+
+                    <label>
+                        F&F Final Discount
+                    </label>
+
+                    <input
+                        type="number"
+                        class="ff-final-discount-input"
+                        data-brand="${escapeHtml(brand)}"
+                        min="0"
+                        max="30"
+                        step="0.01"
+                        value="${standardDiscount}">
+
+                    <span>%</span>
+
+                </div>
+
+            `;
+
+
+            ffDiscountBrandList.appendChild(
+                row
+            );
+
+        });
+
+
+    ffDiscountDialog.style.display = "flex";
+
+}
+
+if (ffDiscountCancelBtn) {
+
+    ffDiscountCancelBtn.addEventListener(
+        "click",
+        () => {
+
+            /*
+             * Cancel means no changes.
+             */
+            ffDiscountDialog.style.display =
+                "none";
+
+
+            ffPinVerified = false;
+
+            ffDiscountError.innerText = "";
+
+        }
+    );
+
+}
+
+
+if (ffDiscountApplyBtn) {
+
+    ffDiscountApplyBtn.addEventListener(
+        "click",
+        () => {
+
+            const inputs =
+                ffDiscountBrandList.querySelectorAll(
+                    ".ff-final-discount-input"
+                );
+
+
+            const brandDiscounts = {};
+
+
+            for (const input of inputs) {
+
+                const brand =
+                    input.dataset.brand;
+
+
+                const value =
+                    Number(
+                        input.value
+                    );
+
+
+                if (
+                    input.value === "" ||
+                    Number.isNaN(value)
+                ) {
+
+                    ffDiscountError.innerText =
+                        "Please enter a valid discount for every brand.";
+
+                    input.focus();
+
+                    return;
+
+                }
+
+
+                if (
+                    value < 0 ||
+                    value > 30
+                ) {
+
+                    ffDiscountError.innerText =
+                        "F&F Final Discount must be between 0% and 30%.";
+
+                    input.focus();
+
+                    return;
+
+                }
+
+
+                brandDiscounts[brand] =
+                    value;
+
+            }
+
+
+            /*
+             * Apply the final brand-wise discounts.
+             */
+            applyFamilyFriendsDiscount(
+                brandDiscounts
+            );
+
+
+            /*
+             * F&F becomes active only AFTER
+             * successful discount application.
+             */
+            familyFriendsDiscountActive =
+                true;
+
+
+            familyFriendsBtn.classList.add(
+                "active"
+            );
+
+
+            ffDiscountDialog.style.display =
+                "none";
+
+
+            ffDiscountError.innerText = "";
+
+        }
+    );
+
+}
+
+function applyFamilyFriendsDiscount(
+    brandDiscounts
+) {
+
+    billItems.forEach(item => {
+
+        const brand =
+            String(
+                item.brand || "Other"
+            ).trim() || "Other";
+
+
+        const finalDiscount =
+            Number(
+                brandDiscounts[brand]
+            );
+
+
+        /*
+         * F&F discount OVERRIDES the standard
+         * Product Master discount.
+         * It never stacks on top of it.
+         */
+        item.ff_discount =
+            finalDiscount;
+
+
+        item.discount =
+            finalDiscount;
+
+    });
+
+
+    renderBill();
+
+    loadPaymentSummary();
+
+    calculatePayment();
+
+}
+
+
+function removeFamilyFriendsDiscount() {
+
+    billItems.forEach(item => {
+
+        item.ff_discount = null;
+
+        item.discount =
+            Number(item.master_discount || 0);
+
+    });
+
+    renderBill();
+
+    loadPaymentSummary();
+
+    calculatePayment();
+
+}
 
 if (customerName) {
 
@@ -1998,14 +2579,19 @@ if (currentBillQty >= availableStock) {
 
             colour: product.colour,
 
-            mrp: Number(product.mrp),
+mrp: Number(product.mrp),
 
-            qty: 1,
+qty: 1,
 
-            discount:
-                Number(product.discount || 0),
+master_discount:
+    Number(product.discount || 0),
 
-            gst_rate: Number(product.gst_rate)
+ff_discount: null,
+
+discount:
+    Number(product.discount || 0),
+
+gst_rate: Number(product.gst_rate)
 
         });
 
@@ -2106,6 +2692,28 @@ function clearCurrentBill(){
     document.getElementById("customerMobile").value = "";
 
     document.getElementById("barcodeInput").value = "";
+
+    saleType = "SALE";
+
+familyFriendsDiscountActive = false;
+
+const saleReturnType =
+    document.getElementById("saleTypeDropdown");
+
+if (saleReturnType) {
+
+    saleReturnType.value = "SALE";
+
+}
+
+const familyFriendsBtn =
+    document.getElementById("familyFriendsBtn");
+
+if (familyFriendsBtn) {
+
+    familyFriendsBtn.classList.remove("active");
+
+}
 
     loadPaymentSummary();
 

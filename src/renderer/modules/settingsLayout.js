@@ -273,18 +273,6 @@ autocomplete="off"
 
     </div>
 
-    <div class="settings-actions">
-
-        <button
-            id="saveScannerBtn"
-            class="dashboard-btn">
-
-            💾 Save
-
-        </button>
-
-    </div>
-
 </div>
 
 `;

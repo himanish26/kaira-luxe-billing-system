@@ -461,6 +461,50 @@ function runDatabaseMigrations() {
 
             }
 
+            if (!existingColumns.includes("ff_enabled")) {
+
+                db.run(`
+                    ALTER TABLE settings
+                    ADD COLUMN ff_enabled
+                    INTEGER DEFAULT 1
+                `);
+
+                console.log(
+                    "Added column: ff_enabled"
+                );
+
+            }
+
+
+            if (!existingColumns.includes("ff_discount_percent")) {
+
+                db.run(`
+                    ALTER TABLE settings
+                    ADD COLUMN ff_discount_percent
+                    REAL DEFAULT 20
+                `);
+
+                console.log(
+                    "Added column: ff_discount_percent"
+                );
+
+            }
+
+
+            if (!existingColumns.includes("ff_pin")) {
+
+                db.run(`
+                    ALTER TABLE settings
+                    ADD COLUMN ff_pin
+                    TEXT
+                `);
+
+                console.log(
+                    "Added column: ff_pin"
+                );
+
+            }
+
             db.run(`
                 CREATE TABLE IF NOT EXISTS day_closing (
 

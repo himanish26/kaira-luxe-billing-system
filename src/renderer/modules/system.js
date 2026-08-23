@@ -3,6 +3,42 @@
 ===================================== */
 console.log("system.js loaded");
 
+function showComingSoon(featureName) {
+
+    const modal = document.createElement("div");
+
+    modal.className = "klbs-coming-soon-overlay";
+
+    modal.innerHTML = `
+        <div class="klbs-coming-soon-modal">
+
+            <div class="klbs-coming-soon-icon">🚧</div>
+
+            <h2>${featureName}</h2>
+
+            <p>This feature is coming soon.</p>
+
+            <button
+                id="comingSoonOkBtn"
+                class="klbs-modal-ok">
+
+                OK
+
+            </button>
+
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document
+        .getElementById("comingSoonOkBtn")
+        .addEventListener("click", () => {
+            modal.remove();
+        });
+
+}
+
 function showSystemPage() {
 
     renderSettingsPage({
@@ -149,10 +185,10 @@ const diagnosticsCard =
 
 if (diagnosticsCard) {
 
-    diagnosticsCard.addEventListener(
-        "click",
-        showDiagnosticsPage
-    );
+diagnosticsCard.addEventListener(
+    "click",
+    () => showComingSoon("System Health")
+);
 
 }
 
@@ -162,10 +198,10 @@ const exportCard =
 
 if (exportCard) {
 
-    exportCard.addEventListener(
-        "click",
-        showExportDataPage
-    );
+exportCard.addEventListener(
+    "click",
+    () => showComingSoon("Export Data")
+);
 
 }
 
@@ -180,4 +216,6 @@ if (updatesCard) {
         showUpdatesPage
     );
 
-}}
+}
+
+}

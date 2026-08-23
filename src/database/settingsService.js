@@ -53,62 +53,77 @@ function saveSettings(settings) {
 
                 const updated = {
 
-                    receipt_message:
-                        settings.receipt_message !== undefined
-                            ? settings.receipt_message
-                            : current.receipt_message,
+    receipt_message:
+        settings.receipt_message !== undefined
+            ? settings.receipt_message
+            : current.receipt_message,
 
-                    default_printer:
-                        settings.default_printer !== undefined
-                            ? settings.default_printer
-                            : current.default_printer,
+    default_printer:
+        settings.default_printer !== undefined
+            ? settings.default_printer
+            : current.default_printer,
 
-                    backup_location:
-                        settings.backup_location !== undefined
-                            ? settings.backup_location
-                            : current.backup_location,
+    backup_location:
+        settings.backup_location !== undefined
+            ? settings.backup_location
+            : current.backup_location,
 
-                    auto_backup_time:
-                        settings.auto_backup_time !== undefined
-                            ? settings.auto_backup_time
-                            : current.auto_backup_time,
+    auto_backup_time:
+        settings.auto_backup_time !== undefined
+            ? settings.auto_backup_time
+            : current.auto_backup_time,
 
-                    smtp_host:
-                        settings.smtp_host !== undefined
-                            ? settings.smtp_host
-                            : current.smtp_host,
+    smtp_host:
+        settings.smtp_host !== undefined
+            ? settings.smtp_host
+            : current.smtp_host,
 
-                    smtp_port:
-                        settings.smtp_port !== undefined
-                            ? settings.smtp_port
-                            : current.smtp_port,
+    smtp_port:
+        settings.smtp_port !== undefined
+            ? settings.smtp_port
+            : current.smtp_port,
 
-                    smtp_secure:
-                        settings.smtp_secure !== undefined
-                            ? settings.smtp_secure
-                            : current.smtp_secure,
+    smtp_secure:
+        settings.smtp_secure !== undefined
+            ? settings.smtp_secure
+            : current.smtp_secure,
 
-                    smtp_user:
-                        settings.smtp_user !== undefined
-                            ? settings.smtp_user
-                            : current.smtp_user,
+    smtp_user:
+        settings.smtp_user !== undefined
+            ? settings.smtp_user
+            : current.smtp_user,
 
-                    smtp_password:
-                        settings.smtp_password !== undefined
-                            ? settings.smtp_password
-                            : current.smtp_password,
+    smtp_password:
+        settings.smtp_password !== undefined
+            ? settings.smtp_password
+            : current.smtp_password,
 
-                    smtp_from:
-                        settings.smtp_from !== undefined
-                            ? settings.smtp_from
-                            : current.smtp_from,
+    smtp_from:
+        settings.smtp_from !== undefined
+            ? settings.smtp_from
+            : current.smtp_from,
 
-                    last_updated:
-                        settings.last_updated !== undefined
-                            ? settings.last_updated
-                            : current.last_updated
+    ff_enabled:
+        settings.ff_enabled !== undefined
+            ? settings.ff_enabled
+            : current.ff_enabled,
 
-                };
+    ff_discount_percent:
+        settings.ff_discount_percent !== undefined
+            ? settings.ff_discount_percent
+            : current.ff_discount_percent,
+
+    ff_pin:
+        settings.ff_pin !== undefined
+            ? settings.ff_pin
+            : current.ff_pin,
+
+    last_updated:
+        settings.last_updated !== undefined
+            ? settings.last_updated
+            : current.last_updated
+
+};
 
                 db.run(
 
@@ -136,6 +151,12 @@ function saveSettings(settings) {
 
                         smtp_from = ?,
 
+                        ff_enabled = ?,
+                        
+                        ff_discount_percent = ?,
+                        
+                        ff_pin = ?,
+
                         last_updated = ?
 
                     WHERE id = 1`,
@@ -161,6 +182,12 @@ function saveSettings(settings) {
                         updated.smtp_password,
 
                         updated.smtp_from,
+
+                        updated.ff_enabled,
+
+                        updated.ff_discount_percent,
+
+                        updated.ff_pin,
 
                         updated.last_updated
 

@@ -178,7 +178,7 @@
 
 .table-scroll{
 
-    height:420px;
+    height:380px;
 
     overflow-y:auto;
 
@@ -1140,4 +1140,126 @@
 
     border-top:1px dashed #ddd;
 
+}
+
+/* =====================================
+   BILLING ACTIONS ROW
+===================================== */
+
+.billing-actions-row {
+    display: flex !important;
+    align-items: center !important;
+    gap: 16px !important;
+    margin-top: 25px !important;
+    width: 100% !important;
+}
+
+
+/* =====================================
+   COMMON ACTION CONTROLS
+===================================== */
+
+.billing-actions-row .action-dropdown,
+.billing-actions-row .action-btn-secondary,
+.billing-actions-row .payment-btn {
+    height: 75px !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    border-radius: 12px !important;
+    font-size: 24px !important;
+    font-weight: 800 !important;
+}
+
+
+/* =====================================
+   SALE / RETURN DROPDOWN
+===================================== */
+
+.billing-actions-row .action-dropdown {
+    width: 240px !important;
+    min-width: 240px !important;
+
+    padding: 0 48px 0 24px !important;
+
+    background-color: #ffffff !important;
+    color: #8b0035 !important;
+
+    border: 2px solid #8b0035 !important;
+
+    cursor: pointer !important;
+    outline: none !important;
+
+    appearance: none !important;
+    -webkit-appearance: none !important;
+
+    background-image:
+        linear-gradient(45deg, transparent 50%, #8b0035 50%),
+        linear-gradient(135deg, #8b0035 50%, transparent 50%) !important;
+
+    background-position:
+        calc(100% - 28px) 31px,
+        calc(100% - 20px) 31px !important;
+
+    background-size: 8px 8px, 8px 8px !important;
+    background-repeat: no-repeat !important;
+}
+
+.billing-actions-row .action-dropdown:hover,
+.billing-actions-row .action-dropdown:focus {
+    border-color: #6d0033 !important;
+    color: #6d0033 !important;
+}
+
+
+/* =====================================
+   FAMILY & FRIENDS BUTTON
+===================================== */
+
+.billing-actions-row .action-btn-secondary {
+    width: 350px !important;
+    min-width: 350px !important;
+
+    padding: 0 28px !important;
+
+    background-color: #ffffff !important;
+    color: #8b0035 !important;
+
+    border: 2px solid #8b0035 !important;
+
+    cursor: pointer !important;
+    white-space: nowrap !important;
+
+    transition: background-color 0.2s ease,
+                color 0.2s ease !important;
+}
+
+.billing-actions-row .action-btn-secondary:hover {
+    background-color: #f8eef2 !important;
+    color: #6d0033 !important;
+}
+
+
+/* =====================================
+   PROCEED TO PAYMENT BUTTON
+===================================== */
+
+.billing-actions-row .payment-btn {
+    flex: 1 !important;
+    min-width: 0 !important;
+
+    padding: 0 30px !important;
+
+    background-color: #0f7b0f !important;
+    color: #ffffff !important;
+
+    border: none !important;
+
+    cursor: pointer !important;
+    white-space: nowrap !important;
+
+    transition: background-color 0.2s ease !important;
+}
+
+.billing-actions-row .payment-btn:hover {
+    background-color: #0b610b !important;
 }
