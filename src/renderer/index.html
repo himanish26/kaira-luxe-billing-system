@@ -712,6 +712,40 @@ maxlength="11">
              NEW BILL
         </h1>
 
+        <!-- RETURN LOOKUP PANEL -->
+
+<div id="returnLookupPanel" class="return-lookup-panel" style="display:none;">
+
+    <div class="return-lookup-title">
+        RETURN / EXCHANGE
+    </div>
+
+    <div class="return-lookup-row">
+
+        <input
+            type="text"
+            id="originalBillNo"
+            placeholder="Enter Original Bill Number"
+            autocomplete="off"
+        >
+
+        <button
+            id="loadReturnBillBtn"
+            type="button"
+        >
+            LOAD BILL
+        </button>
+
+    </div>
+
+    <div
+        id="returnBillStatus"
+        class="return-bill-status"
+    >
+    </div>
+
+</div>
+
         <div class="customer-section">
 
             <input
@@ -1691,50 +1725,93 @@ style="display:none;">
 <!-- FAMILY & FRIENDS DISCOUNT POPUP -->
 <div
     id="ffDiscountDialog"
-    class="modal"
-    style="display:none;">
+    class="custom-dialog"
+    style="display:none;"
+>
+    <div
+        class="custom-dialog-box
+        ff-discount-dialog-box"
+    >
 
-    <div class="modal-content ff-discount-dialog-box">
-
-        <h2>Family & Friends Discount</h2>
+        <h2>
+            Family & Friends Discount
+        </h2>
 
         <p class="ff-dialog-description">
-            Set the final discount for each brand.
-            Maximum allowed: 30%.
+            Review the currently billed items and enter the
+            final F&F discount for each item.
+            Maximum allowed: <strong>30%</strong>.
         </p>
 
-        <div
-            id="ffDiscountBrandList"
-            class="ff-discount-brand-list">
+
+        <div class="ff-table-wrapper">
+
+            <table class="ff-discount-table">
+
+                <thead>
+                    <tr>
+
+                        <th>Product</th>
+
+                        <th>Size</th>
+
+                        <th>Brand</th>
+
+                        <th>Qty</th>
+
+                        <th>MRP</th>
+
+                        <th>
+                            Current Disc%
+                        </th>
+
+                        <th>
+                            F&amp;F Discount
+                        </th>
+
+                        <th>Net</th>
+
+                    </tr>
+                </thead>
+
+
+                <tbody
+                    id="ffDiscountTableBody"
+                >
+                </tbody>
+
+            </table>
+
         </div>
+
 
         <div
             id="ffDiscountError"
-            class="dialog-error">
+            class="dialog-error"
+        >
         </div>
 
-        <div class="modal-buttons">
+
+        <div class="dialog-actions">
 
             <button
+                type="button"
                 id="ffDiscountCancelBtn"
-                class="dashboard-btn secondary">
-
+            >
                 Cancel
-
             </button>
 
+
             <button
+                type="button"
                 id="ffDiscountApplyBtn"
-                class="dashboard-btn">
-
+            >
                 Apply Discount
-
             </button>
 
         </div>
 
     </div>
-
 </div>
 
 <!-- Always last -->

@@ -487,3 +487,91 @@ transform:rotate(360deg);
     color:#991b1b;
 
 }
+
+/* ==========================================
+   KLBS RIGHT-CLICK CONTEXT MENU
+========================================== */
+
+#klbsContextMenu {
+
+    position: fixed;
+
+    z-index: 999999;
+
+    display: none;
+
+    width: 220px;
+
+    background: #ffffff;
+
+    border: 1px solid #d9d9d9;
+
+    border-radius: 10px;
+
+    box-shadow:
+        0 8px 25px rgba(
+            0,
+            0,
+            0,
+            0.18
+        );
+
+    padding: 6px;
+
+    box-sizing: border-box;
+
+}
+
+#klbsContextMenu button {
+
+    display: block;
+
+    width: 100%;
+
+    border: none;
+
+    background: transparent;
+
+    padding:
+        10px
+        14px;
+
+    text-align: left;
+
+    font-size: 15px;
+
+    font-weight: 600;
+
+    color: #333333;
+
+    border-radius: 6px;
+
+    cursor: pointer;
+
+}
+
+#klbsContextMenu button:hover:not(:disabled) {
+
+    background: #f3f3f3;
+
+}
+
+#klbsContextMenu button:disabled {
+
+    color: #b5b5b5;
+
+    cursor: not-allowed;
+
+}
+
+.klbs-context-divider {
+
+    height: 1px;
+
+    background: #e5e5e5;
+
+    margin:
+        5px
+        0;
+
+}

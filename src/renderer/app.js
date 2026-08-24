@@ -562,6 +562,36 @@ document.getElementById("saveReceiptBtn");
 cancelReceiptBtn =
 document.getElementById("cancelReceiptBtn");
 
+function formatKLBSLastUpdated(value) {
+
+    if (!value || value === "Never") {
+        return "Never";
+    }
+
+    const date =
+        new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return value;
+    }
+
+    const formattedDate =
+        date.toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+        });
+
+    const formattedTime =
+        date.toLocaleTimeString("en-IN", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true
+        }).toUpperCase();
+
+    return `${formattedDate} • ${formattedTime}`;
+}
+
 (async () => {
 
     try {
@@ -572,8 +602,10 @@ document.getElementById("cancelReceiptBtn");
         receiptMessage.innerText =
             settings.receipt_message || "Not Set";
 
-        document.getElementById("storeLastUpdated").innerText =
-            settings.last_updated || "Never";
+document.getElementById("storeLastUpdated").innerText =
+    formatKLBSLastUpdated(
+        settings.last_updated
+    );
 
     }
 
@@ -1119,8 +1151,10 @@ if (newBillBtn) {
 
         hideAllScreens();
 
+        clearCurrentBill();
+
         newBillScreen.style.display = "block";
-        loadNextBillNumber();
+        
         const barcodeInput =
             document.getElementById("barcodeInput");
 
@@ -1884,24 +1918,295 @@ const saleReturnType =
 const familyFriendsBtn =
     document.getElementById("familyFriendsBtn");
 
+function applyBillingMode(mode) {
+
+    saleType = mode;
+
+    if (saleReturnType) {
+
+        saleReturnType.value = mode;
+
+    }
+
+    const newBillScreen =
+        document.getElementById(
+            "newBillScreen"
+        );
+
+    if (newBillScreen) {
+
+        newBillScreen.classList.toggle(
+            "return-mode",
+            mode === "RETURN"
+        );
+
+    }
+
+
+    const returnLookupPanel =
+        document.getElementById(
+            "returnLookupPanel"
+        );
+
+    if (returnLookupPanel) {
+
+        returnLookupPanel.style.display =
+            mode === "RETURN"
+                ? "block"
+                : "none";
+
+    }
+
+
+    const billingPageTitle =
+        document.querySelector(
+            ".billing-page-title"
+        );
+
+    if (billingPageTitle) {
+
+        billingPageTitle.innerText =
+            mode === "RETURN"
+                ? "RETURN / EXCHANGE"
+                : "NEW BILL";
+
+    }
+
+
+    const originalBillNo =
+        document.getElementById(
+            "originalBillNo"
+        );
+
+    if (
+        mode === "RETURN" &&
+        originalBillNo
+    ) {
+
+        setTimeout(() => {
+
+            originalBillNo.focus();
+
+        }, 100);
+
+    }
+
+}
+
 if (saleReturnType) {
 
     saleReturnType.addEventListener(
         "change",
         () => {
-        
 
-            saleType = saleReturnType.value;
+            const requestedMode =
+                saleReturnType.value;
 
-            if (saleType === "RETURN") {
+            if (requestedMode === saleType) {
 
-                alert(
-                    "Return billing will be activated in the next Return module."
+                return;
+
+            }
+
+            if (billItems.length > 0) {
+
+                const confirmed =
+                    window.confirm(
+                        `Switching to ${requestedMode} mode will discard the current bill items.\n\nContinue?`
+                    );
+
+                if (!confirmed) {
+
+                    saleReturnType.value =
+                        saleType;
+
+                    return;
+
+                }
+
+                billItems = [];
+
+                renderBill();
+
+            }
+
+            applyBillingMode(
+                requestedMode
+            );
+
+        }
+    );
+
+}
+
+/* =====================================
+   RETURN BILL LOOKUP
+===================================== */
+
+const originalBillNo =
+    document.getElementById("originalBillNo");
+
+const loadReturnBillBtn =
+    document.getElementById("loadReturnBillBtn");
+
+const returnBillStatus =
+    document.getElementById("returnBillStatus");
+
+
+if (loadReturnBillBtn) {
+
+    loadReturnBillBtn.addEventListener(
+        "click",
+        async () => {
+
+            const billNo =
+                originalBillNo.value.trim().toUpperCase();
+
+            if (!billNo) {
+
+                returnBillStatus.innerText =
+                    "Enter the original bill number.";
+
+                return;
+
+            }
+
+
+            loadReturnBillBtn.disabled = true;
+
+            returnBillStatus.innerText =
+                "Loading bill...";
+
+
+            try {
+
+                const result =
+                    await window.electronAPI.getBillForReturn(
+                        billNo
+                    );
+
+
+                if (!result || !result.bill) {
+
+                    returnBillStatus.innerText =
+                        "Original bill not found.";
+
+                    return;
+
+                }
+
+
+                console.log(
+                    "RETURN BILL LOADED:",
+                    result
                 );
 
-                saleReturnType.value = "SALE";
+                document.getElementById(
+                    "customerName"
+                ).value =
+                    result.bill.customer_name || "";
 
-                saleType = "SALE";
+                document.getElementById(
+                    "customerMobile"
+                ).value =
+                    result.bill.customer_mobile || "";
+
+                billItems = result.items
+                    .map((item) => {
+
+                        const remainingQty =
+                            Number(item.qty || 0) -
+                            Number(
+                                item.already_returned_qty || 0
+                            );
+
+                        if (remainingQty <= 0) {
+                            return null;
+                        }
+
+                        return {
+                            ...item,
+
+                            qty: remainingQty,
+
+                            mrp:
+                                Number(item.mrp || 0),
+
+                            discount:
+                                Number(
+                                    item.discount_percent || 0
+                                ),
+
+                            discount_percent:
+                                Number(
+                                    item.discount_percent || 0
+                                ),
+
+                            discount_amount:
+                                Number(
+                                    item.discount_amount || 0
+                                ),
+
+                            original_bill_item_id:
+                                item.id,
+
+                            original_qty:
+                                Number(item.qty || 0),
+
+                            already_returned_qty:
+                                Number(
+                                    item.already_returned_qty || 0
+                                )
+                        };
+
+                    })
+                    .filter((item) => item !== null);
+
+                renderBill();
+
+                returnBillStatus.innerText =
+                    `Bill ${result.bill.bill_no} loaded successfully. ${billItems.length} item(s) available for return.`;
+
+            }
+
+            catch (error) {
+
+                console.error(
+                    "RETURN BILL LOOKUP ERROR:",
+                    error
+                );
+
+                returnBillStatus.innerText =
+                    "Unable to load the original bill.";
+
+            }
+
+            finally {
+
+                loadReturnBillBtn.disabled = false;
+
+            }
+
+        }
+    );
+
+}
+
+if (originalBillNo) {
+
+    originalBillNo.addEventListener(
+        "keydown",
+        (event) => {
+
+            if (event.key === "Enter") {
+
+                event.preventDefault();
+
+                if (loadReturnBillBtn) {
+
+                    loadReturnBillBtn.click();
+
+                }
 
             }
 
@@ -2117,9 +2422,6 @@ if (ffPinInput) {
 const ffDiscountDialog =
     document.getElementById("ffDiscountDialog");
 
-const ffDiscountBrandList =
-    document.getElementById("ffDiscountBrandList");
-
 const ffDiscountError =
     document.getElementById("ffDiscountError");
 
@@ -2129,133 +2431,260 @@ const ffDiscountCancelBtn =
 const ffDiscountApplyBtn =
     document.getElementById("ffDiscountApplyBtn");
 
+const ffDiscountTableBody =
+    document.getElementById(
+        "ffDiscountTableBody"
+    );
+
+function escapeHtml(value) {
+
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+}
 
 function openFamilyFriendsDiscountDialog() {
 
-    if (!ffDiscountBrandList) {
+    if (!ffDiscountTableBody) {
         return;
     }
 
-    ffDiscountError.innerText = "";
 
     /*
-     * Group currently scanned products by brand.
+     * Clear previous popup rows.
      */
-    const brandGroups = {};
+    ffDiscountTableBody.innerHTML = "";
 
-    billItems.forEach(item => {
+
+    /*
+     * Add every currently billed item.
+     */
+    billItems.forEach((item, index) => {
+
+        const productName =
+            String(
+                item.product_name || ""
+            );
+
+        const size =
+            String(
+                item.size || "-"
+            );
 
         const brand =
             String(
                 item.brand || "Other"
-            ).trim() || "Other";
+            );
+
+        const qty =
+            Number(
+                item.qty || 0
+            );
+
+        const mrp =
+            Number(
+                item.mrp || 0
+            );
+
+        const currentDiscount =
+            Number(
+                item.master_discount || 0
+            );
+
+        const currentFinalDiscount =
+            Number(
+                item.discount || 0
+            );
+
+        const netAmount =
+            (
+                mrp *
+                qty *
+                (
+                    1 -
+                    currentFinalDiscount / 100
+                )
+            );
 
 
-        if (!brandGroups[brand]) {
-
-            brandGroups[brand] = [];
-
-        }
+        const row =
+            document.createElement("tr");
 
 
-        brandGroups[brand].push(item);
+row.innerHTML = `
 
-    });
+    <td>
+        ${escapeHtml(productName)}
+    </td>
+
+    <td>
+        ${escapeHtml(size)}
+    </td>
+
+    <td>
+        ${escapeHtml(brand)}
+    </td>
+
+    <td class="ff-center-cell">
+        ${qty}
+    </td>
+
+    <td class="ff-money-cell">
+        ₹${mrp.toFixed(2)}
+    </td>
+
+    <td class="ff-center-cell">
+        ${currentDiscount}%
+    </td>
+
+    <td class="ff-discount-input-cell">
+
+        <input
+            type="number"
+            class="ff-final-discount-input"
+            data-index="${index}"
+            min="0"
+            max="30"
+            step="1"
+            value="${currentFinalDiscount}"
+        >
+
+        <span class="ff-percent-symbol">
+            %
+        </span>
+
+    </td>
+
+    <td
+        class="ff-money-cell ff-net-preview"
+        data-net-index="${index}"
+    >
+        ₹${netAmount.toFixed(2)}
+    </td>
+
+`;
 
 
-    ffDiscountBrandList.innerHTML = "";
+        ffDiscountTableBody.appendChild(
+            row
+        );
+
+        const discountInput =
+    row.querySelector(
+        ".ff-final-discount-input"
+    );
 
 
-    Object.keys(brandGroups)
-        .sort()
-        .forEach(brand => {
-
-            const items =
-                brandGroups[brand];
+const netPreview =
+    row.querySelector(
+        ".ff-net-preview"
+    );
 
 
-            const standardDiscount =
+if (
+    discountInput &&
+    netPreview
+) {
+
+    discountInput.addEventListener(
+        "input",
+        function () {
+
+            let finalDiscount =
+                Number(
+                    this.value
+                );
+
+
+            /*
+             * Prevent invalid values
+             * from affecting preview.
+             */
+            if (
+                !Number.isFinite(
+                    finalDiscount
+                )
+            ) {
+
+                finalDiscount = 0;
+
+            }
+
+
+            /*
+             * Keep preview calculation
+             * within allowed F&F range.
+             */
+            finalDiscount =
                 Math.max(
-                    ...items.map(
-                        item =>
-                            Number(
-                                item.master_discount || 0
-                            )
+                    0,
+                    Math.min(
+                        30,
+                        finalDiscount
                     )
                 );
 
 
-            const itemNames =
-                items.map(item =>
-                    item.product_name ||
-                    item.productName ||
-                    item.name ||
-                    item.barcode ||
-                    "Product"
-                ).join(", ");
+            /*
+             * Calculate item Net using
+             * F&F Final Discount.
+             */
+            const updatedNet =
+                mrp *
+                qty *
+                (
+                    1 -
+                    finalDiscount / 100
+                );
 
 
-            const row =
-                document.createElement("div");
+            netPreview.textContent =
+                `₹${updatedNet.toFixed(2)}`;
+
+        }
+    );
+
+}
+
+    });
 
 
-            row.className =
-                "ff-brand-row";
+    /*
+     * Clear previous error.
+     */
+    ffDiscountError.innerText = "";
 
 
-            row.innerHTML = `
-
-                <div class="ff-brand-info">
-
-                    <div class="ff-brand-name">
-                        ${escapeHtml(brand)}
-                    </div>
-
-                    <div class="ff-brand-items">
-                        ${items.length} item(s): 
-                        ${escapeHtml(itemNames)}
-                    </div>
-
-                    <div class="ff-standard-discount">
-                        Current Standard Discount:
-                        <strong>
-                            ${standardDiscount}%
-                        </strong>
-                    </div>
-
-                </div>
+    /*
+     * Open dialog.
+     */
+    ffDiscountDialog.style.display =
+        "flex";
 
 
-                <div class="ff-final-discount-area">
+    /*
+     * Focus first discount field.
+     */
+    setTimeout(() => {
 
-                    <label>
-                        F&F Final Discount
-                    </label>
-
-                    <input
-                        type="number"
-                        class="ff-final-discount-input"
-                        data-brand="${escapeHtml(brand)}"
-                        min="0"
-                        max="30"
-                        step="0.01"
-                        value="${standardDiscount}">
-
-                    <span>%</span>
-
-                </div>
-
-            `;
-
-
-            ffDiscountBrandList.appendChild(
-                row
+        const firstInput =
+            document.querySelector(
+                ".ff-final-discount-input"
             );
 
-        });
+        if (firstInput) {
 
+            firstInput.focus();
 
-    ffDiscountDialog.style.display = "flex";
+            firstInput.select();
+
+        }
+
+    }, 100);
 
 }
 
@@ -2282,139 +2711,137 @@ if (ffDiscountCancelBtn) {
 }
 
 
-if (ffDiscountApplyBtn) {
-
-    ffDiscountApplyBtn.addEventListener(
-        "click",
-        () => {
-
-            const inputs =
-                ffDiscountBrandList.querySelectorAll(
-                    ".ff-final-discount-input"
-                );
 
 
-            const brandDiscounts = {};
+function applyFamilyFriendsDiscountsFromDialog() {
+
+    const inputs =
+        document.querySelectorAll(
+            ".ff-final-discount-input"
+        );
 
 
-            for (const input of inputs) {
+    /*
+     * Validate all discounts first.
+     */
+    for (const input of inputs) {
 
-                const brand =
-                    input.dataset.brand;
-
-
-                const value =
-                    Number(
-                        input.value
-                    );
-
-
-                if (
-                    input.value === "" ||
-                    Number.isNaN(value)
-                ) {
-
-                    ffDiscountError.innerText =
-                        "Please enter a valid discount for every brand.";
-
-                    input.focus();
-
-                    return;
-
-                }
-
-
-                if (
-                    value < 0 ||
-                    value > 30
-                ) {
-
-                    ffDiscountError.innerText =
-                        "F&F Final Discount must be between 0% and 30%.";
-
-                    input.focus();
-
-                    return;
-
-                }
-
-
-                brandDiscounts[brand] =
-                    value;
-
-            }
-
-
-            /*
-             * Apply the final brand-wise discounts.
-             */
-            applyFamilyFriendsDiscount(
-                brandDiscounts
+        const finalDiscount =
+            Number(
+                input.value
             );
 
 
-            /*
-             * F&F becomes active only AFTER
-             * successful discount application.
-             */
-            familyFriendsDiscountActive =
-                true;
+        if (
+            !Number.isFinite(
+                finalDiscount
+            ) ||
+            finalDiscount < 0 ||
+            finalDiscount > 30
+        ) {
 
+            ffDiscountError.innerText =
+                "F&F Final Discount must be between 0% and 30%.";
 
-            familyFriendsBtn.classList.add(
-                "active"
-            );
+            input.focus();
 
-
-            ffDiscountDialog.style.display =
-                "none";
-
-
-            ffDiscountError.innerText = "";
-
+            return;
         }
-    );
 
-}
+    }
 
-function applyFamilyFriendsDiscount(
-    brandDiscounts
-) {
 
-    billItems.forEach(item => {
+    /*
+     * Apply item-wise FINAL discount.
+     *
+     * IMPORTANT:
+     * F&F discount overrides the Product Master
+     * discount.
+     *
+     * It NEVER stacks with it.
+     */
+    inputs.forEach(input => {
 
-        const brand =
-            String(
-                item.brand || "Other"
-            ).trim() || "Other";
+        const index =
+            Number(
+                input.dataset.index
+            );
 
 
         const finalDiscount =
             Number(
-                brandDiscounts[brand]
+                input.value
             );
 
 
-        /*
-         * F&F discount OVERRIDES the standard
-         * Product Master discount.
-         * It never stacks on top of it.
-         */
-        item.ff_discount =
+        if (!billItems[index]) {
+            return;
+        }
+
+
+        billItems[index].ff_discount =
             finalDiscount;
 
 
-        item.discount =
+        billItems[index].discount =
             finalDiscount;
 
     });
 
 
+    /*
+     * Mark F&F active.
+     */
+    familyFriendsDiscountActive =
+        true;
+
+
+    ffPinVerified =
+        true;
+
+
+    /*
+     * Update button state.
+     */
+    if (familyFriendsBtn) {
+
+        familyFriendsBtn.classList.add(
+            "active"
+        );
+
+    }
+
+
+    /*
+     * Close popup.
+     */
+    ffDiscountError.innerText =
+        "";
+
+
+    ffDiscountDialog.style.display =
+        "none";
+
+
+    /*
+     * Refresh billing calculations.
+     */
     renderBill();
 
     loadPaymentSummary();
 
     calculatePayment();
+
+}
+
+/* APPLY F&F DISCOUNTS */
+
+if (ffDiscountApplyBtn) {
+
+    ffDiscountApplyBtn.addEventListener(
+        "click",
+        applyFamilyFriendsDiscountsFromDialog
+    );
 
 }
 
@@ -2639,7 +3066,28 @@ const net =
 
 <td>${item.brand}</td>
 
-<td>${item.qty}</td>
+<td>
+${
+    saleType === "RETURN"
+        ? `
+            <input
+                type="number"
+                min="0"
+max="${
+    Math.max(
+        0,
+        Number(item.original_qty || 0) -
+        Number(item.already_returned_qty || 0)
+    )
+}"
+                value="${item.qty}"
+                class="qty-input"
+                onchange="updateQuantity(${index}, this.value)"
+            >
+          `
+        : item.qty
+}
+</td>
 
 <td>₹${item.mrp.toFixed(2)}</td>
 
@@ -2693,16 +3141,30 @@ function clearCurrentBill(){
 
     document.getElementById("barcodeInput").value = "";
 
-    saleType = "SALE";
+applyBillingMode("SALE");
 
 familyFriendsDiscountActive = false;
 
-const saleReturnType =
-    document.getElementById("saleTypeDropdown");
+const originalBillNo =
+    document.getElementById(
+        "originalBillNo"
+    );
 
-if (saleReturnType) {
+if (originalBillNo) {
 
-    saleReturnType.value = "SALE";
+    originalBillNo.value = "";
+
+}
+
+
+const returnBillStatus =
+    document.getElementById(
+        "returnBillStatus"
+    );
+
+if (returnBillStatus) {
+
+    returnBillStatus.innerText = "";
 
 }
 
@@ -2778,7 +3240,66 @@ function updateDiscount(index, value){
 }
 
 window.updateDiscount = updateDiscount;
+window.updateQuantity = updateQuantity;
 window.removeItem = removeItem;
+
+function updateQuantity(index, value){
+
+    if (saleType !== "RETURN") {
+
+        return;
+
+    }
+
+    const item =
+        billItems[index];
+
+    if (!item) {
+
+        return;
+
+    }
+
+const maxQty =
+    Math.max(
+        0,
+        Number(item.original_qty || 0) -
+        Number(item.already_returned_qty || 0)
+    );
+
+    let qty =
+        Number(value);
+
+    if (!Number.isFinite(qty)) {
+
+        qty = 0;
+
+    }
+
+    qty =
+        Math.floor(qty);
+
+    if (qty < 0) {
+
+        qty = 0;
+
+    }
+
+    if (qty > maxQty) {
+
+        qty = maxQty;
+
+    }
+
+    item.qty = qty;
+
+    renderBill();
+
+    loadPaymentSummary();
+
+    calculatePayment();
+
+}
 
 function updateSummary(){
 
@@ -2810,8 +3331,13 @@ function updateSummary(){
 
     });
 
-    document.getElementById("itemCount").innerText =
-    billItems.length;
+const activeItems =
+    billItems.filter(
+        item => Number(item.qty) > 0
+    );
+
+document.getElementById("itemCount").innerText =
+    activeItems.length;
 
     document.getElementById("itemQty").innerText =
     totalQty;

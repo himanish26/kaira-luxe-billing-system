@@ -70,6 +70,12 @@ const {
 } = require("../database/billService");
 
 const {
+    getBillForReturn,
+    getNextReturnNumber,
+    saveReturn
+} = require("../database/returnService");
+
+const {
 
     createBackup,
 
@@ -747,6 +753,63 @@ ipcMain.handle(
     async (event, billNo) => {
 
         return await getBillDetails(billNo);
+
+    }
+);
+
+/* ===========================================
+   RETURN MANAGEMENT
+=========================================== */
+
+ipcMain.handle(
+    "get-bill-for-return",
+    async (event, billNo) => {
+
+        return await getBillForReturn(billNo);
+
+    }
+);
+
+
+ipcMain.handle(
+    "get-next-return-number",
+    async () => {
+
+        return await getNextReturnNumber();
+
+    }
+);
+
+
+ipcMain.handle(
+    "save-return",
+    async (event, returnData) => {
+
+        try {
+
+            return await saveReturn(
+                returnData
+            );
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "Save return error:",
+                error
+            );
+
+            return {
+
+                success: false,
+
+                error:
+                    error.message
+
+            };
+
+        }
 
     }
 );

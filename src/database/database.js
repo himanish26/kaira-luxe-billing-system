@@ -169,6 +169,93 @@ function createTables() {
 )
         `);
 
+                /* ===========================================
+           RETURNS
+        =========================================== */
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS returns (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                return_no TEXT UNIQUE,
+
+                original_bill_no TEXT NOT NULL,
+
+                customer_name TEXT,
+
+                customer_mobile TEXT,
+
+                return_type TEXT NOT NULL,
+
+                returned_amount REAL DEFAULT 0,
+
+                replacement_amount REAL DEFAULT 0,
+
+                difference_amount REAL DEFAULT 0,
+
+                store_credit_amount REAL DEFAULT 0,
+
+                status TEXT DEFAULT 'COMPLETED',
+
+                return_date TEXT,
+
+                return_time TEXT,
+
+                created_at TEXT
+
+            )
+        `);
+
+
+        /* ===========================================
+           RETURN ITEMS
+        =========================================== */
+
+        db.run(`
+            CREATE TABLE IF NOT EXISTS return_items (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                return_no TEXT NOT NULL,
+
+                original_bill_no TEXT NOT NULL,
+
+                original_bill_item_id INTEGER NOT NULL,
+
+                barcode TEXT,
+
+                product_name TEXT,
+
+                brand TEXT,
+
+                category TEXT,
+
+                size TEXT,
+
+                colour TEXT,
+
+                return_qty INTEGER NOT NULL,
+
+                original_mrp REAL,
+
+                original_discount_percent REAL,
+
+                original_discount_amount REAL,
+
+                original_gst_rate REAL,
+
+                original_taxable_amount REAL,
+
+                original_gst_amount REAL,
+
+                original_net_amount REAL,
+
+                created_at TEXT
+
+            )
+        `);
+
         db.run(`
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

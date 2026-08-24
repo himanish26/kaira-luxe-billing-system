@@ -63,6 +63,23 @@ contextBridge.exposeInMainWorld(
                 "get-bills"
             ),
 
+            getBillForReturn: (billNo) =>
+    ipcRenderer.invoke(
+        "get-bill-for-return",
+        billNo
+    ),
+
+getNextReturnNumber: () =>
+    ipcRenderer.invoke(
+        "get-next-return-number"
+    ),
+
+saveReturn: (returnData) =>
+    ipcRenderer.invoke(
+        "save-return",
+        returnData
+    ),
+
             getDashboardSummary: () =>
 
     ipcRenderer.invoke(

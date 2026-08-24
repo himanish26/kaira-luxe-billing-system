@@ -1263,3 +1263,592 @@
 .billing-actions-row .payment-btn:hover {
     background-color: #0b610b !important;
 }
+
+/* =====================================
+   FAMILY & FRIENDS DISCOUNT POPUP
+===================================== */
+
+.custom-dialog {
+
+    position: fixed;
+
+    top: 0;
+
+    left: 0;
+
+    width: 100%;
+
+    height: 100%;
+
+    background: rgba(0, 0, 0, 0.45);
+
+    justify-content: center;
+
+    align-items: center;
+
+    z-index: 10000;
+
+    overflow: auto;
+
+}
+
+.ff-discount-dialog-box {
+
+    width: min(
+        1200px,
+        94vw
+    );
+
+    max-width: 1200px;
+
+    max-height: 90vh;
+
+    overflow: hidden;
+
+    padding: 32px;
+
+}
+
+
+.ff-discount-dialog-box h2 {
+
+    margin:
+        0
+        0
+        10px;
+
+    text-align: center;
+
+    color: #7A002C;
+
+    font-size: 34px;
+
+    font-weight: 800;
+
+}
+
+
+.ff-dialog-description {
+
+    margin:
+        0
+        0
+        24px;
+
+    text-align: center;
+
+    font-size: 19px;
+
+    line-height: 1.4;
+
+}
+
+
+/* =====================================
+   TABLE WRAPPER
+===================================== */
+
+.ff-table-wrapper {
+
+    width: 100%;
+
+    max-height: 52vh;
+
+    overflow-x: auto;
+
+    overflow-y: auto;
+
+    border: 1px solid #d7d7d7;
+
+    border-radius: 10px;
+
+    flex: 1 1 auto;
+    
+    min-height: 0;
+    
+}
+
+
+/* =====================================
+   F&F TABLE
+===================================== */
+
+.ff-discount-table {
+
+    width: 100%;
+
+    min-width: 1000px;
+
+    border-collapse: collapse;
+
+    background: #ffffff;
+
+}
+
+
+.ff-discount-table thead {
+
+    position: sticky;
+
+    top: 0;
+
+    z-index: 2;
+
+}
+
+
+.ff-discount-table th {
+
+    padding: 18px 14px;
+
+    background: #7A002C;
+
+    color: #ffffff;
+
+    text-align: left;
+
+    font-size: 19px;
+
+    font-weight: 800;
+
+    white-space: nowrap;
+
+}
+
+
+.ff-discount-table td {
+
+    padding: 16px 14px;
+
+    border-bottom:
+        1px
+        solid
+        #e5e5e5;
+
+    font-size: 19px;
+
+    font-weight: 650;
+
+    vertical-align: middle;
+
+}
+
+
+.ff-discount-table tbody tr:nth-child(even) {
+
+    background: #f7f7f7;
+
+}
+
+
+.ff-discount-table tbody tr:hover {
+
+    background: #f1e8ec;
+
+}
+
+
+.ff-center-cell {
+
+    text-align: center;
+
+}
+
+
+.ff-money-cell {
+
+    text-align: right;
+
+    white-space: nowrap;
+
+}
+
+
+/* =====================================
+   F&F DISCOUNT INPUT
+===================================== */
+
+.ff-discount-input-cell {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+}
+
+
+.ff-final-discount-input {
+
+    width: 90px;
+
+    padding: 10px 12px;
+
+    border:
+        2px
+        solid
+        #bdbdbd;
+
+    border-radius: 8px;
+
+    font-size: 18px;
+
+    font-weight: 700;
+
+    text-align: center;
+
+    outline: none;
+
+}
+
+
+.ff-final-discount-input:focus {
+
+    border-color: #7A002C;
+
+    box-shadow:
+        0
+        0
+        0
+        3px
+        rgba(
+            122,
+            0,
+            44,
+            0.12
+        );
+
+}
+
+
+.ff-percent-symbol {
+
+    font-size: 18px;
+
+    font-weight: 700;
+
+}
+
+
+/* =====================================
+   ERROR MESSAGE
+===================================== */
+
+.ff-discount-dialog-box
+.dialog-error {
+
+    min-height: 24px;
+
+    margin-top: 14px;
+
+    text-align: center;
+
+}
+
+/* =====================================
+   F&F POPUP BACKGROUND + BUTTON FIX
+===================================== */
+
+#ffDiscountDialog .ff-discount-dialog-box {
+
+    background: #ffffff !important;
+
+    border-radius: 16px;
+
+    box-shadow:
+        0 20px 60px
+        rgba(0, 0, 0, 0.35);
+
+}
+
+
+/* =====================================
+   F&F ACTION BUTTONS
+===================================== */
+
+#ffDiscountDialog .dialog-actions {
+
+    display: flex;
+
+    justify-content: flex-end;
+
+    align-items: center;
+
+    gap: 16px;
+
+    margin-top: 22px;
+
+}
+
+
+#ffDiscountDialog .dialog-actions button {
+
+    min-width: 160px;
+
+    height: 52px;
+
+    padding: 0 24px;
+
+    border-radius: 8px;
+
+    font-size: 17px;
+
+    font-weight: 800;
+
+    cursor: pointer;
+
+}
+
+
+#ffDiscountCancelBtn {
+
+    background: #ffffff;
+
+    color: #7A002C;
+
+    border: 2px solid #7A002C;
+
+}
+
+
+#ffDiscountCancelBtn:hover {
+
+    background: #f7e8ee;
+
+}
+
+
+#ffDiscountApplyBtn {
+
+    background: #7A002C;
+
+    color: #ffffff;
+
+    border: 2px solid #7A002C;
+
+}
+
+
+#ffDiscountApplyBtn:hover {
+
+    background: #5f0022;
+
+    border-color: #5f0022;
+
+}
+
+/* =====================================
+   F&F POPUP HEIGHT FIX
+   KEEP ACTION BUTTONS ALWAYS VISIBLE
+===================================== */
+
+#ffDiscountDialog {
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+#ffDiscountDialog .ff-discount-dialog-box {
+
+    width: min(1200px, 94vw);
+
+    max-width: 1200px;
+
+    max-height: calc(100vh - 40px);
+
+    box-sizing: border-box;
+
+    display: flex;
+
+    flex-direction: column;
+
+    overflow: hidden;
+
+    padding: 28px 32px 24px;
+
+    background: #ffffff !important;
+
+    border-radius: 16px;
+
+}
+
+#ffDiscountDialog .ff-table-wrapper {
+
+    flex: 1 1 auto;
+
+    min-height: 0;
+
+    max-height: none;
+
+    overflow-x: auto;
+
+    overflow-y: auto;
+
+}
+
+#ffDiscountDialog .dialog-actions {
+
+    flex: 0 0 auto;
+
+    flex-shrink: 0;
+
+    display: flex;
+
+    justify-content: flex-end;
+
+    align-items: center;
+
+    gap: 16px;
+
+    padding-top: 20px;
+
+    margin-top: 0;
+
+    background: #ffffff;
+
+}
+
+/* ==========================================
+   RETURN LOOKUP PANEL
+========================================== */
+
+.return-lookup-panel{
+
+    margin-bottom:25px;
+
+    padding:22px;
+
+    border:2px solid #d9a3a3;
+
+    border-radius:16px;
+
+    background:#fff5f5;
+
+    position:relative;
+
+    overflow:hidden;
+
+}
+
+
+.return-lookup-panel::before{
+
+    content:"";
+
+    position:absolute;
+
+    inset:0;
+
+    pointer-events:none;
+
+    opacity:.18;
+
+    background:
+        repeating-linear-gradient(
+            -45deg,
+            transparent 0,
+            transparent 14px,
+            #d88 14px,
+            #d88 16px
+        );
+
+}
+
+
+.return-lookup-panel > *{
+
+    position:relative;
+
+    z-index:1;
+
+}
+
+
+.return-lookup-title{
+
+    font-size:26px;
+
+    font-weight:900;
+
+    color:#8b0035;
+
+    margin-bottom:15px;
+
+}
+
+
+.return-lookup-row{
+
+    display:flex;
+
+    gap:15px;
+
+    align-items:center;
+
+}
+
+
+#originalBillNo{
+
+    flex:1;
+
+    height:65px;
+
+    padding:0 18px;
+
+    border:2px solid #d9a3a3;
+
+    border-radius:10px;
+
+    font-size:24px;
+
+    font-weight:700;
+
+    text-transform:uppercase;
+
+}
+
+
+#loadReturnBillBtn{
+
+    height:65px;
+
+    padding:0 28px;
+
+    border:none;
+
+    border-radius:10px;
+
+    background:#8b0035;
+
+    color:white;
+
+    font-size:20px;
+
+    font-weight:800;
+
+    cursor:pointer;
+
+}
+
+
+#loadReturnBillBtn:hover{
+
+    transform:translateY(-1px);
+
+}
+
+
+.return-bill-status{
+
+    min-height:24px;
+
+    margin-top:12px;
+
+    font-size:18px;
+
+    font-weight:700;
+
+    color:#8b0035;
+
+}
