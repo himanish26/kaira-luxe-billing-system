@@ -194,6 +194,8 @@ const {
 
     printBill,
 
+    printStoreCredit,
+
     saveBillPdf,
 
     printTestReceipt,
@@ -877,6 +879,39 @@ ipcMain.handle(
             return{
                 success:false,
                 error:error.message
+            };
+
+        }
+
+    }
+);
+
+ipcMain.handle(
+    "print-store-credit",
+    async (event, storeCreditData) => {
+
+        try {
+
+            await printStoreCredit(
+                storeCreditData
+            );
+
+            return {
+                success: true
+            };
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "STORE CREDIT PRINT ERROR:",
+                error
+            );
+
+            return {
+                success: false,
+                error: error.message
             };
 
         }

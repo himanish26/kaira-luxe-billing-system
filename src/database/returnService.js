@@ -173,6 +173,77 @@ function getNextReturnNumber() {
 
 }
 
+/* ===========================================
+   GET NEXT STORE CREDIT NUMBER
+=========================================== */
+
+function getNextStoreCreditNumber() {
+
+    return new Promise((resolve, reject) => {
+
+        const today = new Date();
+
+        const dd =
+            String(today.getDate()).padStart(2, "0");
+
+        const mm =
+            String(today.getMonth() + 1).padStart(2, "0");
+
+        const yy =
+            String(today.getFullYear()).slice(-2);
+
+        const prefix =
+            `SC${dd}${mm}${yy}`;
+
+        db.get(
+
+            `
+            SELECT store_credit_no
+            FROM store_credits
+
+            WHERE store_credit_no LIKE ?
+
+            ORDER BY store_credit_no DESC
+            LIMIT 1
+            `,
+
+            [`${prefix}%`],
+
+            (err, row) => {
+
+                if (err) {
+
+                    reject(err);
+                    return;
+
+                }
+
+                let next = 1;
+
+                if (row) {
+
+                    next =
+                        Number(
+                            row.store_credit_no.slice(-3)
+                        ) + 1;
+
+                }
+
+                resolve(
+
+                    prefix +
+                    String(next).padStart(3, "0")
+
+                );
+
+            }
+
+        );
+
+    });
+
+}
+
 
 /* ===========================================
    SAVE RETURN
@@ -349,38 +420,152 @@ function saveReturn(returnData) {
                                     pending--;
 
 
-                                    if (pending === 0) {
+if (pending === 0) {
 
-                                        db.run(
-                                            "COMMIT",
-                                            commitErr => {
+    getNextStoreCreditNumber()
 
-                                                if (commitErr) {
+        .then(storeCreditNo => {
 
-                                                    reject(
-                                                        commitErr
-                                                    );
+            const issueDate =
+                new Date();
 
-                                                    return;
+            const validUntil =
+                new Date(issueDate);
 
-                                                }
+            validUntil.setDate(
+                validUntil.getDate() + 180
+            );
+
+            const issueDateText =
+                issueDate
+                    .toISOString()
+                    .split("T")[0];
+
+            const validUntilText =
+                validUntil
+                    .toISOString()
+                    .split("T")[0];
+
+            db.run(
+                `
+                INSERT INTO store_credits
+                (
+                    store_credit_no,
+                    return_id,
+                    original_bill_no,
+                    customer_id,
+                    customer_name,
+                    customer_mobile,
+                    issue_date,
+                    valid_until,
+                    original_amount,
+                    remaining_balance,
+                    status,
+                    created_by,
+                    created_at
+                )
+
+                VALUES
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `,
+
+                [
+                    storeCreditNo,
+
+                    returnId,
+
+                    returnData.original_bill_no,
+
+                    returnData.customer_id || null,
+
+                    returnData.customer_name,
+
+                    returnData.customer_mobile,
+
+                    issueDateText,
+
+                    validUntilText,
+
+                    returnData.return_amount,
+
+                    returnData.return_amount,
+
+                    "ACTIVE",
+
+                    returnData.created_by ||
+                        "Administrator",
+
+                    new Date().toISOString()
+                ],
+
+                function(storeCreditErr) {
+
+                    if (storeCreditErr) {
+
+                        db.run(
+                            "ROLLBACK"
+                        );
+
+                        reject(
+                            storeCreditErr
+                        );
+
+                        return;
+                    }
 
 
-                                                resolve({
+                    db.run(
+                        "COMMIT",
 
-                                                    success: true,
+                        commitErr => {
 
-                                                    return_id:
-                                                        returnId,
+                            if (commitErr) {
 
-                                                    return_no:
-                                                        returnData.return_no
+                                reject(
+                                    commitErr
+                                );
 
-                                                });
+                                return;
+                            }
 
-                                            }
 
-                                        );
+                            resolve({
+
+                                success: true,
+
+                                return_id:
+                                    returnId,
+
+                                return_no:
+                                    returnData.return_no,
+
+                                store_credit_no:
+                                    storeCreditNo,
+
+                                valid_until:
+                                    validUntilText
+
+                            });
+
+                        }
+
+                    );
+
+                }
+
+            );
+
+        })
+
+        .catch(error => {
+
+            db.run(
+                "ROLLBACK"
+            );
+
+            reject(error);
+
+        });
 
                                     }
 
@@ -408,6 +593,8 @@ module.exports = {
     getBillForReturn,
 
     getNextReturnNumber,
+
+    getNextStoreCreditNumber,
 
     saveReturn
 

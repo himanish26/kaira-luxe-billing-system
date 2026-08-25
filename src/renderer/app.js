@@ -1666,28 +1666,264 @@ const paymentBtn =
 
 if (paymentBtn) {
 
-paymentBtn.addEventListener("click", () => {
+paymentBtn.addEventListener("click", async () => {
 
     if (billItems.length === 0) {
 
-    alert("Please scan at least one product before proceeding to payment.");
+        alert("Please select at least one product before proceeding.");
 
-    return;
+        return;
 
-}
+    }
 
 const mobile =
-    document.getElementById("customerMobile").value.trim();
+    document.getElementById(
+        "customerMobile"
+    ).value.trim();
 
-if (mobile !== "" && mobile.length !== 10) {
+if (saleType === "RETURN") {
 
-    alert("Mobile Number must be exactly 10 digits.");
+    if (!mobile) {
 
-    document.getElementById("customerMobile").focus();
+        alert(
+            "Customer Mobile Number is mandatory for a return."
+        );
+
+        document.getElementById(
+            "customerMobile"
+        ).focus();
+
+        return;
+
+    }
+
+    if (mobile.length !== 10) {
+
+        alert(
+            "Customer Mobile Number must be exactly 10 digits."
+        );
+
+        document.getElementById(
+            "customerMobile"
+        ).focus();
+
+        return;
+
+    }
+
+} else if (
+    mobile !== "" &&
+    mobile.length !== 10
+) {
+
+    alert(
+        "Mobile Number must be exactly 10 digits."
+    );
+
+    document.getElementById(
+        "customerMobile"
+    ).focus();
 
     return;
 
 }
+
+    /* =====================================
+       RETURN → CREATE STORE CREDIT DIRECTLY
+    ===================================== */
+
+    if (saleType === "RETURN") {
+
+        const originalBillNo =
+            document.getElementById(
+                "originalBillNo"
+            ).value.trim();
+
+        if (!originalBillNo) {
+
+            alert(
+                "Please load the original bill before processing the return."
+            );
+
+            return;
+
+        }
+
+        const activeReturnItems =
+            billItems.filter(
+                item => Number(item.qty || 0) > 0
+            );
+
+        if (activeReturnItems.length === 0) {
+
+            alert(
+                "Please enter a return quantity for at least one item."
+            );
+
+            return;
+
+        }
+
+        try {
+
+            paymentBtn.disabled = true;
+
+            const returnNo =
+                await window.electronAPI
+                    .getNextReturnNumber();
+
+            const returnAmount =
+                activeReturnItems.reduce(
+                    (total, item) => {
+
+                        const gross =
+                            Number(item.qty || 0) *
+                            Number(item.mrp || 0);
+
+                        const discount =
+                            Number(item.discount || 0);
+
+                        return total +
+                            (
+                                gross -
+                                (gross * discount / 100)
+                            );
+
+                    },
+                    0
+                );
+
+            const result =
+                await window.electronAPI.saveReturn({
+
+                    return_no:
+                        returnNo,
+
+                    original_bill_no:
+                        originalBillNo,
+
+                    customer_name:
+                        document.getElementById(
+                            "customerName"
+                        ).value.trim(),
+
+                    customer_mobile:
+                        mobile,
+
+                    return_reason:
+                        "Customer Return",
+
+                    remarks:
+                        "",
+
+                    return_amount:
+                        returnAmount,
+
+                    items:
+                        activeReturnItems.map(
+                            item => {
+
+                                const gross =
+                                    Number(item.qty || 0) *
+                                    Number(item.mrp || 0);
+
+                                const discount =
+                                    Number(item.discount || 0);
+
+                                const returnValue =
+                                    gross -
+                                    (
+                                        gross *
+                                        discount /
+                                        100
+                                    );
+
+                                return {
+
+                                    product_id:
+                                        item.product_id || null,
+
+                                    barcode:
+                                        item.barcode,
+
+                                    product_name:
+                                        item.product_name,
+
+                                    original_bill_item_id:
+                                        item.original_bill_item_id,
+
+                                    quantity:
+                                        Number(item.qty),
+
+                                    unit_value:
+                                        Number(item.mrp || 0),
+
+                                    return_value:
+                                        returnValue,
+
+                                    remarks:
+                                        ""
+
+                                };
+
+                            }
+                        )
+
+                });
+
+            if (!result || !result.success) {
+
+                throw new Error(
+                    result?.error ||
+                    "Unable to save return."
+                );
+
+            }
+
+            alert(
+                `Return processed successfully.\n\n` +
+                `Store Credit: ${result.store_credit_no}\n` +
+                `Valid Until: ${result.valid_until}`
+            );
+
+            /*
+             * NEXT:
+             * Print Store Credit Receipt here.
+             * We will add this after the save flow
+             * is confirmed working.
+             */
+
+            clearCurrentBill();
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "Return processing error:",
+                error
+            );
+
+            alert(
+                error.message ||
+                "Unable to process return."
+            );
+
+        }
+
+        finally {
+
+            paymentBtn.disabled = false;
+
+        }
+
+        return;
+
+    }
+
+    /* =====================================
+       NORMAL SALE → PAYMENT SCREEN
+    ===================================== */
 
     newBillScreen.style.display = "none";
 
@@ -1698,12 +1934,13 @@ if (mobile !== "" && mobile.length !== 10) {
     document.getElementById("paymentBillNo").innerText =
         document.getElementById("currentBillNo").innerText;
 
-document.getElementById("cashAmount").value = 0;
-document.getElementById("upiAmount").value = 0;
-document.getElementById("cardAmount").value = 0;
+    document.getElementById("cashAmount").value = 0;
+    document.getElementById("upiAmount").value = 0;
+    document.getElementById("cardAmount").value = 0;
 
-loadPaymentSummary();
-calculatePayment();  
+    loadPaymentSummary();
+
+    calculatePayment();
 
 });
 
@@ -2026,13 +2263,32 @@ if (saleReturnType) {
 
                 billItems = [];
 
-                renderBill();
+            }
 
+            // Clear customer details
+            document.getElementById("customerName").value = "";
+            document.getElementById("customerMobile").value = "";
+
+            // Clear return lookup details
+            const originalBillNo =
+                document.getElementById("originalBillNo");
+
+            const returnBillStatus =
+                document.getElementById("returnBillStatus");
+
+            if (originalBillNo) {
+                originalBillNo.value = "";
+            }
+
+            if (returnBillStatus) {
+                returnBillStatus.innerText = "";
             }
 
             applyBillingMode(
                 requestedMode
             );
+
+            renderBill();
 
         }
     );
@@ -2124,40 +2380,43 @@ if (loadReturnBillBtn) {
                             return null;
                         }
 
-                        return {
-                            ...item,
+return {
+    ...item,
 
-                            qty: remainingQty,
+    original_qty:
+        Number(item.qty || 0),
 
-                            mrp:
-                                Number(item.mrp || 0),
+    already_returned_qty:
+        Number(
+            item.already_returned_qty || 0
+        ),
 
-                            discount:
-                                Number(
-                                    item.discount_percent || 0
-                                ),
+    available_qty:
+        remainingQty,
 
-                            discount_percent:
-                                Number(
-                                    item.discount_percent || 0
-                                ),
+    qty: 0,
 
-                            discount_amount:
-                                Number(
-                                    item.discount_amount || 0
-                                ),
+    mrp:
+        Number(item.mrp || 0),
 
-                            original_bill_item_id:
-                                item.id,
+    discount:
+        Number(
+            item.discount_percent || 0
+        ),
 
-                            original_qty:
-                                Number(item.qty || 0),
+    discount_percent:
+        Number(
+            item.discount_percent || 0
+        ),
 
-                            already_returned_qty:
-                                Number(
-                                    item.already_returned_qty || 0
-                                )
-                        };
+    discount_amount:
+        Number(
+            item.discount_amount || 0
+        ),
+
+    original_bill_item_id:
+        item.id
+};
 
                     })
                     .filter((item) => item !== null);
@@ -3044,6 +3303,51 @@ function renderBill(){
 
     tbody.innerHTML = "";
 
+    const tableHead =
+    document.getElementById("billTableHead");
+
+if (tableHead) {
+
+    if (saleType === "RETURN") {
+
+        tableHead.innerHTML = `
+            <tr>
+                <th>Barcode</th>
+                <th>Product</th>
+                <th>Size</th>
+                <th>Brand</th>
+                <th>Original Qty</th>
+<!--
+<th>Already Returned</th>
+<th>Available Qty</th>
+-->
+                <th>Return Qty</th>
+                <th>MRP</th>
+                <th>Disc%</th>
+                <th>Return Amount</th>
+            </tr>
+        `;
+
+    } else {
+
+        tableHead.innerHTML = `
+            <tr>
+                <th>Barcode</th>
+                <th>Product</th>
+                <th>Size</th>
+                <th>Brand</th>
+                <th>Qty</th>
+                <th>MRP</th>
+                <th>Disc%</th>
+                <th>Net</th>
+                <th>🗑️</th>
+            </tr>
+        `;
+
+    }
+
+}
+
     billItems.forEach((item,index)=>{
 
         const row =
@@ -3056,7 +3360,9 @@ const net =
     gross -
     (gross * item.discount / 100);
 
-        row.innerHTML = `
+if (saleType === "RETURN") {
+
+    row.innerHTML = `
 
 <td>${item.barcode}</td>
 
@@ -3066,28 +3372,48 @@ const net =
 
 <td>${item.brand}</td>
 
+<td>${Number(item.original_qty || 0)}</td>
+
+<!--
+<td>${Number(item.already_returned_qty || 0)}</td>
+
+<td>${Number(item.available_qty || 0)}</td>
+-->
+
 <td>
-${
-    saleType === "RETURN"
-        ? `
-            <input
-                type="number"
-                min="0"
-max="${
-    Math.max(
-        0,
-        Number(item.original_qty || 0) -
-        Number(item.already_returned_qty || 0)
-    )
-}"
-                value="${item.qty}"
-                class="qty-input"
-                onchange="updateQuantity(${index}, this.value)"
-            >
-          `
-        : item.qty
-}
+
+<input
+    type="number"
+    min="0"
+    max="${Number(item.available_qty || 0)}"
+    value="${item.qty}"
+    class="qty-input"
+    onchange="updateQuantity(${index}, this.value)"
+>
+
 </td>
+
+<td>₹${Number(item.mrp || 0).toFixed(2)}</td>
+
+<td>${Number(item.discount || 0)}%</td>
+
+<td>₹${Math.round(net)}</td>
+
+`;
+
+} else {
+
+    row.innerHTML = `
+
+<td>${item.barcode}</td>
+
+<td>${item.product_name}</td>
+
+<td>${item.size}</td>
+
+<td>${item.brand}</td>
+
+<td>${item.qty}</td>
 
 <td>₹${item.mrp.toFixed(2)}</td>
 
@@ -3113,13 +3439,15 @@ onchange="updateDiscount(${index}, this.value)"
 class="delete-btn"
 onclick="removeItem(${index})">
 
-🗑
+🗑️
 
 </button>
 
 </td>
 
 `;
+
+}
 
         tbody.appendChild(row);
 
@@ -3133,6 +3461,8 @@ function clearCurrentBill(){
 
     billItems = [];
 
+    applyBillingMode("SALE");
+
     renderBill();
 
     document.getElementById("customerName").value = "";
@@ -3140,9 +3470,6 @@ function clearCurrentBill(){
     document.getElementById("customerMobile").value = "";
 
     document.getElementById("barcodeInput").value = "";
-
-applyBillingMode("SALE");
-
 familyFriendsDiscountActive = false;
 
 const originalBillNo =
@@ -3263,8 +3590,7 @@ function updateQuantity(index, value){
 const maxQty =
     Math.max(
         0,
-        Number(item.original_qty || 0) -
-        Number(item.already_returned_qty || 0)
+        Number(item.available_qty || 0)
     );
 
     let qty =
@@ -3308,22 +3634,37 @@ function updateSummary(){
     let discount = 0;
     let gst = 0;
 
-    billItems.forEach(item=>{
+    billItems.forEach(item => {
 
-        totalQty += item.qty;
+        const qty =
+            Number(item.qty || 0);
+
+        const mrp =
+            Number(item.mrp || 0);
+
+        const discountPercent =
+            Number(item.discount || 0);
+
+        const gstRate =
+            Number(item.gst_rate || 0);
+
+        totalQty += qty;
 
         const lineGross =
-            item.qty * item.mrp;
+            qty * mrp;
 
         const lineDiscount =
-            lineGross * item.discount / 100;
+            lineGross *
+            discountPercent / 100;
 
         const net =
             lineGross - lineDiscount;
 
         const taxable =
-            net * 100 /
-            (100 + item.gst_rate);
+            gstRate > 0
+                ? net * 100 /
+                  (100 + gstRate)
+                : net;
 
         gross += lineGross;
         discount += lineDiscount;
@@ -3331,16 +3672,16 @@ function updateSummary(){
 
     });
 
-const activeItems =
-    billItems.filter(
-        item => Number(item.qty) > 0
-    );
+    const activeItems =
+        billItems.filter(
+            item => Number(item.qty || 0) > 0
+        );
 
-document.getElementById("itemCount").innerText =
-    activeItems.length;
+    document.getElementById("itemCount").innerText =
+        activeItems.length;
 
     document.getElementById("itemQty").innerText =
-    totalQty;
+        totalQty;
 
     document.getElementById("grossAmount").innerText =
         "₹" + gross.toFixed(2);
@@ -3353,6 +3694,18 @@ document.getElementById("itemCount").innerText =
 
     document.getElementById("netAmount").innerText =
         "₹" + (gross - discount).toFixed(2);
+
+    const payableLabel =
+        document.querySelector(".payable-label");
+
+    if (payableLabel) {
+
+        payableLabel.innerText =
+            saleType === "RETURN"
+                ? "STORE CREDIT TO ISSUE"
+                : "AMOUNT PAYABLE";
+
+    }
 
 }
 

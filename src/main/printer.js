@@ -112,6 +112,154 @@ async function printBill(billData){
 
 }
 
+/* =====================================
+   PRINT STORE CREDIT
+===================================== */
+
+async function printStoreCredit(storeCreditData) {
+
+    console.log(
+        "PRINT STORE CREDIT FUNCTION CALLED"
+    );
+
+    console.log(storeCreditData);
+
+    return new Promise((resolve, reject) => {
+
+        const printWindow =
+            new BrowserWindow({
+
+                show: false,
+
+                width: 302,
+
+                height: 1000,
+
+                webPreferences: {
+
+                    nodeIntegration: true,
+
+                    contextIsolation: false
+
+                }
+
+            });
+
+        printWindow.loadFile(
+
+            path.join(
+                __dirname,
+                "../renderer/storeCreditReceipt.html"
+            )
+
+        );
+
+        printWindow.webContents.once(
+
+            "did-finish-load",
+
+            async () => {
+
+                try {
+
+                    const settings =
+                        await getSettings();
+
+                    const printerName =
+                        settings.default_printer;
+
+                    await printWindow.webContents
+                        .executeJavaScript(
+
+                            `window.storeCreditData = ${JSON.stringify(
+                                storeCreditData
+                            )};
+                             window.storeSettings = ${JSON.stringify(
+                                settings
+                            )};`
+
+                        );
+
+                    await printWindow.webContents
+                        .executeJavaScript(
+
+                            "if(window.loadStoreCreditReceipt){ loadStoreCreditReceipt(); }"
+
+                        );
+
+                    setTimeout(() => {
+
+                        printWindow.webContents.print(
+
+                            {
+
+                                silent: true,
+
+                                printBackground: true,
+
+                                deviceName:
+                                    printerName,
+
+                                margins: {
+
+                                    marginType:
+                                        "none"
+
+                                },
+
+                                landscape: false,
+
+                                scaleFactor: 100,
+
+                                usePrinterDefaultPageSize:
+                                    true
+
+                            },
+
+                            (success, error) => {
+
+                                printWindow.close();
+
+                                if (success) {
+
+                                    resolve({
+
+                                        success: true
+
+                                    });
+
+                                }
+
+                                else {
+
+                                    reject(error);
+
+                                }
+
+                            }
+
+                        );
+
+                    }, 300);
+
+                }
+
+                catch (error) {
+
+                    printWindow.close();
+
+                    reject(error);
+
+                }
+
+            }
+
+        );
+
+    });
+
+}
+
 async function saveBillPdf(billData){
 
     console.log("SAVE PDF FUNCTION CALLED");
@@ -543,6 +691,8 @@ usePrinterDefaultPageSize: true
 module.exports = {
 
     printBill,
+
+    printStoreCredit,
 
     saveBillPdf,
 
