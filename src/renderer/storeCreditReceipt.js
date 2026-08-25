@@ -53,9 +53,6 @@ function loadStoreCreditReceipt() {
     const data =
         window.storeCreditData;
 
-    const settings =
-        window.storeSettings || {};
-
     if (!data) {
 
         console.error(
@@ -65,30 +62,6 @@ function loadStoreCreditReceipt() {
         return;
 
     }
-
-
-    /* =========================
-       STORE DETAILS
-    ========================== */
-
-    document.getElementById(
-        "storeName"
-    ).innerText =
-        settings.store_name ||
-        "KAIRA LUXE";
-
-    document.getElementById(
-        "storeAddress"
-    ).innerText =
-        settings.store_address ||
-        "";
-
-    document.getElementById(
-        "storePhone"
-    ).innerText =
-        settings.store_phone ||
-        "";
-
 
     /* =========================
        STORE CREDIT DETAILS
@@ -107,11 +80,13 @@ function loadStoreCreditReceipt() {
         data.return_number ||
         "-";
 
-    document.getElementById(
-        "originalBillNo"
-    ).innerText =
+document.getElementById(
+    "originalBillNo"
+).innerText =
+    (
         data.original_bill_no ||
-        "-";
+        "-"
+    ).toUpperCase();
 
     document.getElementById(
         "issueDate"
@@ -152,10 +127,12 @@ function loadStoreCreditReceipt() {
     document.getElementById(
         "storeCreditAmount"
     ).innerText =
-        formatCurrency(
-            data.original_amount ||
-            data.return_amount
-        );
+
+formatCurrency(
+    data.amount ||
+    data.original_amount ||
+    data.return_amount
+);
 
 
     /* =========================

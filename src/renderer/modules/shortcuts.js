@@ -109,6 +109,13 @@ function initializeKLBSContextMenu() {
 
 function handleKLBSContextMenu(event) {
 
+    console.log(
+    "RIGHT CLICK:",
+    event.target,
+    event.target.tagName,
+    event.target.className
+);
+
     const target =
         event.target.closest(
             "input, textarea"

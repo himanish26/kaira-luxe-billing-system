@@ -895,7 +895,7 @@ db.serialize(() => {
 
             remaining_balance REAL NOT NULL DEFAULT 0,
 
-            status TEXT NOT NULL DEFAULT 'ACTIVE',
+            status TEXT NOT NULL DEFAULT 'ISSUED',
 
             created_by TEXT DEFAULT 'Administrator',
 
@@ -903,10 +903,9 @@ db.serialize(() => {
 
             CHECK (
                 status IN (
-                    'ACTIVE',
-                    'USED',
-                    'EXPIRED',
-                    'CANCELLED'
+                    'ISSUED',
+                    'REDEEMED',
+                    'EXPIRED'
                 )
             ),
 
@@ -1472,6 +1471,221 @@ async function initializeSmtpSettings() {
 
 }
 
+/* ===========================================
+   MIGRATE STORE CREDIT TABLE SCHEMA
+=========================================== */
+
+function migrateStoreCreditSchema() {
+
+    return new Promise((resolve, reject) => {
+
+        db.serialize(() => {
+
+            db.run("BEGIN TRANSACTION");
+
+            db.run(
+
+                `
+                CREATE TABLE IF NOT EXISTS store_credits_new (
+
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                    store_credit_no TEXT UNIQUE NOT NULL,
+
+                    return_id INTEGER NOT NULL,
+
+                    original_bill_no TEXT NOT NULL,
+
+                    customer_id INTEGER,
+
+                    customer_name TEXT NOT NULL,
+
+                    customer_mobile TEXT NOT NULL,
+
+                    issue_date TEXT NOT NULL,
+
+                    valid_until TEXT NOT NULL,
+
+                    original_amount REAL NOT NULL DEFAULT 0,
+
+                    remaining_balance REAL NOT NULL DEFAULT 0,
+
+                    status TEXT NOT NULL DEFAULT 'ISSUED',
+
+                    created_by TEXT DEFAULT 'Administrator',
+
+                    created_at TEXT NOT NULL,
+
+                    CHECK (
+                        status IN (
+                            'ISSUED',
+                            'REDEEMED',
+                            'EXPIRED'
+                        )
+                    ),
+
+                    FOREIGN KEY (return_id)
+                        REFERENCES returns(id)
+
+                )
+                `,
+
+                createErr => {
+
+                    if (createErr) {
+
+                        db.run("ROLLBACK");
+                        reject(createErr);
+                        return;
+
+                    }
+
+                    db.run(
+
+                        `
+                        INSERT INTO store_credits_new
+                        (
+                            id,
+                            store_credit_no,
+                            return_id,
+                            original_bill_no,
+                            customer_id,
+                            customer_name,
+                            customer_mobile,
+                            issue_date,
+                            valid_until,
+                            original_amount,
+                            remaining_balance,
+                            status,
+                            created_by,
+                            created_at
+                        )
+
+                        SELECT
+                            id,
+                            store_credit_no,
+                            return_id,
+                            original_bill_no,
+                            customer_id,
+                            customer_name,
+                            customer_mobile,
+                            issue_date,
+                            valid_until,
+                            original_amount,
+                            remaining_balance,
+
+                            CASE
+                                WHEN status = 'ACTIVE'
+                                    THEN 'ISSUED'
+
+                                WHEN status = 'USED'
+                                    THEN 'REDEEMED'
+
+                                WHEN status = 'EXPIRED'
+                                    THEN 'EXPIRED'
+
+                                ELSE 'ISSUED'
+                            END,
+
+                            created_by,
+                            created_at
+
+                        FROM store_credits
+                        `,
+
+                        copyErr => {
+
+                            if (copyErr) {
+
+                                db.run("ROLLBACK");
+                                reject(copyErr);
+                                return;
+
+                            }
+
+                            db.run(
+
+                                `
+                                DROP TABLE store_credits
+                                `,
+
+                                dropErr => {
+
+                                    if (dropErr) {
+
+                                        db.run("ROLLBACK");
+                                        reject(dropErr);
+                                        return;
+
+                                    }
+
+                                    db.run(
+
+                                        `
+                                        ALTER TABLE
+                                        store_credits_new
+                                        RENAME TO store_credits
+                                        `,
+
+                                        renameErr => {
+
+                                            if (renameErr) {
+
+                                                db.run(
+                                                    "ROLLBACK"
+                                                );
+
+                                                reject(renameErr);
+                                                return;
+
+                                            }
+
+                                            db.run(
+
+                                                "COMMIT",
+
+                                                commitErr => {
+
+                                                    if (
+                                                        commitErr
+                                                    ) {
+
+                                                        reject(
+                                                            commitErr
+                                                        );
+
+                                                        return;
+
+                                                    }
+
+                                                    resolve();
+
+                                                }
+
+                                            );
+
+                                        }
+
+                                    );
+
+                                }
+
+                            );
+
+                        }
+
+                    );
+
+                }
+
+            );
+
+        });
+
+    });
+
+}
+
 // ============================================================
 // DATABASE READY CHECKPOINT
 // All database initialization operations queued above must
@@ -1501,6 +1715,8 @@ try {
     await initializeSmtpSettings();
 
     await initializeOpeningStock();
+
+    await migrateStoreCreditSchema();
 
     console.log(
         '✓ Database Initialization Complete'

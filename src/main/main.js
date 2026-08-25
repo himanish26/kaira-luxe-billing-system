@@ -12,7 +12,7 @@ const {
 
     ipcMain,
 
-    dialog
+    dialog,
 
 } = require("electron");
 
@@ -59,6 +59,8 @@ const {
 
     getBills,
 
+    getTransactionHistory,
+
     getBillDetails,
 
     updatePaymentAllocation,
@@ -72,7 +74,9 @@ const {
 const {
     getBillForReturn,
     getNextReturnNumber,
-    saveReturn
+    saveReturn,
+    getStoreCreditDetails,
+    getStoreCreditForReprint
 } = require("../database/returnService");
 
 const {
@@ -749,6 +753,36 @@ ipcMain.handle(
     }
 );
 
+ipcMain.handle(
+    "get-transaction-history",
+    async () => {
+
+        return await getTransactionHistory();
+
+    }
+);
+
+ipcMain.handle(
+    "get-store-credit-details",
+    async (event, storeCreditNo) => {
+
+        return await getStoreCreditDetails(
+            storeCreditNo
+        );
+
+    }
+);
+
+ipcMain.handle(
+    "get-store-credit-for-reprint",
+    async (event, storeCreditNo) => {
+
+        return await getStoreCreditForReprint(
+            storeCreditNo
+        );
+
+    }
+);
 
 ipcMain.handle(
     "get-bill-details",
@@ -888,9 +922,24 @@ ipcMain.handle(
 
 ipcMain.handle(
     "print-store-credit",
-    async (event, storeCreditData) => {
+    async (event, storeCreditNo) => {
 
         try {
+
+            const storeCreditData =
+                await getStoreCreditForReprint(
+                    storeCreditNo
+                );
+
+            if (!storeCreditData) {
+
+                return {
+                    success: false,
+                    error:
+                        "Store Credit can only be reprinted while its status is ISSUED."
+                };
+
+            }
 
             await printStoreCredit(
                 storeCreditData

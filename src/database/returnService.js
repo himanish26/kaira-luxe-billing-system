@@ -490,7 +490,7 @@ if (pending === 0) {
 
                     returnData.return_amount,
 
-                    "ACTIVE",
+                    "ISSUED",
 
                     returnData.created_by ||
                         "Administrator",
@@ -587,6 +587,188 @@ if (pending === 0) {
 
 }
 
+/* ===========================================
+   GET STORE CREDIT DETAILS
+=========================================== */
+
+function getStoreCreditDetails(storeCreditNo) {
+
+    return new Promise((resolve, reject) => {
+
+        db.get(
+
+            `
+            SELECT
+
+                sc.store_credit_no,
+
+                r.return_no,
+
+                sc.original_bill_no,
+
+                sc.customer_name,
+
+                sc.customer_mobile,
+
+                sc.issue_date,
+
+                sc.valid_until,
+
+                sc.original_amount,
+
+                sc.status
+
+            FROM store_credits sc
+
+            INNER JOIN returns r
+                ON r.id = sc.return_id
+
+            WHERE sc.store_credit_no = ?
+            `,
+
+            [storeCreditNo],
+
+            (err, row) => {
+
+                if (err) {
+
+                    reject(err);
+
+                    return;
+
+                }
+
+                if (!row) {
+
+                    resolve(null);
+
+                    return;
+
+                }
+
+                const today =
+                    new Date()
+                        .toISOString()
+                        .split("T")[0];
+
+                if (
+
+                    row.status === "ACTIVE" &&
+
+                    row.valid_until < today
+
+                ) {
+
+                    db.run(
+
+                        `
+                        UPDATE store_credits
+                        SET status = 'EXPIRED'
+                        WHERE store_credit_no = ?
+                        `,
+
+                        [storeCreditNo],
+
+                        updateErr => {
+
+                            if (updateErr) {
+
+                                reject(updateErr);
+
+                                return;
+
+                            }
+
+                            row.status =
+                                "EXPIRED";
+
+                            resolve(row);
+
+                        }
+
+                    );
+
+                    return;
+
+                }
+
+                resolve(row);
+
+            }
+
+        );
+
+    });
+
+}
+
+/* ===========================================
+   GET STORE CREDIT FOR REPRINT
+=========================================== */
+
+function getStoreCreditForReprint(storeCreditNo) {
+
+    return new Promise((resolve, reject) => {
+
+        db.get(
+
+            `
+            SELECT
+
+                sc.store_credit_no,
+
+                r.return_no,
+
+                sc.original_bill_no,
+
+                sc.customer_name,
+
+                sc.customer_mobile,
+
+                sc.issue_date,
+
+                sc.valid_until,
+
+                sc.original_amount,
+
+                sc.status
+
+            FROM store_credits sc
+
+            LEFT JOIN returns r
+                ON r.id = sc.return_id
+
+WHERE
+    sc.store_credit_no = ?
+    AND sc.status = 'ACTIVE'
+    AND sc.valid_until >= ?
+            `,
+
+[
+    storeCreditNo,
+    new Date()
+        .toISOString()
+        .split("T")[0]
+],
+
+            (err, row) => {
+
+                if (err) {
+
+                    reject(err);
+                    return;
+
+                }
+
+                resolve(row || null);
+
+            }
+
+        );
+
+    });
+
+}
 
 module.exports = {
 
@@ -596,6 +778,10 @@ module.exports = {
 
     getNextStoreCreditNumber,
 
-    saveReturn
+    saveReturn,
+
+    getStoreCreditDetails,
+
+    getStoreCreditForReprint
 
 };

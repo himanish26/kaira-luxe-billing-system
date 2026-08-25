@@ -63,6 +63,23 @@ contextBridge.exposeInMainWorld(
                 "get-bills"
             ),
 
+            getTransactionHistory: () =>
+    ipcRenderer.invoke(
+        "get-transaction-history"
+    ),
+
+    getStoreCreditDetails: (storeCreditNo) =>
+    ipcRenderer.invoke(
+        "get-store-credit-details",
+        storeCreditNo
+    ),
+
+    getStoreCreditForReprint: (storeCreditNo) =>
+    ipcRenderer.invoke(
+        "get-store-credit-for-reprint",
+        storeCreditNo
+    ),
+
             getBillForReturn: (billNo) =>
     ipcRenderer.invoke(
         "get-bill-for-return",
@@ -140,11 +157,17 @@ closeBusinessDay: () =>
 
    
 
-        printBill: (billData) =>
-            ipcRenderer.invoke(
-                "print-bill",
-                billData
-            ),
+printBill: (billData) =>
+    ipcRenderer.invoke(
+        "print-bill",
+        billData
+    ),
+
+printStoreCredit: (storeCreditData) =>
+    ipcRenderer.invoke(
+        "print-store-credit",
+        storeCreditData
+    ),
 
     printDayClosing: (summary) =>
 

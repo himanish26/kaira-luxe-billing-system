@@ -203,3 +203,83 @@ td:nth-child(4){
     text-align:center;
 
 }
+
+/* =====================================
+   STORE CREDIT RECEIPT
+===================================== */
+
+.details-section {
+    width: 100%;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 4px 0;
+    line-height: 1.35;
+}
+
+.detail-row span:first-child {
+    flex-shrink: 0;
+}
+
+.detail-row span:last-child,
+.detail-row strong {
+    text-align: right;
+    word-break: break-word;
+}
+
+.valid-until-row {
+    font-weight: 700;
+}
+
+.section-heading {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 6px 0;
+}
+
+.credit-value-section {
+    text-align: center;
+    padding: 4px 0;
+}
+
+.credit-label {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.credit-amount {
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.terms-conditions {
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.terms-conditions ol {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.terms-conditions li {
+    margin-bottom: 4px;
+}
+
+.receipt-footer {
+    text-align: center;
+    font-size: 11px;
+    line-height: 1.35;
+    margin-top: 4px;
+}
+
+.thank-you {
+    margin-top: 6px;
+    font-size: 12px;
+    font-weight: 700;
+}

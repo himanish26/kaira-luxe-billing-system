@@ -478,6 +478,142 @@ ORDER BY b.id DESC
 
 }
 
+function getTransactionHistory() {
+
+    return new Promise((resolve, reject) => {
+
+        db.all(
+
+            `
+            SELECT *
+            FROM (
+
+                /* =====================
+                   BILLS
+                ===================== */
+
+                SELECT
+
+                    'BILL' AS category,
+
+                    b.bill_no AS reference_no,
+
+                    b.bill_date AS transaction_date,
+
+                    b.bill_time AS transaction_time,
+
+                    b.customer_name,
+
+                    b.customer_mobile,
+
+                    b.net_amount AS amount,
+
+                    b.payment_status AS status,
+
+                    EXISTS (
+                        SELECT 1
+                        FROM payment_corrections pc
+                        WHERE pc.bill_no = b.bill_no
+                    ) AS payment_corrected,
+
+                    b.id AS sort_id
+
+                FROM bills b
+
+
+                UNION ALL
+
+
+                /* =====================
+                   RETURNS
+                ===================== */
+
+                SELECT
+
+                    'RETURN' AS category,
+
+                    r.return_no AS reference_no,
+
+                    date(r.created_at) AS transaction_date,
+
+                    time(r.created_at) AS transaction_time,
+
+                    r.customer_name,
+
+                    r.customer_mobile,
+
+                    r.return_amount AS amount,
+
+                    'COMPLETED' AS status,
+
+                    0 AS payment_corrected,
+
+                    r.id AS sort_id
+
+                FROM returns r
+
+
+                UNION ALL
+
+
+                /* =====================
+                   STORE CREDITS
+                ===================== */
+
+                SELECT
+
+                    'STORE CREDIT' AS category,
+
+                    sc.store_credit_no AS reference_no,
+
+                    sc.issue_date AS transaction_date,
+
+                    time(sc.created_at) AS transaction_time,
+
+                    sc.customer_name,
+
+                    sc.customer_mobile,
+
+                    sc.original_amount AS amount,
+
+                    sc.status,
+
+                    0 AS payment_corrected,
+
+                    sc.id AS sort_id
+
+                FROM store_credits sc
+
+            )
+
+            ORDER BY
+                transaction_date DESC,
+                transaction_time DESC,
+                sort_id DESC
+            `,
+
+            [],
+
+            (err, rows) => {
+
+                if (err) {
+
+                    reject(err);
+
+                    return;
+
+                }
+
+                resolve(rows);
+
+            }
+
+        );
+
+    });
+
+}
+
 function getBillDetails(billNo) {
 
     return new Promise((resolve, reject) => {
@@ -964,6 +1100,7 @@ module.exports = {
     saveBill,
     getNextBillNumber,
     getBills,
+    getTransactionHistory,
     getBillDetails,
     updatePaymentAllocation,
     getPaymentCorrections,

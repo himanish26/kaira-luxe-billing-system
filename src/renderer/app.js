@@ -1772,26 +1772,28 @@ if (saleType === "RETURN") {
                 await window.electronAPI
                     .getNextReturnNumber();
 
-            const returnAmount =
-                activeReturnItems.reduce(
-                    (total, item) => {
+const returnAmount =
+    Math.round(
+        activeReturnItems.reduce(
+            (total, item) => {
 
-                        const gross =
-                            Number(item.qty || 0) *
-                            Number(item.mrp || 0);
+                const gross =
+                    Number(item.qty || 0) *
+                    Number(item.mrp || 0);
 
-                        const discount =
-                            Number(item.discount || 0);
+                const discount =
+                    Number(item.discount || 0);
 
-                        return total +
-                            (
-                                gross -
-                                (gross * discount / 100)
-                            );
+                return total +
+                    (
+                        gross -
+                        (gross * discount / 100)
+                    );
 
-                    },
-                    0
-                );
+            },
+            0
+        )
+    );
 
             const result =
                 await window.electronAPI.saveReturn({
@@ -1880,20 +1882,58 @@ if (saleType === "RETURN") {
 
             }
 
-            alert(
-                `Return processed successfully.\n\n` +
-                `Store Credit: ${result.store_credit_no}\n` +
-                `Valid Until: ${result.valid_until}`
-            );
+const printResult =
+    await window.electronAPI.printStoreCredit({
 
-            /*
-             * NEXT:
-             * Print Store Credit Receipt here.
-             * We will add this after the save flow
-             * is confirmed working.
-             */
+        store_credit_no:
+            result.store_credit_no,
 
-            clearCurrentBill();
+        return_no:
+            result.return_no,
+
+        original_bill_no:
+            originalBillNo,
+
+        customer_name:
+            document.getElementById(
+                "customerName"
+            ).value.trim(),
+
+        customer_mobile:
+            mobile,
+
+        amount:
+            returnAmount,
+
+        issue_date:
+            new Date()
+                .toISOString()
+                .split("T")[0],
+
+        valid_until:
+            result.valid_until
+
+    });
+
+if (
+    !printResult ||
+    !printResult.success
+) {
+
+    throw new Error(
+        printResult?.error ||
+        "Store Credit created, but receipt printing failed."
+    );
+
+}
+
+alert(
+    `Return processed successfully.\n\n` +
+    `Store Credit: ${result.store_credit_no}\n` +
+    `Valid Until: ${result.valid_until}`
+);
+
+clearCurrentBill();
 
         }
 
@@ -2008,6 +2048,65 @@ if (viewBillBackBtn) {
         resetScrollPosition();
 
     });
+
+}
+
+const viewStoreCreditBackBtn =
+    document.getElementById(
+        "viewStoreCreditBackBtn"
+    );
+
+if (viewStoreCreditBackBtn) {
+
+    viewStoreCreditBackBtn.addEventListener(
+        "click",
+        () => {
+
+            document.getElementById(
+                "viewStoreCreditScreen"
+            ).style.display = "none";
+
+            billHistoryScreen.style.display =
+                "block";
+
+            resetScrollPosition();
+
+        }
+    );
+
+}
+
+const reprintStoreCreditBtn =
+    document.getElementById(
+        "reprintStoreCreditBtn"
+    );
+
+if (reprintStoreCreditBtn) {
+
+    reprintStoreCreditBtn.addEventListener(
+        "click",
+        async () => {
+
+            const storeCreditNo =
+                reprintStoreCreditBtn.dataset
+                    .storeCreditNo;
+
+            if (!storeCreditNo) {
+
+                alert(
+                    "Store Credit number is missing."
+                );
+
+                return;
+
+            }
+
+            await reprintStoreCredit(
+                storeCreditNo
+            );
+
+        }
+    );
 
 }
 
@@ -3850,31 +3949,103 @@ function renderBillHistory(bills){
         const row =
             document.createElement("tr");
 
+let actionView = "";
+let actionPrint = "";
+
+if (bill.category === "BILL") {
+
+    actionView = `
+        <button
+            class="view-btn"
+            onclick="viewBill('${bill.reference_no}')">
+            👁 View
+        </button>
+    `;
+
+    actionPrint = `
+        <button
+            class="print-btn"
+            onclick="reprintBill('${bill.reference_no}')">
+            🖨 Reprint
+        </button>
+    `;
+
+}
+
+else if (bill.category === "STORE CREDIT") {
+
+    actionView = `
+        <button
+            class="view-btn"
+            onclick="viewStoreCredit('${bill.reference_no}')">
+            👁 View
+        </button>
+    `;
+
+    actionPrint = `
+        <button
+            class="print-btn"
+            onclick="reprintStoreCredit('${bill.reference_no}')">
+            🖨 Reprint
+        </button>
+    `;
+
+}
+
+else {
+
+    actionView = `
+        <button
+            class="view-btn"
+            disabled>
+            👁 View
+        </button>
+    `;
+
+    actionPrint = `
+        <button
+            class="print-btn"
+            disabled>
+            🖨 Reprint
+        </button>
+    `;
+
+}
+
         row.innerHTML = `
 
-<td>${bill.bill_no}</td>
+<td>${bill.category}</td>
+
+<td>${bill.reference_no}</td>
 
 <td>${
-new Date(bill.bill_date)
-.toLocaleDateString("en-GB")
-.replace(/\//g,"-")
-} ${formatTime(bill.bill_time)}</td>
+    bill.transaction_date
+        ? new Date(bill.transaction_date)
+            .toLocaleDateString("en-GB")
+            .replace(/\//g, "-")
+        : "-"
+} ${
+    bill.transaction_time
+        ? formatTime(bill.transaction_time)
+        : ""
+}</td>
 
 <td>${bill.customer_name || "-"}</td>
 
 <td>${bill.customer_mobile || "-"}</td>
 
-<td>₹${Math.round(bill.net_amount)}</td>
+<td>₹${Math.round(Number(bill.amount || 0))}</td>
 
 <td>
 
 <span class="status-paid">
 
-${bill.payment_status}
+${bill.status || "-"}
 
 </span>
 
 ${
+    bill.category === "BILL" &&
     bill.payment_corrected
         ? `
         <br>
@@ -3888,19 +4059,11 @@ ${
 </td>
 
 <td>
-<button
-class="view-btn"
-onclick="viewBill('${bill.bill_no}')">
-👁 View
-</button>
+${actionView}
 </td>
 
 <td>
-<button
-class="print-btn"
-onclick="reprintBill('${bill.bill_no}')">
-🖨 Reprint
-</button>
+${actionPrint}
 </td>
 
 `;
@@ -3915,8 +4078,8 @@ async function loadBills(){
 
     try{
 
-        allBills =
-            await window.electronAPI.getBills();
+allBills =
+    await window.electronAPI.getTransactionHistory();
 
         renderBillHistory(allBills);
 
@@ -3931,6 +4094,209 @@ async function loadBills(){
     }
 
 }
+
+/* =====================================
+   VIEW STORE CREDIT
+===================================== */
+
+async function viewStoreCredit(storeCreditNo) {
+
+    try {
+
+        const details =
+            await window.electronAPI.getStoreCreditDetails(
+                storeCreditNo
+            );
+
+        if (!details) {
+
+            alert(
+                "Unable to load Store Credit details."
+            );
+
+            return;
+
+        }
+
+        billHistoryScreen.style.display = "none";
+
+        document.getElementById(
+            "viewStoreCreditScreen"
+        ).style.display = "block";
+
+
+        document.getElementById(
+            "viewStoreCreditNo"
+        ).innerText =
+            details.store_credit_no || "-";
+
+
+        document.getElementById(
+            "viewStoreCreditStatus"
+        ).innerText =
+            details.status || "-";
+
+
+        document.getElementById(
+            "viewStoreCreditIssueDate"
+        ).innerText =
+            details.issue_date
+                ? new Date(
+                    details.issue_date + "T00:00:00"
+                ).toLocaleDateString(
+                    "en-GB"
+                ).replace(/\//g, "-")
+                : "-";
+
+
+        document.getElementById(
+            "viewStoreCreditValidUntil"
+        ).innerText =
+            details.valid_until
+                ? new Date(
+                    details.valid_until + "T00:00:00"
+                ).toLocaleDateString(
+                    "en-GB"
+                ).replace(/\//g, "-")
+                : "-";
+
+
+        document.getElementById(
+            "viewStoreCreditCustomer"
+        ).innerText =
+            details.customer_name || "-";
+
+
+        document.getElementById(
+            "viewStoreCreditMobile"
+        ).innerText =
+            details.customer_mobile || "-";
+
+
+        document.getElementById(
+            "viewStoreCreditOriginalBill"
+        ).innerText =
+            details.original_bill_no || "-";
+
+
+        document.getElementById(
+            "viewStoreCreditReturnNo"
+        ).innerText =
+            details.return_no || "-";
+
+
+        document.getElementById(
+            "viewStoreCreditOriginalAmount"
+        ).innerText =
+            Number(
+                details.original_amount || 0
+            ).toFixed(2);
+
+
+const reprintStoreCreditBtn =
+    document.getElementById(
+        "reprintStoreCreditBtn"
+    );
+
+if (
+    details.status === "ISSUED"
+) {
+
+    reprintStoreCreditBtn.style.display =
+        "inline-block";
+
+    reprintStoreCreditBtn.dataset.storeCreditNo =
+        details.store_credit_no;
+
+}
+
+else {
+
+    reprintStoreCreditBtn.style.display =
+        "none";
+
+    reprintStoreCreditBtn.dataset.storeCreditNo =
+        "";
+
+}
+
+
+        resetScrollPosition();
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        alert(
+            "Unable to load Store Credit details."
+        );
+
+    }
+
+}
+
+
+/* =====================================
+   REPRINT STORE CREDIT
+===================================== */
+
+async function reprintStoreCredit(storeCreditNo) {
+
+    try {
+
+const details =
+    await window.electronAPI.getStoreCreditForReprint(
+        storeCreditNo
+    );
+
+if (!details) {
+
+    alert(
+        "Store Credit cannot be reprinted because it is not currently ISSUED or has expired."
+    );
+
+    return;
+
+}
+
+const result =
+    await window.electronAPI.printStoreCredit(
+        storeCreditNo
+    );
+
+        if (result.success) {
+
+            alert(
+                `Store Credit No.: ${details.store_credit_no}\n\nPrinted Successfully.`
+            );
+
+        }
+
+        else {
+
+            alert(
+                result.error ||
+                "Unable to print Store Credit."
+            );
+
+        }
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        alert(
+            "Unable to reprint Store Credit."
+        );
+
+    }
+
+}
+
 async function viewBill(billNo){
 
 
@@ -4278,19 +4644,21 @@ if (billSearch){
             .trim();
 
         const filtered =
-            allBills.filter(bill =>
+    allBills.filter(transaction =>
 
-                bill.bill_no
-                    .toLowerCase()
-                    .includes(text)
+        String(
+            transaction.reference_no || ""
+        )
+            .toLowerCase()
+            .includes(text)
 
-                ||
+        ||
 
-                String(
-                    bill.customer_mobile || ""
-                ).includes(text)
+        String(
+            transaction.customer_mobile || ""
+        ).includes(text)
 
-            );
+    );
 
         renderBillHistory(filtered);
 
