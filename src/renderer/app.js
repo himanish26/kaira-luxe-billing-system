@@ -1934,6 +1934,9 @@ gst_amount:
     }
     : null,
 
+            gift_voucher_amount:
+                Number(giftVoucherAppliedAmount) || 0,
+
         items:
     billItems.map(item => {
 
@@ -2819,14 +2822,21 @@ function formatTime(time){
 ===================================== */
 
 let billItems = [];
+
 let allBills = [];
+
 let currentViewedBill = null;
 
 let ffPinVerified = false;
 
+let giftVoucherAppliedAmount = 0;
+
+let pinAuthorizationAction = null;
+
 let productNotFoundOpen = false;
 
 let saleType = "SALE";
+
 let familyFriendsDiscountActive = false;
 
 const barcodeInput =
@@ -2845,6 +2855,9 @@ const saleReturnType =
 
 const familyFriendsBtn =
     document.getElementById("familyFriendsBtn");
+
+const giftVoucherBtn =
+    document.getElementById("giftVoucherBtn");
 
 function applyBillingMode(mode) {
 
@@ -3202,6 +3215,41 @@ if (originalBillNo) {
 
 }
 
+const giftVoucherDialog =
+    document.getElementById(
+        "giftVoucherDialog"
+    );
+
+const giftVoucherAmountInput =
+    document.getElementById(
+        "giftVoucherAmountInput"
+    );
+
+const giftVoucherBillValue =
+    document.getElementById(
+        "giftVoucherBillValue"
+    );
+
+const giftVoucherRemainingValue =
+    document.getElementById(
+        "giftVoucherRemainingValue"
+    );
+
+const giftVoucherError =
+    document.getElementById(
+        "giftVoucherError"
+    );
+
+const giftVoucherCancelBtn =
+    document.getElementById(
+        "giftVoucherCancelBtn"
+    );
+
+const giftVoucherApplyBtn =
+    document.getElementById(
+        "giftVoucherApplyBtn"
+    );
+
 const ffPinDialog =
     document.getElementById("ffPinDialog");
 
@@ -3257,11 +3305,12 @@ if (familyFriendsBtn) {
                 return;
 
             }
-
-
             /*
-             * Open PIN authorization popup.
-             */
+            * Open PIN authorization popup
+            * for Family & Friends.
+            */
+            pinAuthorizationAction = "FF";
+
             ffPinInput.value = "";
 
             ffPinError.innerText = "";
@@ -3279,6 +3328,55 @@ if (familyFriendsBtn) {
 
 }
 
+
+/* =====================================
+   GIFT VOUCHER PIN AUTHORIZATION
+===================================== */
+
+if (giftVoucherBtn) {
+
+    giftVoucherBtn.addEventListener(
+        "click",
+        () => {
+
+            /*
+             * Do not allow Gift Voucher
+             * without billed products.
+             */
+            if (!billItems.length) {
+
+                alert(
+                    "Please add at least one product before applying a Gift Voucher."
+                );
+
+                return;
+
+            }
+
+
+            /*
+             * Open shared PIN authorization
+             * popup for Gift Voucher.
+             */
+            pinAuthorizationAction = "GV";
+
+            ffPinInput.value = "";
+
+            ffPinError.innerText = "";
+
+            ffPinDialog.style.display =
+                "flex";
+
+            setTimeout(() => {
+
+                ffPinInput.focus();
+
+            }, 50);
+
+        }
+    );
+
+}
 
 /* CANCEL PIN ENTRY */
 
@@ -3345,7 +3443,8 @@ async function verifyFamilyFriendsPin() {
  * PIN verified.
  * Never log or store the entered PIN.
  */
-ffPinVerified = true;
+const authorizedAction =
+    pinAuthorizationAction;
 
 ffPinInput.value = "";
 
@@ -3355,10 +3454,37 @@ ffPinDialog.style.display = "none";
 
 
 /*
- * Open the brand-wise F&F discount popup.
+ * Route to the authorized action.
  */
-openFamilyFriendsDiscountDialog();
+if (authorizedAction === "FF") {
 
+    ffPinVerified = true;
+
+    pinAuthorizationAction = null;
+
+    openFamilyFriendsDiscountDialog();
+
+    return;
+
+}
+
+
+if (authorizedAction === "GV") {
+
+    pinAuthorizationAction = null;
+
+    openGiftVoucherDialog();
+
+    return;
+
+}
+
+
+/*
+ * No valid authorization action.
+ */
+ffPinError.innerText =
+    "Unable to determine authorization action.";
 
     }
 
@@ -3376,6 +3502,377 @@ openFamilyFriendsDiscountDialog();
 
 }
 
+function openGiftVoucherDialog() {
+
+    /*
+     * Safety check.
+     */
+    if (
+        !giftVoucherDialog ||
+        !giftVoucherAmountInput
+    ) {
+
+        return;
+
+    }
+
+
+    /*
+     * Calculate current bill value.
+     */
+    const billValue =
+        billItems.reduce(
+            (total, item) => {
+
+                const qty =
+                    Number(item.qty || 0);
+
+                const mrp =
+                    Number(item.mrp || 0);
+
+                const discount =
+                    Number(item.discount || 0);
+
+                const itemValue =
+                    qty *
+                    mrp *
+                    (
+                        1 -
+                        discount / 100
+                    );
+
+                return total + itemValue;
+
+            },
+            0
+        );
+
+
+    /*
+     * Show bill value.
+     */
+    if (giftVoucherBillValue) {
+
+        giftVoucherBillValue.textContent =
+            `₹${billValue.toFixed(2)}`;
+
+    }
+
+
+    /*
+     * Load existing applied amount, if any.
+     */
+    giftVoucherAmountInput.value =
+        giftVoucherAppliedAmount > 0
+            ? giftVoucherAppliedAmount.toFixed(2)
+            : "";
+
+
+    /*
+     * Calculate remaining amount.
+     */
+    const remainingAmount =
+        Math.max(
+            0,
+            billValue -
+            giftVoucherAppliedAmount
+        );
+
+    if (giftVoucherRemainingValue) {
+
+        giftVoucherRemainingValue.textContent =
+            `₹${remainingAmount.toFixed(2)}`;
+
+    }
+
+
+    /*
+     * Clear previous error.
+     */
+    if (giftVoucherError) {
+
+        giftVoucherError.innerText = "";
+
+    }
+
+
+    /*
+     * Open popup.
+     */
+    giftVoucherDialog.style.display =
+        "flex";
+
+
+    /*
+     * Focus amount input.
+     */
+    setTimeout(() => {
+
+        giftVoucherAmountInput.focus();
+
+        giftVoucherAmountInput.select();
+
+    }, 50);
+
+}
+
+/* =====================================
+   GIFT VOUCHER LIVE AMOUNT PREVIEW
+===================================== */
+
+if (giftVoucherAmountInput) {
+
+    giftVoucherAmountInput.addEventListener(
+        "input",
+        () => {
+
+            const billValue =
+                billItems.reduce(
+                    (total, item) => {
+
+                        const qty =
+                            Number(item.qty || 0);
+
+                        const mrp =
+                            Number(item.mrp || 0);
+
+                        const discount =
+                            Number(
+                                item.discount || 0
+                            );
+
+                        const itemValue =
+                            qty *
+                            mrp *
+                            (
+                                1 -
+                                discount / 100
+                            );
+
+                        return total + itemValue;
+
+                    },
+                    0
+                );
+
+
+            let enteredAmount =
+                Number(
+                    giftVoucherAmountInput.value || 0
+                );
+
+
+            if (
+                !Number.isFinite(
+                    enteredAmount
+                ) ||
+                enteredAmount < 0
+            ) {
+
+                enteredAmount = 0;
+
+            }
+
+
+            const remainingAmount =
+                Math.max(
+                    0,
+                    billValue -
+                    enteredAmount
+                );
+
+
+            if (giftVoucherRemainingValue) {
+
+                giftVoucherRemainingValue.textContent =
+                    `₹${remainingAmount.toFixed(2)}`;
+
+            }
+
+
+            if (giftVoucherError) {
+
+                giftVoucherError.innerText = "";
+
+            }
+
+        }
+    );
+
+}
+
+/* =====================================
+   GIFT VOUCHER CANCEL
+===================================== */
+
+if (giftVoucherCancelBtn) {
+
+    giftVoucherCancelBtn.addEventListener(
+        "click",
+        () => {
+
+            giftVoucherAmountInput.value = "";
+
+            if (giftVoucherError) {
+
+                giftVoucherError.innerText = "";
+
+            }
+
+            giftVoucherDialog.style.display =
+                "none";
+
+        }
+    );
+
+}
+
+
+/* =====================================
+   APPLY GIFT VOUCHER
+===================================== */
+
+if (giftVoucherApplyBtn) {
+
+    giftVoucherApplyBtn.addEventListener(
+        "click",
+        () => {
+
+            /*
+             * Calculate current bill value.
+             */
+            const billValue =
+                billItems.reduce(
+                    (total, item) => {
+
+                        const qty =
+                            Number(item.qty || 0);
+
+                        const mrp =
+                            Number(item.mrp || 0);
+
+                        const discount =
+                            Number(
+                                item.discount || 0
+                            );
+
+                        const itemValue =
+                            qty *
+                            mrp *
+                            (
+                                1 -
+                                discount / 100
+                            );
+
+                        return total + itemValue;
+
+                    },
+                    0
+                );
+
+
+            const enteredAmount =
+                Number(
+                    giftVoucherAmountInput.value
+                );
+
+
+            /*
+             * Validate amount.
+             */
+            if (
+                !Number.isFinite(
+                    enteredAmount
+                ) ||
+                enteredAmount <= 0
+            ) {
+
+                giftVoucherError.innerText =
+                    "Enter a valid Gift Voucher amount.";
+
+                giftVoucherAmountInput.focus();
+
+                return;
+
+            }
+
+
+            /*
+             * GV cannot exceed bill value.
+             */
+            if (enteredAmount > billValue) {
+
+                giftVoucherError.innerText =
+                    "Gift Voucher amount cannot exceed the bill value.";
+
+                giftVoucherAmountInput.focus();
+
+                return;
+
+            }
+
+
+            /*
+             * Apply Gift Voucher amount.
+             */
+            giftVoucherAppliedAmount =
+                Number(
+                    enteredAmount.toFixed(2)
+                );
+
+
+            /*
+             * Update existing GV display.
+             */
+            const giftVoucherAppliedAmountDisplay =
+                document.getElementById(
+                    "giftVoucherAppliedAmount"
+                );
+
+            if (
+                giftVoucherAppliedAmountDisplay
+            ) {
+
+                giftVoucherAppliedAmountDisplay.textContent =
+                    giftVoucherAppliedAmount.toFixed(2);
+
+            }
+
+
+            /*
+             * Mark button as active.
+             */
+            if (giftVoucherBtn) {
+
+                giftVoucherBtn.classList.add(
+                    "active"
+                );
+
+            }
+
+
+            /*
+             * Close popup.
+             */
+            giftVoucherError.innerText = "";
+
+            giftVoucherDialog.style.display =
+                "none";
+
+
+            /*
+             * Refresh bill and payment calculations.
+             */
+            renderBill();
+
+            loadPaymentSummary();
+
+            calculatePayment();
+
+        }
+    );
+
+}
 
 if (ffPinVerifyBtn) {
 
@@ -4583,8 +5080,15 @@ function calculatePayment(){
             ? Number(appliedStoreCredit.amount)
             : 0;
 
+    const giftVoucherAmount =
+        Number(giftVoucherAppliedAmount) || 0;
+
     const actualTotal =
-        cash + upi + card + storeCreditAmount;
+        cash +
+        upi +
+        card +
+        storeCreditAmount +
+        giftVoucherAmount;
 
     const total =
         Math.round(actualTotal);
@@ -5298,6 +5802,12 @@ Math.round(details.bill.net_amount);
 
     document.getElementById("viewCard").innerText =
         Number(details.bill.card_amount).toFixed(2);
+
+    document.getElementById("viewStoreCredit").innerText =
+    Number(details.bill.store_credit_amount || 0).toFixed(2);
+
+document.getElementById("viewGiftVoucher").innerText =
+    Number(details.bill.gift_voucher_amount || 0).toFixed(2);
 
         document.getElementById("viewTaxableGST").innerText =
     Number(details.bill.taxable_amount).toFixed(2);

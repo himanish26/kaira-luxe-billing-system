@@ -1333,25 +1333,34 @@ GSTIN : 21BBLPP6327G1ZO
 
         </div>
 
-    <h3 class="payment-heading">PAYMENT DETAILS</h3>
-        <div class="total-row">
-            <span>Cash</span>
-            <span>₹<span id="viewCash"></span></span>
-        </div>
+<h3 class="payment-heading">PAYMENT DETAILS</h3>
 
-        <div class="total-row">
-            <span>UPI</span>
-            <span>₹<span id="viewUPI"></span></span>
-        </div>
+<div class="total-row">
+    <span>Cash</span>
+    <span>₹<span id="viewCash"></span></span>
+</div>
 
-        <div class="total-row">
-            <span>Card</span>
-            <span>₹<span id="viewCard"></span></span>
-        </div>
+<div class="total-row">
+    <span>UPI</span>
+    <span>₹<span id="viewUPI"></span></span>
+</div>
+
+<div class="total-row">
+    <span>Card</span>
+    <span>₹<span id="viewCard"></span></span>
+</div>
+
+<div class="total-row">
+    <span>Store Credit</span>
+    <span>₹<span id="viewStoreCredit"></span></span>
+</div>
+
+<div class="total-row">
+    <span>Gift Voucher</span>
+    <span>₹<span id="viewGiftVoucher"></span></span>
+</div>
 
     </div>
-
-    
 
 <div
     id="paymentCorrectionHistory"
@@ -2205,6 +2214,92 @@ style="display:none;">
                 id="ffDiscountApplyBtn"
             >
                 Apply Discount
+            </button>
+
+        </div>
+
+    </div>
+</div>
+
+<!-- GIFT VOUCHER AMOUNT POPUP -->
+<div
+    id="giftVoucherDialog"
+    class="custom-dialog"
+    style="display:none;"
+>
+    <div class="custom-dialog-box">
+
+        <h2>
+            Apply Gift Voucher
+        </h2>
+
+        <p>
+            Enter the Gift Voucher amount to be used
+            for this bill.
+        </p>
+
+        <div class="invoice-info-card">
+
+            <div class="invoice-row">
+
+                <div>
+                    <b>Bill Value</b><br>
+
+                    <span
+                        id="giftVoucherBillValue"
+                    >
+                        ₹0.00
+                    </span>
+                </div>
+
+                <div>
+                    <b>Remaining After GV</b><br>
+
+                    <span
+                        id="giftVoucherRemainingValue"
+                    >
+                        ₹0.00
+                    </span>
+                </div>
+
+            </div>
+
+        </div>
+
+        <br>
+
+        <label for="giftVoucherAmountInput">
+            Gift Voucher Amount
+        </label>
+
+        <input
+            type="number"
+            id="giftVoucherAmountInput"
+            min="0"
+            step="0.01"
+            placeholder="Enter GV amount"
+        >
+
+        <div
+            id="giftVoucherError"
+            class="dialog-error"
+        >
+        </div>
+
+        <div class="dialog-actions">
+
+            <button
+                type="button"
+                id="giftVoucherCancelBtn"
+            >
+                Cancel
+            </button>
+
+            <button
+                type="button"
+                id="giftVoucherApplyBtn"
+            >
+                Apply Gift Voucher
             </button>
 
         </div>

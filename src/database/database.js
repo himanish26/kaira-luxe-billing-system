@@ -123,6 +123,10 @@ function createTables() {
 
     card_amount REAL,
 
+    store_credit_amount REAL DEFAULT 0,
+
+    gift_voucher_amount REAL DEFAULT 0,
+
     payment_status TEXT,
 
     created_at TEXT
@@ -1686,6 +1690,110 @@ function migrateStoreCreditSchema() {
 
 }
 
+/* ===========================================
+   MIGRATE BILL PAYMENT COLUMNS
+=========================================== */
+
+function migrateBillPaymentColumns() {
+
+    return new Promise((resolve, reject) => {
+
+        db.all(
+            `PRAGMA table_info(bills)`,
+            [],
+            (err, columns) => {
+
+                if (err) {
+                    reject(err);
+                    return;
+                }
+
+                const columnNames =
+                    columns.map(
+                        column => column.name
+                    );
+
+                const migrations = [];
+
+                if (
+                    !columnNames.includes(
+                        "store_credit_amount"
+                    )
+                ) {
+
+                    migrations.push(
+                        `
+                        ALTER TABLE bills
+                        ADD COLUMN store_credit_amount
+                        REAL DEFAULT 0
+                        `
+                    );
+
+                }
+
+                if (
+                    !columnNames.includes(
+                        "gift_voucher_amount"
+                    )
+                ) {
+
+                    migrations.push(
+                        `
+                        ALTER TABLE bills
+                        ADD COLUMN gift_voucher_amount
+                        REAL DEFAULT 0
+                        `
+                    );
+
+                }
+
+                if (
+                    migrations.length === 0
+                ) {
+
+                    resolve();
+                    return;
+
+                }
+
+                let pending =
+                    migrations.length;
+
+                migrations.forEach(sql => {
+
+                    db.run(
+                        sql,
+                        alterErr => {
+
+                            if (alterErr) {
+                                reject(alterErr);
+                                return;
+                            }
+
+                            pending--;
+
+                            if (pending === 0) {
+
+                                console.log(
+                                    "✓ Bill payment columns migrated."
+                                );
+
+                                resolve();
+
+                            }
+
+                        }
+                    );
+
+                });
+
+            }
+        );
+
+    });
+
+}
+
 // ============================================================
 // DATABASE READY CHECKPOINT
 // All database initialization operations queued above must
@@ -1718,10 +1826,11 @@ try {
 
     await migrateStoreCreditSchema();
 
+    await migrateBillPaymentColumns();
+
     console.log(
         '✓ Database Initialization Complete'
     );
-
     databaseReadyResolve();
 
 }

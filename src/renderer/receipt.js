@@ -92,6 +92,18 @@ if (bill.customer_mobile && bill.customer_mobile.trim() !== "") {
         row: "cardRow",
         value: Number(bill.card_amount) || 0,
         span: "card"
+    },
+
+    {
+        row: "storeCreditRow",
+        value: Number(bill.store_credit_amount) || 0,
+        span: "storeCredit"
+    },
+
+    {
+        row: "giftVoucherRow",
+        value: Number(bill.gift_voucher_amount) || 0,
+        span: "giftVoucher"
     }
 
 ];

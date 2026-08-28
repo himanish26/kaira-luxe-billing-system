@@ -96,11 +96,13 @@ function saveBill(billData) {
                     cash_amount,
                     upi_amount,
                     card_amount,
+                    store_credit_amount,
+                    gift_voucher_amount,
                     payment_status,
                     created_at
                 )
                 VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `,
 
                 [
@@ -122,6 +124,17 @@ function saveBill(billData) {
                     billData.cash_amount,
                     billData.upi_amount,
                     billData.card_amount,
+
+                    billData.store_credit
+                        ? Number(
+                            billData.store_credit.amount
+                        ) || 0
+                        : 0,
+
+                    Number(
+                        billData.gift_voucher_amount
+                    ) || 0,
+
                     "PAID",
                     new Date().toISOString()
 
