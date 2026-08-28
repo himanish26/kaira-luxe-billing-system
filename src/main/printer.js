@@ -124,9 +124,27 @@ async function printStoreCredit(storeCreditData) {
 
     console.log(storeCreditData);
 
-    return new Promise((resolve, reject) => {
+    let printWindow = null;
 
-        const printWindow =
+    try {
+
+        const settings =
+            await getSettings();
+
+        const printerName =
+            settings.default_printer;
+
+        if (!printerName) {
+
+            return {
+                success: false,
+                error:
+                    "No default printer is configured."
+            };
+
+        }
+
+        printWindow =
             new BrowserWindow({
 
                 show: false,
@@ -145,7 +163,7 @@ async function printStoreCredit(storeCreditData) {
 
             });
 
-        printWindow.loadFile(
+        await printWindow.loadFile(
 
             path.join(
                 __dirname,
@@ -154,112 +172,137 @@ async function printStoreCredit(storeCreditData) {
 
         );
 
-        printWindow.webContents.once(
+        await printWindow.webContents
+            .executeJavaScript(
 
-            "did-finish-load",
+                `window.storeCreditData = ${JSON.stringify(
+                    storeCreditData
+                )};
+                 window.storeSettings = ${JSON.stringify(
+                    settings
+                )};`
 
-            async () => {
+            );
 
-                try {
+        await printWindow.webContents
+            .executeJavaScript(
 
-                    const settings =
-                        await getSettings();
+                `if (
+                    typeof loadStoreCreditReceipt === "function"
+                ) {
+                    loadStoreCreditReceipt();
+                }`
 
-                    const printerName =
-                        settings.default_printer;
+            );
 
-                    await printWindow.webContents
-                        .executeJavaScript(
-
-                            `window.storeCreditData = ${JSON.stringify(
-                                storeCreditData
-                            )};
-                             window.storeSettings = ${JSON.stringify(
-                                settings
-                            )};`
-
-                        );
-
-                    await printWindow.webContents
-                        .executeJavaScript(
-
-                            "if(window.loadStoreCreditReceipt){ loadStoreCreditReceipt(); }"
-
-                        );
-
-                    setTimeout(() => {
-
-                        printWindow.webContents.print(
-
-                            {
-
-                                silent: true,
-
-                                printBackground: true,
-
-                                deviceName:
-                                    printerName,
-
-                                margins: {
-
-                                    marginType:
-                                        "none"
-
-                                },
-
-                                landscape: false,
-
-                                scaleFactor: 100,
-
-                                usePrinterDefaultPageSize:
-                                    true
-
-                            },
-
-                            (success, error) => {
-
-                                printWindow.close();
-
-                                if (success) {
-
-                                    resolve({
-
-                                        success: true
-
-                                    });
-
-                                }
-
-                                else {
-
-                                    reject(error);
-
-                                }
-
-                            }
-
-                        );
-
-                    }, 300);
-
-                }
-
-                catch (error) {
-
-                    printWindow.close();
-
-                    reject(error);
-
-                }
-
-            }
-
+        await new Promise(
+            resolve => setTimeout(resolve, 500)
         );
 
-    });
+        const result =
+            await new Promise(resolve => {
+
+                if (
+                    !printWindow ||
+                    printWindow.isDestroyed()
+                ) {
+
+                    resolve({
+                        success: false,
+                        error:
+                            "Print window was destroyed."
+                    });
+
+                    return;
+
+                }
+
+                printWindow.webContents.print(
+
+                    {
+
+                        silent: true,
+
+                        printBackground: true,
+
+                        deviceName:
+                            printerName,
+
+                        margins: {
+
+                            marginType:
+                                "none"
+
+                        },
+
+                        landscape: false,
+
+                        scaleFactor: 100,
+
+                        usePrinterDefaultPageSize:
+                            true
+
+                    },
+
+                    (success, error) => {
+
+                        resolve({
+
+                            success,
+
+                            error:
+                                error || null
+
+                        });
+
+                    }
+
+                );
+
+            });
+
+        if (
+            printWindow &&
+            !printWindow.isDestroyed()
+        ) {
+
+            printWindow.close();
+
+        }
+
+        return result;
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "STORE CREDIT PRINT ERROR:",
+            error
+        );
+
+        if (
+            printWindow &&
+            !printWindow.isDestroyed()
+        ) {
+
+            printWindow.close();
+
+        }
+
+        return {
+
+            success: false,
+
+            error:
+                error.message ||
+                "Store Credit printing failed."
+
+        };
+
+    }
 
 }
-
 async function saveBillPdf(billData){
 
     console.log("SAVE PDF FUNCTION CALLED");

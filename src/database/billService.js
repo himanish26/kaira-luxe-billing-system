@@ -268,13 +268,10 @@ function createSaleInventoryTransactions(){
     let pending =
         billData.items.length;
 
-    if(pending === 0){
-
-        commit();
-
-        return;
-
-    }
+if(pending === 0){
+    redeemStoreCreditAndCommit();
+    return;
+}
 
     const now =
         new Date().toISOString();
@@ -369,11 +366,9 @@ function createSaleInventoryTransactions(){
 
                         pending--;
 
-                        if(pending === 0){
-
-                            commit();
-
-                        }
+if(pending === 0){
+    redeemStoreCreditAndCommit();
+}
 
                     }
 
@@ -384,6 +379,93 @@ function createSaleInventoryTransactions(){
         );
 
     });
+
+}
+
+function redeemStoreCreditAndCommit(){
+
+    if (
+        !billData.store_credit ||
+        !billData.store_credit.store_credit_no
+    ) {
+
+        commit();
+        return;
+
+    }
+
+    const storeCreditNo =
+        billData.store_credit.store_credit_no;
+
+    const storeCreditAmount =
+        Number(
+            billData.store_credit.amount
+        );
+
+    db.run(
+    `
+    UPDATE store_credits
+
+    SET
+        remaining_balance = 0,
+        status = 'REDEEMED'
+
+    WHERE
+        store_credit_no = ?
+
+        AND customer_mobile = ?
+
+        AND status = 'ISSUED'
+
+        AND remaining_balance > 0
+
+        AND ABS(remaining_balance - ?) < 0.01
+
+        AND valid_until >= ?
+    `,
+    [
+        storeCreditNo,
+
+        billData.customer_mobile,
+
+        storeCreditAmount,
+
+        new Date()
+            .toISOString()
+            .split("T")[0]
+    ],
+
+        function(err){
+
+            if(err){
+
+                db.run("ROLLBACK");
+
+                reject(err);
+
+                return;
+
+            }
+
+            if(this.changes !== 1){
+
+                db.run("ROLLBACK");
+
+                reject(
+                    new Error(
+                        "Store Credit redemption failed. The credit may be invalid, expired, already redeemed, or does not belong to this customer."
+                    )
+                );
+
+                return;
+
+            }
+
+            commit();
+
+        }
+
+    );
 
 }
 
@@ -516,6 +598,7 @@ function getTransactionHistory() {
                         WHERE pc.bill_no = b.bill_no
                     ) AS payment_corrected,
 
+                    b.created_at AS sort_timestamp,
                     b.id AS sort_id
 
                 FROM bills b
@@ -534,21 +617,23 @@ function getTransactionHistory() {
 
                     r.return_no AS reference_no,
 
-                    date(r.created_at) AS transaction_date,
+date(r.created_at, 'localtime') AS transaction_date,
 
-                    time(r.created_at) AS transaction_time,
+time(r.created_at, 'localtime') AS transaction_time,
 
                     r.customer_name,
 
                     r.customer_mobile,
 
-                    r.return_amount AS amount,
+r.return_amount AS amount,
 
-                    'COMPLETED' AS status,
+'COMPLETED' AS status,
 
-                    0 AS payment_corrected,
+0 AS payment_corrected,
 
-                    r.id AS sort_id
+r.created_at AS sort_timestamp,
+
+r.id AS sort_id
 
                 FROM returns r
 
@@ -566,30 +651,31 @@ function getTransactionHistory() {
 
                     sc.store_credit_no AS reference_no,
 
-                    sc.issue_date AS transaction_date,
+date(sc.created_at, 'localtime') AS transaction_date,
 
-                    time(sc.created_at) AS transaction_time,
+time(sc.created_at, 'localtime') AS transaction_time,
 
                     sc.customer_name,
 
                     sc.customer_mobile,
 
-                    sc.original_amount AS amount,
+sc.original_amount AS amount,
 
-                    sc.status,
+sc.status,
 
-                    0 AS payment_corrected,
+0 AS payment_corrected,
 
-                    sc.id AS sort_id
+sc.created_at AS sort_timestamp,
+
+sc.id AS sort_id
 
                 FROM store_credits sc
 
             )
 
-            ORDER BY
-                transaction_date DESC,
-                transaction_time DESC,
-                sort_id DESC
+ORDER BY
+    sort_timestamp DESC,
+    sort_id DESC
             `,
 
             [],

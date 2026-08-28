@@ -68,11 +68,23 @@ contextBridge.exposeInMainWorld(
         "get-transaction-history"
     ),
 
-    getStoreCreditDetails: (storeCreditNo) =>
-    ipcRenderer.invoke(
-        "get-store-credit-details",
-        storeCreditNo
-    ),
+getStoreCreditDetails: (storeCreditNo) =>
+ipcRenderer.invoke(
+    "get-store-credit-details",
+    storeCreditNo
+),
+
+getReturnDetails: (returnNo) =>
+ipcRenderer.invoke(
+    "get-return-details",
+    returnNo
+),
+
+getAvailableStoreCreditByMobile: (customerMobile) =>
+ipcRenderer.invoke(
+    "get-available-store-credit-by-mobile",
+    customerMobile
+),
 
     getStoreCreditForReprint: (storeCreditNo) =>
     ipcRenderer.invoke(
@@ -167,6 +179,12 @@ printStoreCredit: (storeCreditData) =>
     ipcRenderer.invoke(
         "print-store-credit",
         storeCreditData
+    ),
+
+reprintStoreCredit: (storeCreditNo) =>
+    ipcRenderer.invoke(
+        "reprint-store-credit",
+        storeCreditNo
     ),
 
     printDayClosing: (summary) =>

@@ -1017,6 +1017,78 @@ maxlength="11">
                 autocomplete="off"
             >
 
+            <div class="credit-voucher-payment-section">
+
+   <!-- STORE CREDIT -->
+<div
+    id="storeCreditPaymentCard"
+    class="credit-voucher-row store-credit-payment-card"
+>
+
+    <div class="credit-voucher-details">
+
+        <div class="credit-voucher-label">
+            Store Credit
+        </div>
+
+        <div
+            id="storeCreditAvailabilityText"
+            class="credit-voucher-availability"
+        >
+            No Store Credit Available
+        </div>
+
+        <div
+            id="storeCreditValidityText"
+            class="credit-voucher-validity"
+        >
+        </div>
+
+    </div>
+
+    <div class="credit-voucher-action">
+
+        <div
+            id="storeCreditAppliedAmount"
+            class="credit-voucher-amount"
+        >
+            ₹0.00
+        </div>
+
+        <button
+            type="button"
+            id="storeCreditBtn"
+            class="credit-voucher-btn"
+        >
+            STORE CREDIT
+        </button>
+
+    </div>
+
+</div>
+
+    <!-- GIFT VOUCHER -->
+    <div class="credit-voucher-row">
+
+        <div
+            id="giftVoucherAppliedAmount"
+            class="credit-voucher-amount"
+        >
+            ₹0.00
+        </div>
+
+        <button
+            type="button"
+            id="giftVoucherBtn"
+            class="credit-voucher-btn"
+        >
+            Gift Voucher
+        </button>
+
+    </div>
+
+</div>
+
             <div class="summary-line">
 
                 Received
@@ -1458,6 +1530,198 @@ returned after purchase.
         <button id="reprintStoreCreditBtn">
             🖨 Reprint
         </button>
+
+    </div>
+
+</div>
+
+<!-- =====================================
+     VIEW RETURN SCREEN
+===================================== -->
+
+<div
+    id="viewReturnScreen"
+    style="display:none;">
+
+    <div class="bill-top-bar">
+
+        <button
+            id="viewReturnBackBtn"
+            class="back-btn">
+
+            ← Back
+
+        </button>
+
+    </div>
+
+    <h1 class="billing-page-title">
+        RETURN DETAILS
+    </h1>
+
+    <div class="invoice-info-card">
+
+        <div class="invoice-row">
+
+            <div>
+                <b>Return No.</b><br>
+
+                <span id="viewReturnNo"></span>
+            </div>
+
+            <div>
+                <b>Return Date</b><br>
+
+                <span id="viewReturnDate"></span>
+            </div>
+
+        </div>
+
+        <hr>
+
+        <div class="invoice-row">
+
+            <div>
+                <b>Original Bill No.</b><br>
+
+                <span id="viewReturnOriginalBill"></span>
+            </div>
+
+            <div>
+                <b>Return Amount</b><br>
+
+                <span
+                    style="
+                        font-size: 22px;
+                        font-weight: 800;
+                    ">
+                    ₹<span id="viewReturnAmount"></span>
+                </span>
+            </div>
+
+        </div>
+
+        <hr>
+
+        <div class="invoice-row">
+
+            <div>
+                <b>Customer Name</b><br>
+
+                <span id="viewReturnCustomer"></span>
+            </div>
+
+            <div>
+                <b>Mobile Number</b><br>
+
+                <span id="viewReturnMobile"></span>
+            </div>
+
+        </div>
+
+        <hr>
+
+        <div class="invoice-row">
+
+            <div>
+                <b>Return Reason</b><br>
+
+                <span id="viewReturnReason"></span>
+            </div>
+
+            <div>
+                <b>Processed By</b><br>
+
+                <span id="viewReturnCreatedBy"></span>
+            </div>
+
+        </div>
+
+        <hr>
+
+        <div class="invoice-row">
+
+            <div>
+                <b>Remarks</b><br>
+
+                <span id="viewReturnRemarks"></span>
+            </div>
+
+        </div>
+
+    </div>
+
+    <h2
+        style="
+            margin-top: 30px;
+            margin-bottom: 15px;
+        ">
+        RETURNED ITEMS
+    </h2>
+
+    <div
+        class="table-container"
+        style="overflow-x:auto;">
+
+        <table>
+
+            <thead>
+
+                <tr>
+                    <th>Product</th>
+                    <th>Barcode</th>
+                    <th>Qty</th>
+                    <th>Unit Value</th>
+                    <th>Return Value</th>
+                    <th>Remarks</th>
+                </tr>
+
+            </thead>
+
+            <tbody
+                id="viewReturnItemsBody">
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+    <div class="invoice-info-card">
+
+        <div class="invoice-row">
+
+            <div>
+                <b>Store Credit No.</b><br>
+
+                <span id="viewReturnStoreCreditNo"></span>
+            </div>
+
+            <div>
+                <b>Store Credit Status</b><br>
+
+                <span id="viewReturnStoreCreditStatus"></span>
+            </div>
+
+        </div>
+
+        <hr>
+
+        <div class="invoice-row">
+
+            <div>
+                <b>Issue Date</b><br>
+
+                <span id="viewReturnStoreCreditIssueDate"></span>
+            </div>
+
+            <div>
+                <b>Valid Until</b><br>
+
+                <span id="viewReturnStoreCreditValidUntil"></span>
+            </div>
+
+        </div>
 
     </div>
 
@@ -1946,6 +2210,128 @@ style="display:none;">
         </div>
 
     </div>
+</div>
+
+<!-- STORE CREDIT MODAL -->
+
+<div
+    id="storeCreditModal"
+    class="credit-voucher-modal"
+    style="display:none;"
+>
+
+    <div class="credit-voucher-modal-box">
+
+        <div class="credit-voucher-modal-header">
+
+            <h2>STORE CREDIT</h2>
+
+            <button
+                type="button"
+                id="closeStoreCreditModalBtn"
+                class="credit-voucher-close-btn"
+            >
+                ×
+            </button>
+
+        </div>
+
+
+        <div class="credit-voucher-input-row">
+
+            <input
+                type="text"
+                id="storeCreditNumberInput"
+                placeholder="Store Credit Number"
+                autocomplete="off"
+            >
+
+            <button
+                type="button"
+                id="verifyStoreCreditBtn"
+                class="verify-credit-btn"
+            >
+                VERIFY
+            </button>
+
+        </div>
+
+
+        <div
+            id="storeCreditVerificationResult"
+            class="credit-verification-result"
+            style="display:none;"
+        >
+
+<div class="credit-info-row">
+    <span>
+        Store Credit No.:
+    </span>
+
+    <strong id="verifiedStoreCreditNumber">
+        -
+    </strong>
+</div>
+
+<div class="credit-info-row">
+    <span>
+        Available Amount:
+    </span>
+
+    <strong id="verifiedStoreCreditAmount">
+        ₹0.00
+    </strong>
+</div>
+
+<div class="credit-info-row">
+    <span>
+        Valid Until:
+    </span>
+
+    <strong id="verifiedStoreCreditValidity">
+        -
+    </strong>
+</div>
+
+<div class="credit-info-row">
+    <span>
+        Status:
+    </span>
+
+    <strong
+        id="verifiedStoreCreditStatus"
+        class="credit-status"
+    >
+        NOT VERIFIED
+    </strong>
+</div>
+
+        </div>
+
+
+        <div class="credit-voucher-modal-actions">
+
+            <button
+                type="button"
+                id="cancelStoreCreditBtn"
+                class="modal-cancel-btn"
+            >
+                CANCEL
+            </button>
+
+            <button
+                type="button"
+                id="applyStoreCreditBtn"
+                class="modal-apply-btn"
+                disabled
+            >
+                APPLY STORE CREDIT
+            </button>
+
+        </div>
+
+    </div>
+
 </div>
 
 <!-- Always last -->

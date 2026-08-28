@@ -1234,10 +1234,513 @@ if (reportsDashboardBtn){
 
 }
 
+const storeCreditBtn =
+    document.getElementById("storeCreditBtn");
+
+const storeCreditModal =
+    document.getElementById("storeCreditModal");
+
+const closeStoreCreditModalBtn =
+    document.getElementById(
+        "closeStoreCreditModalBtn"
+    );
+
+const cancelStoreCreditBtn =
+    document.getElementById(
+        "cancelStoreCreditBtn"
+    );
+
+const storeCreditNumberInput =
+    document.getElementById(
+        "storeCreditNumberInput"
+    );
+
+const storeCreditVerificationResult =
+    document.getElementById(
+        "storeCreditVerificationResult"
+    );
+
+const verifiedStoreCreditAmount =
+    document.getElementById(
+        "verifiedStoreCreditAmount"
+    );
+
+const verifiedStoreCreditStatus =
+    document.getElementById(
+        "verifiedStoreCreditStatus"
+    );
+
+const verifyStoreCreditBtn =
+    document.getElementById(
+        "verifyStoreCreditBtn"
+    );
+
+const applyStoreCreditBtn =
+    document.getElementById(
+        "applyStoreCreditBtn"
+    );
+
+const storeCreditAppliedAmount =
+    document.getElementById(
+        "storeCreditAppliedAmount"
+    );
+
+const storeCreditPaymentCard =
+    document.getElementById(
+        "storeCreditPaymentCard"
+    );
+
+const storeCreditAvailabilityText =
+    document.getElementById(
+        "storeCreditAvailabilityText"
+    );
+
+const storeCreditValidityText =
+    document.getElementById(
+        "storeCreditValidityText"
+    );
+
+const verifiedStoreCreditNumber =
+    document.getElementById(
+        "verifiedStoreCreditNumber"
+    );
+
+const verifiedStoreCreditValidity =
+    document.getElementById(
+        "verifiedStoreCreditValidity"
+    );
+
+let appliedStoreCredit = null;
+
+let availableStoreCredit = null;
+
+if (storeCreditAppliedAmount) {
+
+    storeCreditAppliedAmount.innerText =
+        "₹0.00";
+
+}
+
+updateStoreCreditAvailabilityCard();
+
+function formatStoreCreditDate(dateValue) {
+
+    if (!dateValue) {
+        return "-";
+    }
+
+    const parts =
+        String(dateValue).split("-");
+
+    if (parts.length !== 3) {
+        return dateValue;
+    }
+
+    return (
+        parts[2] +
+        "/" +
+        parts[1] +
+        "/" +
+        parts[0]
+    );
+
+}
+
+
+function updateStoreCreditAvailabilityCard() {
+
+    if (!storeCreditPaymentCard) {
+        return;
+    }
+
+    if (!availableStoreCredit) {
+
+        storeCreditPaymentCard.classList.remove(
+            "store-credit-available"
+        );
+
+        storeCreditAvailabilityText.innerText =
+            "No Store Credit Available";
+
+        storeCreditValidityText.innerText =
+            "";
+
+        return;
+    }
+
+    const amount =
+        Number(
+            availableStoreCredit.remaining_balance ??
+            availableStoreCredit.original_amount ??
+            0
+        );
+
+    const status =
+        availableStoreCredit.status === "ISSUED"
+            ? "ACTIVE"
+            : availableStoreCredit.status;
+
+    storeCreditPaymentCard.classList.add(
+        "store-credit-available"
+    );
+
+    storeCreditAvailabilityText.innerText =
+        "₹" +
+        amount.toFixed(2) +
+        " AVAILABLE";
+
+    storeCreditValidityText.innerText =
+        "Status: " +
+        status +
+        "  |  Valid Until: " +
+        formatStoreCreditDate(
+            availableStoreCredit.valid_until
+        );
+
+}
+
 const saveBillBtn =
     document.getElementById("saveBillBtn");
 const printBillBtn =
     document.getElementById("printBillBtn");
+
+if (storeCreditBtn) {
+
+    storeCreditBtn.addEventListener(
+        "click",
+        () => {
+
+            storeCreditNumberInput.value =
+                availableStoreCredit
+                    ? availableStoreCredit.store_credit_no
+                    : "";
+
+            storeCreditVerificationResult.style.display =
+                "none";
+
+            verifiedStoreCreditNumber.innerText =
+                "-";
+
+            verifiedStoreCreditValidity.innerText =
+                "-";
+
+            verifiedStoreCreditAmount.innerText =
+                "₹0.00";
+
+            verifiedStoreCreditStatus.innerText =
+                availableStoreCredit
+                    ? availableStoreCredit.status
+                    : "NOT VERIFIED";
+
+            applyStoreCreditBtn.disabled = true;
+
+            storeCreditModal.style.display =
+                "flex";
+
+            if (availableStoreCredit) {
+
+                verifyStoreCreditBtn.focus();
+
+            }
+            else {
+
+                storeCreditNumberInput.focus();
+
+            }
+
+        }
+    );
+
+}
+
+if (closeStoreCreditModalBtn) {
+
+    closeStoreCreditModalBtn.addEventListener(
+        "click",
+        () => {
+
+            storeCreditModal.style.display =
+                "none";
+
+        }
+    );
+
+}
+
+if (cancelStoreCreditBtn) {
+
+    cancelStoreCreditBtn.addEventListener(
+        "click",
+        () => {
+
+            storeCreditModal.style.display =
+                "none";
+
+        }
+    );
+
+}
+
+if (verifyStoreCreditBtn) {
+
+    verifyStoreCreditBtn.addEventListener(
+        "click",
+        async () => {
+
+            const storeCreditNo =
+                storeCreditNumberInput.value.trim();
+
+            const customerMobile =
+                document
+                    .getElementById("customerMobile")
+                    .value
+                    .trim();
+
+            if (!customerMobile ||
+                customerMobile.length !== 10) {
+
+                alert(
+                    "Please enter and verify the customer's 10-digit mobile number before using Store Credit."
+                );
+
+                document
+                    .getElementById("customerMobile")
+                    .focus();
+
+                return;
+            }
+
+            if (!availableStoreCredit) {
+
+                alert(
+                    "No valid Store Credit is available for this customer's mobile number."
+                );
+
+                return;
+            }
+
+            if (
+                storeCreditNo !==
+                availableStoreCredit.store_credit_no
+            ) {
+
+                alert(
+                    "This Store Credit does not belong to the current customer."
+                );
+
+                storeCreditNumberInput.value =
+                    availableStoreCredit.store_credit_no;
+
+                applyStoreCreditBtn.disabled = true;
+
+                return;
+            }
+
+            verifyStoreCreditBtn.disabled = true;
+
+            try {
+
+                const storeCredit =
+                    await window.electronAPI
+                        .getStoreCreditDetails(
+                            storeCreditNo
+                        );
+
+                storeCreditVerificationResult.style.display =
+                    "block";
+
+                if (!storeCredit) {
+
+                    verifiedStoreCreditAmount.innerText =
+                        "₹0.00";
+
+                    verifiedStoreCreditStatus.innerText =
+                        "NOT FOUND";
+
+                    applyStoreCreditBtn.disabled = true;
+
+                    return;
+                }
+
+                if (
+                    storeCredit.customer_mobile !==
+                    customerMobile
+                ) {
+
+                    verifiedStoreCreditAmount.innerText =
+                        "₹0.00";
+
+                    verifiedStoreCreditStatus.innerText =
+                        "MOBILE NUMBER MISMATCH";
+
+                    applyStoreCreditBtn.disabled = true;
+
+                    alert(
+                        "Store Credit verification failed. The Store Credit is not linked to the current customer's mobile number."
+                    );
+
+                    return;
+                }
+
+                const today =
+                    new Date()
+                        .toISOString()
+                        .split("T")[0];
+
+const payable =
+    Number(
+        document
+            .getElementById("paymentNet")
+            .innerText
+            .replace(/[^0-9.-]/g, "")
+    );
+
+const storeCreditAmount =
+    Number(
+        storeCredit.remaining_balance ??
+        storeCredit.original_amount
+    );
+
+                const isExpired =
+                    storeCredit.valid_until < today;
+
+                const isIssued =
+                    storeCredit.status === "ISSUED";
+
+                verifiedStoreCreditAmount.innerText =
+                    "₹" +
+                    storeCreditAmount.toFixed(2);
+
+                verifiedStoreCreditStatus.innerText =
+                    storeCredit.status;
+
+verifiedStoreCreditNumber.innerText =
+    storeCredit.store_credit_no || "-";
+
+verifiedStoreCreditValidity.innerText =
+    formatStoreCreditDate(
+        storeCredit.valid_until
+    );
+
+                if (isExpired) {
+
+                    verifiedStoreCreditStatus.innerText =
+                        "EXPIRED";
+
+                    applyStoreCreditBtn.disabled = true;
+
+                    return;
+                }
+
+                if (!isIssued) {
+
+                    applyStoreCreditBtn.disabled = true;
+
+                    return;
+                }
+
+if (storeCreditAmount > payable + 0.01) {
+
+    verifiedStoreCreditStatus.innerText =
+        "AMOUNT EXCEEDS PAYABLE";
+
+    applyStoreCreditBtn.disabled = true;
+
+    return;
+}
+
+                applyStoreCreditBtn.disabled = false;
+
+            }
+            catch (error) {
+
+                console.error(
+                    "Store Credit verification failed:",
+                    error
+                );
+
+                storeCreditVerificationResult.style.display =
+                    "block";
+
+                verifiedStoreCreditAmount.innerText =
+                    "₹0.00";
+
+                verifiedStoreCreditStatus.innerText =
+                    "ERROR";
+
+                applyStoreCreditBtn.disabled = true;
+
+            }
+            finally {
+
+                verifyStoreCreditBtn.disabled = false;
+
+            }
+
+        }
+    );
+
+}
+
+if (applyStoreCreditBtn) {
+
+    applyStoreCreditBtn.addEventListener(
+        "click",
+        () => {
+
+            const storeCreditNo =
+                storeCreditNumberInput.value.trim();
+
+const storeCreditAmount =
+    Number(
+        verifiedStoreCreditAmount
+            .innerText
+            .replace(/[^0-9.-]/g, "")
+    );
+
+const payable =
+    Number(
+        document
+            .getElementById("paymentNet")
+            .innerText
+            .replace(/[^0-9.-]/g, "")
+    );
+
+if (!storeCreditNo) {
+
+    alert(
+        "Please verify a valid Store Credit first."
+    );
+
+    return;
+}
+
+if (storeCreditAmount > payable) {
+
+    alert(
+        "Store Credit amount cannot exceed the bill payable amount."
+    );
+
+    return;
+}
+
+            appliedStoreCredit = {
+                storeCreditNo: storeCreditNo,
+                amount: storeCreditAmount
+            };
+
+            storeCreditAppliedAmount.innerText =
+                "₹" + storeCreditAmount.toFixed(2);
+
+            storeCreditModal.style.display =
+                "none";
+
+            calculatePayment();
+
+        }
+    );
+
+}
 
 document.getElementById("cashAmount")
     ?.addEventListener("input", calculatePayment);
@@ -1301,28 +1804,36 @@ async function saveCurrentBill(){
     const now = new Date();
 
     const net =
-        Number(
-            document.getElementById("paymentNet")
-            .innerText.replace("₹","")
-        );
+    Number(
+        document
+            .getElementById("paymentNet")
+            .innerText
+            .replace(/[^0-9.-]/g, "")
+    );
 
-    const discount =
-        Number(
-            document.getElementById("discountAmount")
-            .innerText.replace("₹","")
-        );
+const discount =
+    Number(
+        document
+            .getElementById("discountAmount")
+            .innerText
+            .replace(/[^0-9.-]/g, "")
+    );
 
-    const gross =
-        Number(
-            document.getElementById("grossAmount")
-            .innerText.replace("₹","")
-        );
+const gross =
+    Number(
+        document
+            .getElementById("grossAmount")
+            .innerText
+            .replace(/[^0-9.-]/g, "")
+    );
 
-    const gst =
-        Number(
-            document.getElementById("gstAmount")
-            .innerText.replace("₹","")
-        );
+const gst =
+    Number(
+        document
+            .getElementById("gstAmount")
+            .innerText
+            .replace(/[^0-9.-]/g, "")
+    );
 
     const totalQty =
         billItems.reduce(
@@ -1413,6 +1924,16 @@ gst_amount:
                 document.getElementById("cardAmount").value
             ),
 
+            store_credit: appliedStoreCredit
+    ? {
+        store_credit_no:
+            appliedStoreCredit.storeCreditNo,
+
+        amount:
+            Number(appliedStoreCredit.amount)
+    }
+    : null,
+
         items:
     billItems.map(item => {
 
@@ -1453,6 +1974,17 @@ gst_amount:
     alert("Bill Saved Successfully");
 
     billItems = [];
+
+    appliedStoreCredit = null;
+
+    availableStoreCredit = null;
+
+if (storeCreditAppliedAmount) {
+
+    storeCreditAppliedAmount.innerText =
+        "₹0.00";
+
+}
 
     familyFriendsDiscountActive = false;
 
@@ -1764,13 +2296,23 @@ if (saleType === "RETURN") {
 
         }
 
+const proceed =
+    confirm(
+        "RETURN CONFIRMATION\n\n" +
+        "Please review the selected return quantities carefully.\n\n" +
+        "This return will be processed against the original bill, and no further return or exchange can be made against this bill.\n\n" +
+        "Press OK to continue or Cancel to review the return."
+    );
+
+if (!proceed) {
+
+    return;
+
+}
+
         try {
 
             paymentBtn.disabled = true;
-
-            const returnNo =
-                await window.electronAPI
-                    .getNextReturnNumber();
 
 const returnAmount =
     Math.round(
@@ -1794,6 +2336,10 @@ const returnAmount =
             0
         )
     );
+
+            const returnNo =
+                await window.electronAPI
+                    .getNextReturnNumber();
 
             const result =
                 await window.electronAPI.saveReturn({
@@ -1882,56 +2428,74 @@ const returnAmount =
 
             }
 
-const printResult =
-    await window.electronAPI.printStoreCredit({
+let printResult = null;
 
-        store_credit_no:
-            result.store_credit_no,
+try {
 
-        return_no:
-            result.return_no,
+    printResult =
+        await window.electronAPI.printStoreCredit({
+            store_credit_no:
+                result.store_credit_no,
 
-        original_bill_no:
-            originalBillNo,
+            return_no:
+                result.return_no,
 
-        customer_name:
-            document.getElementById(
-                "customerName"
-            ).value.trim(),
+            original_bill_no:
+                originalBillNo,
 
-        customer_mobile:
-            mobile,
+            customer_name:
+                document.getElementById(
+                    "customerName"
+                ).value.trim(),
 
-        amount:
-            returnAmount,
+            customer_mobile:
+                mobile,
 
-        issue_date:
-            new Date()
-                .toISOString()
-                .split("T")[0],
+            amount:
+                returnAmount,
 
-        valid_until:
-            result.valid_until
+            issue_date:
+                new Date()
+                    .toISOString()
+                    .split("T")[0],
 
-    });
+            valid_until:
+                result.valid_until
+        });
+
+}
+catch (printError) {
+
+    console.error(
+        "STORE CREDIT PRINT ERROR:",
+        printError
+    );
+
+}
 
 if (
     !printResult ||
     !printResult.success
 ) {
 
-    throw new Error(
-        printResult?.error ||
-        "Store Credit created, but receipt printing failed."
+    alert(
+        `Return processed successfully.\n\n` +
+        `Store Credit: ${result.store_credit_no}\n` +
+        `Valid Until: ${result.valid_until}\n\n` +
+        `However, receipt printing failed.\n` +
+        `The Store Credit has been created successfully and can be reprinted.`
     );
 
 }
+else {
 
-alert(
-    `Return processed successfully.\n\n` +
-    `Store Credit: ${result.store_credit_no}\n` +
-    `Valid Until: ${result.valid_until}`
-);
+    alert(
+        `Return processed successfully.\n\n` +
+        `Store Credit: ${result.store_credit_no}\n` +
+        `Valid Until: ${result.valid_until}`
+    );
+
+}
 
 clearCurrentBill();
 
@@ -1972,7 +2536,7 @@ clearCurrentBill();
     resetScrollPosition();
 
     document.getElementById("paymentBillNo").innerText =
-        document.getElementById("currentBillNo").innerText;
+    document.getElementById("currentBillNo").innerText;
 
     document.getElementById("cashAmount").value = 0;
     document.getElementById("upiAmount").value = 0;
@@ -1985,12 +2549,40 @@ clearCurrentBill();
 });
 
 }
+
 const paymentBackBtn =
     document.getElementById("paymentBackBtn");
 
 if (paymentBackBtn) {
 
     paymentBackBtn.addEventListener("click", () => {
+
+const currentPayable =
+    Math.round(
+        Number(
+            document
+                .getElementById("paymentNet")
+                .innerText
+                .replace(/[^0-9.-]/g, "")
+        )
+    );
+
+if (
+    appliedStoreCredit &&
+    Number(appliedStoreCredit.amount) >
+        currentPayable + 0.01
+) {
+
+    appliedStoreCredit = null;
+
+    if (storeCreditAppliedAmount) {
+
+        storeCreditAppliedAmount.innerText =
+            "₹0.00";
+
+    }
+
+}
 
         paymentScreen.style.display = "none";
 
@@ -2441,14 +3033,51 @@ if (loadReturnBillBtn) {
                     );
 
 
-                if (!result || !result.bill) {
+if (!result) {
 
-                    returnBillStatus.innerText =
-                        "Original bill not found.";
+    returnBillStatus.innerText =
+        "Original bill not found.";
 
-                    return;
+    return;
 
-                }
+}
+
+if (result.alreadyReturned) {
+
+    billItems = [];
+
+    renderBill();
+
+    const returnedOn =
+        result.returned_at
+            ? new Date(
+                result.returned_at
+            ).toLocaleDateString("en-IN")
+            : "-";
+
+    alert(
+        "RETURN COMPLETED / FURTHER RETURNS NOT ALLOWED\n\n" +
+        "Bill No.: " + billNo + "\n" +
+        "Return No.: " + result.return_no + "\n" +
+        "Returned On: " + returnedOn + "\n\n" +
+        "A return has already been processed against this bill. " +
+        "No further return or exchange can be generated against this bill."
+    );
+
+    returnBillStatus.innerText =
+        "RETURN ALREADY COMPLETED. Further returns are not allowed.";
+
+    return;
+}
+
+if (!result.bill) {
+
+    returnBillStatus.innerText =
+        "Original bill not found.";
+
+    return;
+
+}
 
 
                 console.log(
@@ -3238,13 +3867,64 @@ if (customerName) {
 
 if (customerMobile) {
 
-    customerMobile.addEventListener("input", function () {
+    customerMobile.addEventListener(
+        "input",
+        async function () {
 
-        this.value = this.value
-            .replace(/\D/g, "")
-            .slice(0, 10);
+            this.value = this.value
+                .replace(/\D/g, "")
+                .slice(0, 10);
 
-    });
+            const mobile =
+                this.value.trim();
+
+availableStoreCredit = null;
+
+updateStoreCreditAvailabilityCard();
+
+if (mobile.length !== 10) {
+
+    return;
+
+}
+
+            try {
+
+                const storeCredit =
+                    await window.electronAPI
+                        .getAvailableStoreCreditByMobile(
+                            mobile
+                        );
+
+if (!storeCredit) {
+
+    updateStoreCreditAvailabilityCard();
+
+    return;
+
+}
+
+availableStoreCredit =
+    storeCredit;
+
+updateStoreCreditAvailabilityCard();
+
+            }
+catch (error) {
+
+    availableStoreCredit = null;
+
+    updateStoreCreditAvailabilityCard();
+
+    console.error(
+        "Available Store Credit lookup failed:",
+        error
+    );
+
+}
+
+        }
+    );
 
 }
 
@@ -3560,6 +4240,19 @@ function clearCurrentBill(){
 
     billItems = [];
 
+        appliedStoreCredit = null;
+
+    availableStoreCredit = null;
+
+    if (storeCreditAppliedAmount) {
+
+        storeCreditAppliedAmount.innerText =
+            "₹0.00";
+
+    }
+
+    updateStoreCreditAvailabilityCard();
+
     applyBillingMode("SALE");
 
     renderBill();
@@ -3814,26 +4507,31 @@ function loadPaymentSummary(){
     const gross =
         Number(
             document.getElementById("grossAmount")
-            .innerText.replace("₹","")
-        );
+                .innerText
+                .replace(/[^0-9.-]/g, "")
+        ) || 0;
 
     const discount =
         Number(
             document.getElementById("discountAmount")
-            .innerText.replace("₹","")
-        );
+                .innerText
+                .replace(/[^0-9.-]/g, "")
+        ) || 0;
 
     const gst =
         Number(
             document.getElementById("gstAmount")
-            .innerText.replace("₹","")
-        );
+                .innerText
+                .replace(/[^0-9.-]/g, "")
+        ) || 0;
 
     const net =
         Number(
             document.getElementById("netAmount")
-            .innerText.replace("₹","")
-        );
+                .innerText
+                .replace(/[^0-9.-]/g, "")
+        ) || 0;
+        
     let totalQty = 0;
 
         billItems.forEach(item=>{
@@ -3861,79 +4559,93 @@ document.getElementById("paymentQty").innerText =
         "₹" + Math.round(net)
 
 }
+
+
 function calculatePayment(){
 
-const cash =
-parseFloat(
-document.getElementById("cashAmount").value
-) || 0;
+    const cash =
+        parseFloat(
+            document.getElementById("cashAmount").value
+        ) || 0;
 
-const upi =
-parseFloat(
-document.getElementById("upiAmount").value
-) || 0;
+    const upi =
+        parseFloat(
+            document.getElementById("upiAmount").value
+        ) || 0;
 
-const card =
-parseFloat(
-document.getElementById("cardAmount").value
-) || 0;
+    const card =
+        parseFloat(
+            document.getElementById("cardAmount").value
+        ) || 0;
+
+    const storeCreditAmount =
+        appliedStoreCredit
+            ? Number(appliedStoreCredit.amount)
+            : 0;
+
+    const actualTotal =
+        cash + upi + card + storeCreditAmount;
+
     const total =
-        cash + upi + card;
+        Math.round(actualTotal);
 
-  const payable =
-Math.round(
-Number(
-document.getElementById("paymentNet")
-.innerText.replace("₹","")
-)
-);
-   
+    const paymentNetText =
+        document
+            .getElementById("paymentNet")
+            .innerText;
 
-const label =
-    document.getElementById("balanceLabel");
+    const payable =
+        Math.round(
+            Number(
+                paymentNetText.replace(
+                    /[^0-9.-]/g,
+                    ""
+                )
+            )
+        );
+
+    const label =
+        document.getElementById("balanceLabel");
 
     document.getElementById("totalReceived").innerText =
-        "₹" + total.toFixed(2);
+        "₹" + total;
 
     const balance =
-    total - payable;
+        total - payable;
 
-document.getElementById("balanceAmount").innerText =
-    "₹" + Math.abs(balance).toFixed(2);
+    document.getElementById("balanceAmount").innerText =
+        "₹" + Math.abs(balance);
 
-if(balance < -0.01){
+    if (balance < -0.01) {
 
-    label.innerText =
-        "Balance Due";
+        label.innerText =
+            "Balance Due";
 
+    }
+    else if (balance > 0.01) {
 
-}
-else if(balance > 0.01){
+        label.innerText =
+            "Change";
 
-    label.innerText =
-        "Change";
-}
+    }
+    else {
 
-else{
+        label.innerText =
+            "Change";
 
-    label.innerText =
-        "Change";
-
-
-
-}
+    }
 
     const difference =
-    Math.abs(total - payable);
+        Math.abs(total - payable);
 
-const enable =
-    difference <= 0.01;
+    const enable =
+        difference <= 0.01;
 
-document.getElementById("saveBillBtn").disabled =
-    !enable;
+    document.getElementById("saveBillBtn").disabled =
+        !enable;
 
-document.getElementById("printBillBtn").disabled =
-    !enable;
+    document.getElementById("printBillBtn").disabled =
+        !enable;
 
 }
 
@@ -3992,23 +4704,17 @@ else if (bill.category === "STORE CREDIT") {
 
 }
 
-else {
+else if (bill.category === "RETURN") {
 
     actionView = `
         <button
             class="view-btn"
-            disabled>
+            onclick="viewReturn('${bill.reference_no}')">
             👁 View
         </button>
     `;
 
-    actionPrint = `
-        <button
-            class="print-btn"
-            disabled>
-            🖨 Reprint
-        </button>
-    `;
+    actionPrint = "";
 
 }
 
@@ -4237,6 +4943,222 @@ else {
 
 }
 
+/* =====================================
+   VIEW RETURN
+===================================== */
+
+async function viewReturn(returnNo) {
+
+    try {
+
+        const details =
+            await window.electronAPI.getReturnDetails(
+                returnNo
+            );
+
+        if (!details) {
+
+            alert(
+                "Unable to load Return details."
+            );
+
+            return;
+
+        }
+
+        billHistoryScreen.style.display = "none";
+
+        document.getElementById(
+            "viewReturnScreen"
+        ).style.display = "block";
+
+
+        document.getElementById(
+            "viewReturnNo"
+        ).innerText =
+            details.return_no || "-";
+
+
+        document.getElementById(
+            "viewReturnOriginalBill"
+        ).innerText =
+            details.original_bill_no || "-";
+
+
+        document.getElementById(
+            "viewReturnCustomer"
+        ).innerText =
+            details.customer_name || "-";
+
+
+        document.getElementById(
+            "viewReturnMobile"
+        ).innerText =
+            details.customer_mobile || "-";
+
+
+        document.getElementById(
+            "viewReturnReason"
+        ).innerText =
+            details.return_reason || "-";
+
+
+        document.getElementById(
+            "viewReturnRemarks"
+        ).innerText =
+            details.remarks || "-";
+
+
+        document.getElementById(
+            "viewReturnCreatedBy"
+        ).innerText =
+            details.created_by || "-";
+
+
+        document.getElementById(
+            "viewReturnAmount"
+        ).innerText =
+            Number(
+                details.return_amount || 0
+            ).toFixed(2);
+
+
+        document.getElementById(
+            "viewReturnDate"
+        ).innerText =
+            details.created_at
+                ? new Date(
+                    details.created_at
+                ).toLocaleDateString(
+                    "en-GB"
+                ).replace(/\//g, "-")
+                : "-";
+
+
+        document.getElementById(
+            "viewReturnStoreCreditNo"
+        ).innerText =
+            details.store_credit_no || "-";
+
+
+        document.getElementById(
+            "viewReturnStoreCreditStatus"
+        ).innerText =
+            details.store_credit_status || "-";
+
+
+        document.getElementById(
+            "viewReturnStoreCreditIssueDate"
+        ).innerText =
+            details.issue_date
+                ? new Date(
+                    details.issue_date +
+                    "T00:00:00"
+                ).toLocaleDateString(
+                    "en-GB"
+                ).replace(/\//g, "-")
+                : "-";
+
+
+        document.getElementById(
+            "viewReturnStoreCreditValidUntil"
+        ).innerText =
+            details.valid_until
+                ? new Date(
+                    details.valid_until +
+                    "T00:00:00"
+                ).toLocaleDateString(
+                    "en-GB"
+                ).replace(/\//g, "-")
+                : "-";
+
+
+        const itemsBody =
+            document.getElementById(
+                "viewReturnItemsBody"
+            );
+
+        itemsBody.innerHTML = "";
+
+
+        (details.items || []).forEach(
+            item => {
+
+                const row =
+                    document.createElement("tr");
+
+
+                row.innerHTML = `
+
+<td>${item.product_name || "-"}</td>
+
+<td>${item.barcode || "-"}</td>
+
+<td>${Number(item.quantity || 0)}</td>
+
+<td>₹${Number(
+    item.unit_value || 0
+).toFixed(2)}</td>
+
+<td>₹${Number(
+    item.return_value || 0
+).toFixed(2)}</td>
+
+<td>${item.remarks || "-"}</td>
+
+                `;
+
+
+                itemsBody.appendChild(row);
+
+            }
+        );
+
+
+        resetScrollPosition();
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "VIEW RETURN ERROR:",
+            error
+        );
+
+        alert(
+            "Unable to load Return details."
+        );
+
+    }
+
+}
+
+const viewReturnBackBtn =
+    document.getElementById(
+        "viewReturnBackBtn"
+    );
+
+if (viewReturnBackBtn) {
+
+    viewReturnBackBtn.addEventListener(
+        "click",
+        () => {
+
+            document.getElementById(
+                "viewReturnScreen"
+            ).style.display = "none";
+
+            billHistoryScreen.style.display =
+                "block";
+
+            resetScrollPosition();
+
+        }
+    );
+
+}
+
 
 /* =====================================
    REPRINT STORE CREDIT
@@ -4262,7 +5184,7 @@ if (!details) {
 }
 
 const result =
-    await window.electronAPI.printStoreCredit(
+    await window.electronAPI.reprintStoreCredit(
         storeCreditNo
     );
 

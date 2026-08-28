@@ -575,3 +575,313 @@ transform:rotate(360deg);
         0;
 
 }
+
+/* ===========================================
+   STORE CREDIT MODAL
+=========================================== */
+
+.credit-voucher-modal {
+    position: fixed;
+    inset: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background: rgba(0, 0, 0, 0.45);
+
+    z-index: 9999;
+}
+
+.credit-voucher-modal-box {
+    width: 460px;
+    max-width: calc(100vw - 40px);
+
+    background: #ffffff;
+
+    border-radius: 14px;
+
+    box-shadow:
+        0 18px 50px rgba(0, 0, 0, 0.30);
+
+    padding: 24px;
+}
+
+.credit-voucher-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    margin-bottom: 20px;
+}
+
+.credit-voucher-modal-header h2 {
+    margin: 0;
+
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.credit-voucher-close-btn {
+    border: none;
+    background: transparent;
+
+    font-size: 30px;
+    line-height: 1;
+
+    cursor: pointer;
+}
+
+.credit-voucher-input-row {
+    display: flex;
+    gap: 10px;
+
+    margin-bottom: 18px;
+}
+
+.credit-voucher-input-row input {
+    flex: 1;
+
+    height: 44px;
+
+    padding: 0 12px;
+
+    border: 1px solid #cccccc;
+    border-radius: 8px;
+
+    font-size: 16px;
+}
+
+.verify-credit-btn {
+    min-width: 90px;
+
+    border: none;
+    border-radius: 8px;
+
+    background: #9b003b;
+    color: #ffffff;
+
+    font-weight: 700;
+
+    cursor: pointer;
+}
+
+.credit-verification-result {
+    padding: 16px;
+
+    background: #f7f7f7;
+
+    border-radius: 10px;
+
+    margin-bottom: 18px;
+}
+
+.credit-info-row {
+    display: flex;
+    justify-content: space-between;
+
+    margin-bottom: 10px;
+}
+
+.credit-info-row:last-child {
+    margin-bottom: 0;
+}
+
+.credit-status {
+    font-weight: 700;
+}
+
+.credit-voucher-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+
+    gap: 12px;
+}
+
+.modal-cancel-btn,
+.modal-apply-btn {
+    min-width: 150px;
+    height: 44px;
+
+    border-radius: 8px;
+
+    font-weight: 700;
+
+    cursor: pointer;
+}
+
+.modal-cancel-btn {
+    background: #ffffff;
+
+    border: 1px solid #cccccc;
+}
+
+.modal-apply-btn {
+    border: none;
+
+    background: #9b003b;
+    color: #ffffff;
+}
+
+.modal-apply-btn:disabled {
+    opacity: 0.5;
+
+    cursor: not-allowed;
+}
+
+/* ===========================================
+   PAYMENT PAGE STORE CREDIT AVAILABILITY
+=========================================== */
+
+.credit-voucher-payment-section {
+    display: flex;
+    flex-direction: column;
+
+    gap: 12px;
+
+    margin-top: 16px;
+}
+
+.credit-voucher-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    min-height: 72px;
+
+    padding: 12px 14px;
+
+    border: 1px solid #d7d7d7;
+    border-radius: 12px;
+
+    background: #ffffff;
+}
+
+.credit-voucher-btn {
+    min-width: 150px;
+    height: 40px;
+
+    border: none;
+    border-radius: 8px;
+
+    background: #efefef;
+    color: #333333;
+
+    font-weight: 700;
+
+    cursor: pointer;
+}
+
+.credit-voucher-btn:hover {
+    background: #e3e3e3;
+}
+
+.store-credit-payment-card {
+    position: relative;
+
+    align-items: center;
+    justify-content: space-between;
+
+    min-height: 92px;
+
+    padding: 14px 16px;
+
+    border: 1px solid #d7d7d7;
+    border-radius: 12px;
+
+    background: #ffffff;
+}
+
+.credit-voucher-details {
+    display: flex;
+    flex-direction: column;
+
+    gap: 5px;
+}
+
+.credit-voucher-label {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.credit-voucher-availability {
+    font-size: 13px;
+    font-weight: 700;
+
+    color: #777777;
+}
+
+.credit-voucher-validity {
+    font-size: 12px;
+
+    color: #777777;
+}
+
+.credit-voucher-action {
+    display: flex;
+    flex-direction: column;
+
+    align-items: flex-end;
+
+    gap: 8px;
+}
+
+.store-credit-payment-card.store-credit-available {
+    border-color: #9b003b;
+
+    box-shadow:
+        0 0 0 1px rgba(155, 0, 59, 0.10),
+        0 0 18px rgba(155, 0, 59, 0.22);
+
+    animation:
+        storeCreditAttention 1.8s ease-in-out infinite;
+}
+
+.store-credit-payment-card.store-credit-available
+.credit-voucher-label {
+    color: #9b003b;
+}
+
+.store-credit-payment-card.store-credit-available
+.credit-voucher-availability {
+    color: #9b003b;
+
+    font-size: 15px;
+}
+
+.store-credit-payment-card.store-credit-available
+.credit-voucher-btn {
+    background: #9b003b;
+    color: #ffffff;
+
+    animation:
+        storeCreditButtonGlow 1.8s ease-in-out infinite;
+}
+
+@keyframes storeCreditAttention {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-1px);
+    }
+
+}
+
+@keyframes storeCreditButtonGlow {
+
+    0%,
+    100% {
+        box-shadow:
+            0 0 0 rgba(155, 0, 59, 0);
+    }
+
+    50% {
+        box-shadow:
+            0 0 14px rgba(155, 0, 59, 0.45);
+    }
+
+}

@@ -76,7 +76,9 @@ const {
     getNextReturnNumber,
     saveReturn,
     getStoreCreditDetails,
-    getStoreCreditForReprint
+    getAvailableStoreCreditByMobile,
+    getStoreCreditForReprint,
+    getReturnDetails
 } = require("../database/returnService");
 
 const {
@@ -774,6 +776,28 @@ ipcMain.handle(
 );
 
 ipcMain.handle(
+    "get-return-details",
+    async (event, returnNo) => {
+
+        return await getReturnDetails(
+            returnNo
+        );
+
+    }
+);
+
+ipcMain.handle(
+    "get-available-store-credit-by-mobile",
+    async (event, customerMobile) => {
+
+        return await getAvailableStoreCreditByMobile(
+            customerMobile
+        );
+
+    }
+);
+
+ipcMain.handle(
     "get-store-credit-for-reprint",
     async (event, storeCreditNo) => {
 
@@ -920,8 +944,50 @@ ipcMain.handle(
     }
 );
 
+/* =====================================
+   PRINT STORE CREDIT - INITIAL ISSUE
+===================================== */
+
 ipcMain.handle(
     "print-store-credit",
+    async (event, storeCreditData) => {
+
+        try {
+
+            await printStoreCredit(
+                storeCreditData
+            );
+
+            return {
+                success: true
+            };
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "STORE CREDIT INITIAL PRINT ERROR:",
+                error
+            );
+
+            return {
+                success: false,
+                error: error.message
+            };
+
+        }
+
+    }
+);
+
+
+/* =====================================
+   REPRINT STORE CREDIT
+===================================== */
+
+ipcMain.handle(
+    "reprint-store-credit",
     async (event, storeCreditNo) => {
 
         try {
@@ -936,7 +1002,7 @@ ipcMain.handle(
                 return {
                     success: false,
                     error:
-                        "Store Credit can only be reprinted while its status is ISSUED."
+                        "Store Credit cannot be reprinted because it is not currently valid for reprint."
                 };
 
             }
@@ -954,7 +1020,7 @@ ipcMain.handle(
         catch (error) {
 
             console.error(
-                "STORE CREDIT PRINT ERROR:",
+                "STORE CREDIT REPRINT ERROR:",
                 error
             );
 

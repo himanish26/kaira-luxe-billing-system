@@ -326,12 +326,36 @@
 
 }
 
-/* Qty */
+/* Return Qty */
 
-#billTable th:nth-child(5),
-#billTable td:nth-child(5){
+#billTable th:nth-child(6),
+#billTable td:nth-child(6){
 
-    width:70px;
+    width:120px;
+
+    min-width:120px;
+
+    text-align:center;
+
+}
+
+#billTable td:nth-child(6) .qty-input{
+
+    width:90px;
+
+    min-height:46px;
+
+    padding:4px 8px;
+
+    font-size:22px;
+
+    font-weight:700;
+
+    text-align:center;
+
+    border:2px solid #7a002c;
+
+    border-radius:8px;
 
 }
 

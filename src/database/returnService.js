@@ -28,7 +28,6 @@ function getBillForReturn(billNo) {
 
                 }
 
-
                 if (!bill) {
 
                     resolve(null);
@@ -36,52 +35,107 @@ function getBillForReturn(billNo) {
 
                 }
 
+                /*
+                ============================================
+                CHECK WHETHER THIS BILL HAS ALREADY
+                BEEN RETURNED
 
-                db.all(
+                LOCKED RULE:
+                ONE BILL CAN HAVE ONLY ONE RETURN
+                ============================================
+                */
+
+                db.get(
 
                     `
                     SELECT
-                        bi.*,
-
-                        COALESCE(
-                            (
-                                SELECT SUM(ri.quantity)
-                                FROM return_items ri
-
-                                INNER JOIN returns r
-                                    ON r.id = ri.return_id
-
-                                WHERE
-                                    ri.original_bill_item_id = bi.id
-                            ),
-                            0
-                        ) AS already_returned_qty
-
-                    FROM bill_items bi
-
-                    WHERE bi.bill_no = ?
-
-                    ORDER BY bi.id ASC
+                        return_no,
+                        created_at
+                    FROM returns
+                    WHERE original_bill_no = ?
+                    ORDER BY id DESC
+                    LIMIT 1
                     `,
 
                     [billNo],
 
-                    (err, items) => {
+                    (returnErr, existingReturn) => {
 
-                        if (err) {
+                        if (returnErr) {
 
-                            reject(err);
+                            reject(returnErr);
                             return;
 
                         }
 
+                        if (existingReturn) {
 
-                        resolve({
+                            resolve({
 
-                            bill,
-                            items
+                                alreadyReturned: true,
 
-                        });
+                                return_no:
+                                    existingReturn.return_no,
+
+                                returned_at:
+                                    existingReturn.created_at,
+
+                                bill: null,
+
+                                items: []
+
+                            });
+
+                            return;
+
+                        }
+
+                        /*
+                        ========================================
+                        BILL HAS NOT BEEN RETURNED
+                        LOAD RETURNABLE ITEMS
+                        ========================================
+                        */
+
+                        db.all(
+
+                            `
+                            SELECT
+                                bi.*,
+
+                                0 AS already_returned_qty
+
+                            FROM bill_items bi
+
+                            WHERE bi.bill_no = ?
+
+                            ORDER BY bi.id ASC
+                            `,
+
+                            [billNo],
+
+                            (itemsErr, items) => {
+
+                                if (itemsErr) {
+
+                                    reject(itemsErr);
+                                    return;
+
+                                }
+
+                                resolve({
+
+                                    alreadyReturned: false,
+
+                                    bill,
+
+                                    items
+
+                                });
+
+                            }
+
+                        );
 
                     }
 
@@ -257,83 +311,44 @@ function saveReturn(returnData) {
 
             db.run("BEGIN TRANSACTION");
 
-
-            db.run(
-
+            db.get(
                 `
-                INSERT INTO returns
-                (
-                    return_no,
-                    original_bill_no,
-                    customer_id,
-                    customer_name,
-                    customer_mobile,
-                    return_reason,
-                    remarks,
-                    return_amount,
-                    created_by,
-                    created_at
-                )
-
-                VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                SELECT
+                    return_no
+                FROM returns
+                WHERE original_bill_no = ?
+                LIMIT 1
                 `,
-
                 [
-
-                    returnData.return_no,
-
-                    returnData.original_bill_no,
-
-                    returnData.customer_id || null,
-
-                    returnData.customer_name,
-
-                    returnData.customer_mobile,
-
-                    returnData.return_reason,
-
-                    returnData.remarks || "",
-
-                    returnData.return_amount,
-
-                    returnData.created_by ||
-                        "Administrator",
-
-                    new Date().toISOString()
-
+                    returnData.original_bill_no
                 ],
+                (checkErr, existingReturn) => {
 
-                function(err) {
-
-                    if (err) {
+                    if (checkErr) {
 
                         db.run("ROLLBACK");
-
-                        reject(err);
-
+                        reject(checkErr);
                         return;
 
                     }
 
+                    /*
+                    ============================================
+                    HARD LOCK
+                    ONE ORIGINAL BILL CAN HAVE ONLY ONE RETURN
+                    ============================================
+                    */
 
-                    const returnId =
-                        this.lastID;
+                    if (existingReturn) {
 
-
-                    let pending =
-                        returnData.items.length;
-
-
-                    if (pending === 0) {
-
-                        db.run(
-                            "ROLLBACK"
-                        );
+                        db.run("ROLLBACK");
 
                         reject(
                             new Error(
-                                "No return items selected."
+                                "RETURN COMPLETED / FURTHER RETURNS NOT ALLOWED\n\n" +
+                                "This original bill has already been returned.\n\n" +
+                                "Return No: " +
+                                existingReturn.return_no
                             )
                         );
 
@@ -341,244 +356,285 @@ function saveReturn(returnData) {
 
                     }
 
-
-                    let failed = false;
-
-
-                    returnData.items.forEach(
-                        item => {
-
-                            db.run(
-
-                                `
-                                INSERT INTO return_items
-                                (
-                                    return_id,
-                                    product_id,
-                                    barcode,
-                                    product_name,
-                                    original_bill_item_id,
-                                    quantity,
-                                    unit_value,
-                                    return_value,
-                                    remarks,
-                                    created_at
-                                )
-
-                                VALUES
-                                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                `,
-
-                                [
-
-                                    returnId,
-
-                                    item.product_id || null,
-
-                                    item.barcode || "",
-
-                                    item.product_name || "",
-
-                                    item.original_bill_item_id,
-
-                                    item.quantity,
-
-                                    item.unit_value,
-
-                                    item.return_value,
-
-                                    item.remarks || "",
-
-                                    new Date().toISOString()
-
-                                ],
-
-                                function(err) {
-
-                                    if (failed) {
-
-                                        return;
-
-                                    }
-
-
-                                    if (err) {
-
-                                        failed = true;
-
-                                        db.run(
-                                            "ROLLBACK"
-                                        );
-
-                                        reject(err);
-
-                                        return;
-
-                                    }
-
-
-                                    pending--;
-
-
-if (pending === 0) {
-
-    getNextStoreCreditNumber()
-
-        .then(storeCreditNo => {
-
-            const issueDate =
-                new Date();
-
-            const validUntil =
-                new Date(issueDate);
-
-            validUntil.setDate(
-                validUntil.getDate() + 180
-            );
-
-            const issueDateText =
-                issueDate
-                    .toISOString()
-                    .split("T")[0];
-
-            const validUntilText =
-                validUntil
-                    .toISOString()
-                    .split("T")[0];
-
-            db.run(
-                `
-                INSERT INTO store_credits
-                (
-                    store_credit_no,
-                    return_id,
-                    original_bill_no,
-                    customer_id,
-                    customer_name,
-                    customer_mobile,
-                    issue_date,
-                    valid_until,
-                    original_amount,
-                    remaining_balance,
-                    status,
-                    created_by,
-                    created_at
-                )
-
-                VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                `,
-
-                [
-                    storeCreditNo,
-
-                    returnId,
-
-                    returnData.original_bill_no,
-
-                    returnData.customer_id || null,
-
-                    returnData.customer_name,
-
-                    returnData.customer_mobile,
-
-                    issueDateText,
-
-                    validUntilText,
-
-                    returnData.return_amount,
-
-                    returnData.return_amount,
-
-                    "ISSUED",
-
-                    returnData.created_by ||
-                        "Administrator",
-
-                    new Date().toISOString()
-                ],
-
-                function(storeCreditErr) {
-
-                    if (storeCreditErr) {
-
-                        db.run(
-                            "ROLLBACK"
-                        );
-
-                        reject(
-                            storeCreditErr
-                        );
-
-                        return;
-                    }
-
-
                     db.run(
-                        "COMMIT",
+                        `
+                        INSERT INTO returns
+                        (
+                            return_no,
+                            original_bill_no,
+                            customer_id,
+                            customer_name,
+                            customer_mobile,
+                            return_reason,
+                            remarks,
+                            return_amount,
+                            created_by,
+                            created_at
+                        )
 
-                        commitErr => {
+                        VALUES
+                        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        `,
+                        [
+                            returnData.return_no,
+                            returnData.original_bill_no,
+                            returnData.customer_id || null,
+                            returnData.customer_name,
+                            returnData.customer_mobile,
+                            returnData.return_reason,
+                            returnData.remarks || "",
+                            returnData.return_amount,
+                            returnData.created_by ||
+                                "Administrator",
+                            new Date().toISOString()
+                        ],
+                        function(err) {
 
-                            if (commitErr) {
+                            if (err) {
+
+                                db.run("ROLLBACK");
+                                reject(err);
+                                return;
+
+                            }
+
+                            const returnId =
+                                this.lastID;
+
+                            let pending =
+                                returnData.items.length;
+
+                            if (pending === 0) {
+
+                                db.run("ROLLBACK");
 
                                 reject(
-                                    commitErr
+                                    new Error(
+                                        "No return items selected."
+                                    )
                                 );
 
                                 return;
+
                             }
 
+                            let failed = false;
 
-                            resolve({
+                            returnData.items.forEach(
+                                item => {
 
-                                success: true,
+                                    db.run(
+                                        `
+                                        INSERT INTO return_items
+                                        (
+                                            return_id,
+                                            product_id,
+                                            barcode,
+                                            product_name,
+                                            original_bill_item_id,
+                                            quantity,
+                                            unit_value,
+                                            return_value,
+                                            remarks,
+                                            created_at
+                                        )
 
-                                return_id:
-                                    returnId,
+                                        VALUES
+                                        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                        `,
+                                        [
+                                            returnId,
+                                            item.product_id || null,
+                                            item.barcode || "",
+                                            item.product_name || "",
+                                            item.original_bill_item_id,
+                                            item.quantity,
+                                            item.unit_value,
+                                            item.return_value,
+                                            item.remarks || "",
+                                            new Date().toISOString()
+                                        ],
+                                        function(itemErr) {
 
-                                return_no:
-                                    returnData.return_no,
+                                            if (failed) {
 
-                                store_credit_no:
-                                    storeCreditNo,
+                                                return;
 
-                                valid_until:
-                                    validUntilText
+                                            }
 
-                            });
+                                            if (itemErr) {
 
-                        }
+                                                failed = true;
 
-                    );
+                                                db.run(
+                                                    "ROLLBACK"
+                                                );
 
-                }
+                                                reject(itemErr);
 
-            );
+                                                return;
 
-        })
+                                            }
 
-        .catch(error => {
+                                            pending--;
 
-            db.run(
-                "ROLLBACK"
-            );
+                                            if (pending !== 0) {
 
-            reject(error);
+                                                return;
 
-        });
+                                            }
 
-                                    }
+                                            getNextStoreCreditNumber()
+
+                                                .then(
+                                                    storeCreditNo => {
+
+                                                        const issueDate =
+                                                            new Date();
+
+                                                        const validUntil =
+                                                            new Date(
+                                                                issueDate
+                                                            );
+
+                                                        validUntil.setDate(
+                                                            validUntil.getDate() +
+                                                            180
+                                                        );
+
+                                                        const issueDateText =
+                                                            issueDate
+                                                                .toISOString()
+                                                                .split("T")[0];
+
+                                                        const validUntilText =
+                                                            validUntil
+                                                                .toISOString()
+                                                                .split("T")[0];
+
+                                                        db.run(
+                                                            `
+                                                            INSERT INTO store_credits
+                                                            (
+                                                                store_credit_no,
+                                                                return_id,
+                                                                original_bill_no,
+                                                                customer_id,
+                                                                customer_name,
+                                                                customer_mobile,
+                                                                issue_date,
+                                                                valid_until,
+                                                                original_amount,
+                                                                remaining_balance,
+                                                                status,
+                                                                created_by,
+                                                                created_at
+                                                            )
+
+                                                            VALUES
+                                                            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                                            `,
+                                                            [
+                                                                storeCreditNo,
+                                                                returnId,
+                                                                returnData.original_bill_no,
+                                                                returnData.customer_id || null,
+                                                                returnData.customer_name,
+                                                                returnData.customer_mobile,
+                                                                issueDateText,
+                                                                validUntilText,
+                                                                returnData.return_amount,
+                                                                returnData.return_amount,
+                                                                "ISSUED",
+                                                                returnData.created_by ||
+                                                                    "Administrator",
+                                                                new Date().toISOString()
+                                                            ],
+                                                            function(
+                                                                storeCreditErr
+                                                            ) {
+
+                                                                if (
+                                                                    storeCreditErr
+                                                                ) {
+
+                                                                    db.run(
+                                                                        "ROLLBACK"
+                                                                    );
+
+                                                                    reject(
+                                                                        storeCreditErr
+                                                                    );
+
+                                                                    return;
+
+                                                                }
+
+                                                                db.run(
+                                                                    "COMMIT",
+                                                                    commitErr => {
+
+                                                                        if (
+                                                                            commitErr
+                                                                        ) {
+
+                                                                            db.run(
+                                                                                "ROLLBACK"
+                                                                            );
+
+                                                                            reject(
+                                                                                commitErr
+                                                                            );
+
+                                                                            return;
+
+                                                                        }
+
+                                                                        resolve({
+                                                                            success: true,
+
+                                                                            return_id:
+                                                                                returnId,
+
+                                                                            return_no:
+                                                                                returnData.return_no,
+
+                                                                            store_credit_no:
+                                                                                storeCreditNo,
+
+                                                                            valid_until:
+                                                                                validUntilText
+                                                                        });
+
+                                                                    }
+                                                                );
+
+                                                            }
+                                                        );
+
+                                                    }
+                                                )
+
+                                                .catch(error => {
+
+                                                    db.run(
+                                                        "ROLLBACK"
+                                                    );
+
+                                                    reject(error);
+
+                                                });
+
+                                        }
+                                    );
 
                                 }
-
                             );
 
                         }
-
                     );
 
                 }
-
             );
 
         });
@@ -653,7 +709,7 @@ function getStoreCreditDetails(storeCreditNo) {
 
                 if (
 
-                    row.status === "ACTIVE" &&
+                    row.status === "ISSUED" &&
 
                     row.valid_until < today
 
@@ -703,10 +759,90 @@ function getStoreCreditDetails(storeCreditNo) {
 }
 
 /* ===========================================
+   GET AVAILABLE STORE CREDIT BY MOBILE
+=========================================== */
+
+function getAvailableStoreCreditByMobile(
+    customerMobile
+) {
+
+    return new Promise((resolve, reject) => {
+
+        const today =
+            new Date()
+                .toISOString()
+                .split("T")[0];
+
+        db.get(
+
+            `
+            SELECT
+                sc.store_credit_no,
+                sc.customer_name,
+                sc.customer_mobile,
+                sc.issue_date,
+                sc.valid_until,
+                sc.original_amount,
+                sc.remaining_balance,
+                sc.status
+
+            FROM store_credits sc
+
+            WHERE
+                sc.customer_mobile = ?
+                AND sc.status = 'ISSUED'
+                AND sc.remaining_balance > 0
+                AND sc.valid_until >= ?
+
+            ORDER BY
+                sc.issue_date ASC,
+                sc.id ASC
+
+            LIMIT 1
+            `,
+
+            [
+                customerMobile,
+                today
+            ],
+
+            (err, row) => {
+
+                if (err) {
+
+                    reject(err);
+                    return;
+
+                }
+
+                resolve(row || null);
+
+            }
+
+        );
+
+    });
+
+}
+
+/* ===========================================
    GET STORE CREDIT FOR REPRINT
 =========================================== */
 
 function getStoreCreditForReprint(storeCreditNo) {
+
+    const now = new Date();
+
+    const today =
+        new Intl.DateTimeFormat(
+            "en-CA",
+            {
+                timeZone: "Asia/Kolkata",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit"
+            }
+        ).format(now);
 
     return new Promise((resolve, reject) => {
 
@@ -738,18 +874,16 @@ function getStoreCreditForReprint(storeCreditNo) {
             LEFT JOIN returns r
                 ON r.id = sc.return_id
 
-WHERE
-    sc.store_credit_no = ?
-    AND sc.status = 'ACTIVE'
-    AND sc.valid_until >= ?
+            WHERE
+                sc.store_credit_no = ?
+                AND sc.status = 'ISSUED'
+                AND sc.valid_until >= ?
             `,
 
-[
-    storeCreditNo,
-    new Date()
-        .toISOString()
-        .split("T")[0]
-],
+            [
+                storeCreditNo,
+                today
+            ],
 
             (err, row) => {
 
@@ -761,6 +895,117 @@ WHERE
                 }
 
                 resolve(row || null);
+
+            }
+
+        );
+
+    });
+
+}
+
+/* ===========================================
+   GET RETURN DETAILS
+=========================================== */
+
+function getReturnDetails(returnNo) {
+
+    return new Promise((resolve, reject) => {
+
+        db.get(
+
+            `
+            SELECT
+                r.return_no,
+                r.original_bill_no,
+                r.customer_name,
+                r.customer_mobile,
+                r.return_reason,
+                r.remarks,
+                r.return_amount,
+                r.created_by,
+                r.created_at,
+
+sc.store_credit_no,
+sc.status AS store_credit_status,
+sc.issue_date,
+sc.valid_until
+
+            FROM returns r
+
+            LEFT JOIN store_credits sc
+                ON sc.return_id = r.id
+
+            WHERE r.return_no = ?
+            `,
+
+            [
+                returnNo
+            ],
+
+            (err, returnRow) => {
+
+                if (err) {
+
+                    reject(err);
+                    return;
+
+                }
+
+                if (!returnRow) {
+
+                    resolve(null);
+                    return;
+
+                }
+
+                db.all(
+
+                    `
+                    SELECT
+                        product_id,
+                        barcode,
+                        product_name,
+                        quantity,
+                        unit_value,
+                        return_value,
+                        remarks
+
+                    FROM return_items
+
+                    WHERE return_id = (
+                        SELECT id
+                        FROM returns
+                        WHERE return_no = ?
+                    )
+
+                    ORDER BY id ASC
+                    `,
+
+                    [
+                        returnNo
+                    ],
+
+                    (itemErr, items) => {
+
+                        if (itemErr) {
+
+                            reject(itemErr);
+                            return;
+
+                        }
+
+                        resolve({
+
+                            ...returnRow,
+
+                            items: items || []
+
+                        });
+
+                    }
+
+                );
 
             }
 
@@ -782,6 +1027,10 @@ module.exports = {
 
     getStoreCreditDetails,
 
-    getStoreCreditForReprint
+    getAvailableStoreCreditByMobile,
+
+    getStoreCreditForReprint,
+
+    getReturnDetails
 
 };
