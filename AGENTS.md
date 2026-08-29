@@ -2,8 +2,29 @@
 
 ## Project
 Kaira Luxe Billing System (KLBS)
-Current target: Version 1.0.0 RC5
+Current target: Version 1.0.0 RC8
 Platform: Windows desktop application using Node.js/Electron and SQLite.
+
+## Platform Authority
+
+KLBS is a Windows-only production application.
+
+Production target:
+- Windows 10/11
+- x64
+- Electron packaged as Windows EXE/installer
+
+macOS may be used only as a development environment.
+
+When running on macOS:
+- Do NOT introduce macOS-specific production behavior.
+- Do NOT change Windows paths, packaging, printing, filesystem, backup/restore, installer, or platform-specific logic merely to make development work on macOS.
+- Do NOT replace Windows-compatible implementations with macOS-specific alternatives.
+- Do NOT treat successful macOS execution as proof of Windows compatibility.
+- Preserve existing Windows production behavior.
+- If a task requires platform-specific behavior, Windows is authoritative.
+- Packaging, printer, installer, Windows filesystem, permission, and production deployment changes must be verified on Windows before approval.
+- Do NOT modify electron-builder Windows configuration merely because the current development host is macOS.
 
 ## Roles
 ChatGPT is the project architect/specification authority and reviewer.
