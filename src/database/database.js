@@ -225,6 +225,24 @@ function createTables() {
 
                 auto_backup_time TEXT DEFAULT '21:30',
 
+                smtp_host TEXT DEFAULT 'smtp.gmail.com',
+
+                smtp_port INTEGER DEFAULT 587,
+
+                smtp_secure INTEGER DEFAULT 0,
+
+                smtp_user TEXT,
+
+                smtp_password TEXT,
+
+                smtp_from TEXT,
+
+                ff_enabled INTEGER DEFAULT 1,
+
+                ff_discount_percent REAL DEFAULT 20,
+
+                ff_pin TEXT,
+
                 last_updated TEXT
 
             )
@@ -307,8 +325,6 @@ Berhampur-760001',
     )
 `);
 
-        runDatabaseMigrations();
-
         console.log("All Tables Created Successfully");
     });
 
@@ -316,271 +332,169 @@ Berhampur-760001',
 
 function runDatabaseMigrations() {
 
-    db.all(
-        "PRAGMA table_info(settings)",
-        [],
-        (err, columns) => {
+    return new Promise((resolve, reject) => {
 
-            if (err) {
+        db.all(
+            "PRAGMA table_info(settings)",
+            [],
+            async (err, columns) => {
 
-                console.error(
-                    "Migration Error:",
-                    err
+                if (err) {
+                    reject(err);
+                    return;
+                }
+
+                const existingColumns =
+                    columns.map(column => column.name);
+
+                const migrations = [
+                    {
+                        name: "backup_location",
+                        sql: `ALTER TABLE settings ADD COLUMN backup_location TEXT`
+                    },
+                    {
+                        name: "auto_backup_time",
+                        sql: `ALTER TABLE settings ADD COLUMN auto_backup_time TEXT DEFAULT '21:30'`
+                    },
+                    {
+                        name: "default_printer",
+                        sql: `ALTER TABLE settings ADD COLUMN default_printer TEXT`
+                    },
+                    {
+                        name: "smtp_host",
+                        sql: `ALTER TABLE settings ADD COLUMN smtp_host TEXT DEFAULT 'smtp.gmail.com'`
+                    },
+                    {
+                        name: "smtp_port",
+                        sql: `ALTER TABLE settings ADD COLUMN smtp_port INTEGER DEFAULT 587`
+                    },
+                    {
+                        name: "smtp_secure",
+                        sql: `ALTER TABLE settings ADD COLUMN smtp_secure INTEGER DEFAULT 0`
+                    },
+                    {
+                        name: "smtp_user",
+                        sql: `ALTER TABLE settings ADD COLUMN smtp_user TEXT`
+                    },
+                    {
+                        name: "smtp_password",
+                        sql: `ALTER TABLE settings ADD COLUMN smtp_password TEXT`
+                    },
+                    {
+                        name: "smtp_from",
+                        sql: `ALTER TABLE settings ADD COLUMN smtp_from TEXT`
+                    },
+                    {
+                        name: "ff_enabled",
+                        sql: `ALTER TABLE settings ADD COLUMN ff_enabled INTEGER DEFAULT 1`
+                    },
+                    {
+                        name: "ff_discount_percent",
+                        sql: `ALTER TABLE settings ADD COLUMN ff_discount_percent REAL DEFAULT 20`
+                    },
+                    {
+                        name: "ff_pin",
+                        sql: `ALTER TABLE settings ADD COLUMN ff_pin TEXT`
+                    }
+                ].filter(
+                    migration =>
+                        !existingColumns.includes(
+                            migration.name
+                        )
                 );
 
-                return;
+                try {
+
+                    for (const migration of migrations) {
+
+                        await new Promise(
+                            (alterResolve, alterReject) => {
+
+                                db.run(
+                                    migration.sql,
+                                    alterErr => {
+
+                                        if (alterErr) {
+                                            alterReject(alterErr);
+                                            return;
+                                        }
+
+                                        console.log(
+                                            `✓ Added column: ${migration.name}`
+                                        );
+
+                                        alterResolve();
+
+                                    }
+                                );
+
+                            }
+                        );
+
+                    }
+
+                    resolve();
+
+                }
+                catch (migrationErr) {
+                    reject(migrationErr);
+                }
 
             }
+        );
 
-            const existingColumns =
-                columns.map(c => c.name);
-
-
-            if (!existingColumns.includes("backup_location")) {
-
-                db.run(`
-                    ALTER TABLE settings
-                    ADD COLUMN backup_location TEXT
-                `);
-
-                console.log(
-                    "✓ Added column: backup_location"
-                );
-
-            }
-
-
-            if (!existingColumns.includes("auto_backup_time")) {
-
-                db.run(`
-                    ALTER TABLE settings
-                    ADD COLUMN auto_backup_time
-                    TEXT DEFAULT '21:30'
-                `);
-
-                console.log(
-                    "✓ Added column: auto_backup_time"
-                );
-
-            }
-
-
-            if (!existingColumns.includes("default_printer")) {
-
-                db.run(`
-                    ALTER TABLE settings
-                    ADD COLUMN default_printer TEXT
-                `);
-
-                console.log(
-                    "✓ Added column: default_printer"
-                );
-
-            }
-
-
-            if (!existingColumns.includes("smtp_host")) {
-
-                db.run(`
-                    ALTER TABLE settings
-                    ADD COLUMN smtp_host
-                    TEXT DEFAULT 'smtp.gmail.com'
-                `);
-
-                console.log(
-                    "✓ Added column: smtp_host"
-                );
-
-            }
-
-
-            if (!existingColumns.includes("smtp_port")) {
-
-                db.run(`
-                    ALTER TABLE settings
-                    ADD COLUMN smtp_port
-                    INTEGER DEFAULT 587
-                `);
-
-                console.log(
-                    "✓ Added column: smtp_port"
-                );
-
-            }
-
-
-            if (!existingColumns.includes("smtp_secure")) {
-
-                db.run(`
-                    ALTER TABLE settings
-                    ADD COLUMN smtp_secure
-                    INTEGER DEFAULT 0
-                `);
-
-                console.log(
-                    "✓ Added column: smtp_secure"
-                );
-
-            }
-
-
-            if (!existingColumns.includes("smtp_user")) {
-
-                db.run(`
-                    ALTER TABLE settings
-                    ADD COLUMN smtp_user TEXT
-                `);
-
-                console.log(
-                    "✓ Added column: smtp_user"
-                );
-
-            }
-
-
-            if (!existingColumns.includes("smtp_password")) {
-
-                db.run(`
-                    ALTER TABLE settings
-                    ADD COLUMN smtp_password TEXT
-                `);
-
-                console.log(
-                    "✓ Added column: smtp_password"
-                );
-
-            }
-
-
-            if (!existingColumns.includes("smtp_from")) {
-
-                db.run(`
-                    ALTER TABLE settings
-                    ADD COLUMN smtp_from TEXT
-                `);
-
-                console.log(
-                    "✓ Added column: smtp_from"
-                );
-
-            }
-
-            if (!existingColumns.includes("ff_enabled")) {
-
-                db.run(`
-                    ALTER TABLE settings
-                    ADD COLUMN ff_enabled
-                    INTEGER DEFAULT 1
-                `);
-
-                console.log(
-                    "Added column: ff_enabled"
-                );
-
-            }
-
-
-            if (!existingColumns.includes("ff_discount_percent")) {
-
-                db.run(`
-                    ALTER TABLE settings
-                    ADD COLUMN ff_discount_percent
-                    REAL DEFAULT 20
-                `);
-
-                console.log(
-                    "Added column: ff_discount_percent"
-                );
-
-            }
-
-
-            if (!existingColumns.includes("ff_pin")) {
-
-                db.run(`
-                    ALTER TABLE settings
-                    ADD COLUMN ff_pin
-                    TEXT
-                `);
-
-                console.log(
-                    "Added column: ff_pin"
-                );
-
-            }
-
-            db.run(`
-                CREATE TABLE IF NOT EXISTS day_closing (
-
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                    business_date TEXT NOT NULL UNIQUE,
-
-                    closed_at TEXT NOT NULL,
-
-                    total_bills INTEGER NOT NULL,
-
-                    total_items INTEGER NOT NULL,
-
-                    net_sales REAL NOT NULL,
-
-                    cash_sales REAL NOT NULL,
-
-                    upi_sales REAL NOT NULL,
-
-                    card_sales REAL NOT NULL,
-
-                    backup_status TEXT NOT NULL DEFAULT 'PENDING',
-
-                    email_status TEXT NOT NULL DEFAULT 'PENDING',
-
-                    closed_by TEXT NOT NULL DEFAULT 'Administrator',
-
-                    remarks TEXT
-
-                )
-            `);
-
-        }
-
-    );
+    });
 
 }
 
-db.all(
-    "PRAGMA table_info(products)",
-    [],
-    (err, columns) => {
+function migrateProductDiscountColumn() {
 
-        if (err) {
+    return new Promise((resolve, reject) => {
 
-            console.error(
-                "Products Migration Error:",
-                err
-            );
+        db.all(
+            "PRAGMA table_info(products)",
+            [],
+            (err, columns) => {
 
-            return;
+                if (err) {
+                    reject(err);
+                    return;
+                }
 
-        }
+                const existingColumns =
+                    columns.map(column => column.name);
 
-        const existingColumns =
-            columns.map(c => c.name);
+                if (existingColumns.includes("discount")) {
+                    resolve();
+                    return;
+                }
 
-        if (!existingColumns.includes("discount")) {
+                db.run(
+                    `
+                    ALTER TABLE products
+                    ADD COLUMN discount REAL DEFAULT 0
+                    `,
+                    alterErr => {
 
-            db.run(`
-                ALTER TABLE products
-                ADD COLUMN discount REAL DEFAULT 0
-            `);
+                        if (alterErr) {
+                            reject(alterErr);
+                            return;
+                        }
 
-            console.log(
-                "✓ Added column: products.discount"
-            );
+                        console.log(
+                            "✓ Added column: products.discount"
+                        );
 
-        }
+                        resolve();
 
-    }
-);
+                    }
+                );
+
+            }
+        );
+
+    });
+}
 
 db.run(`
     CREATE TABLE IF NOT EXISTS payment_corrections (
@@ -1839,6 +1753,10 @@ db.serialize(() => {
             }
 
 try {
+
+        await runDatabaseMigrations();
+
+        await migrateProductDiscountColumn();
 
         await initializeSmtpSettings();
 

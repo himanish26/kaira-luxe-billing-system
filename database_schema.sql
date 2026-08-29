@@ -467,9 +467,29 @@ CREATE TABLE settings (
 
                 receipt_message TEXT,
 
+                default_printer TEXT,
+
                 backup_location TEXT,
 
                 auto_backup_time TEXT DEFAULT '21:30',
+
+                smtp_host TEXT DEFAULT 'smtp.gmail.com',
+
+                smtp_port INTEGER DEFAULT 587,
+
+                smtp_secure INTEGER DEFAULT 0,
+
+                smtp_user TEXT,
+
+                smtp_password TEXT,
+
+                smtp_from TEXT,
+
+                ff_enabled INTEGER DEFAULT 1,
+
+                ff_discount_percent REAL DEFAULT 20,
+
+                ff_pin TEXT,
 
                 last_updated TEXT
 
