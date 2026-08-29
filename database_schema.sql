@@ -230,7 +230,7 @@ CREATE TABLE customer_credit_transactions (
 
             id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-            customer_id INTEGER NOT NULL,
+            customer_id INTEGER,
 
             transaction_type TEXT NOT NULL,
 

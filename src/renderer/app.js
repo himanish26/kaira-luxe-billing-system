@@ -2468,10 +2468,10 @@ try {
                 mobile,
 
             amount:
-                returnAmount,
+                result.available_balance,
 
             issue_date:
-                getKLBSBusinessDate(),
+                result.issue_date,
 
             valid_until:
                 result.valid_until

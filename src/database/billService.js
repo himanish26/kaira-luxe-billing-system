@@ -419,67 +419,116 @@ function redeemStoreCreditAndCommit(){
             billData.store_credit.amount
         );
 
-    db.run(
-    `
-    UPDATE store_credits
+    db.get(
+        `
+        SELECT
+            id,
+            customer_id,
+            remaining_balance
+        FROM store_credits
+        WHERE store_credit_no = ?
+          AND TRIM(customer_mobile) = TRIM(?)
+          AND status = 'ISSUED'
+          AND remaining_balance > 0
+          AND ABS(remaining_balance - ?) < 0.01
+          AND valid_until >= ?
+        `,
+        [
+            storeCreditNo,
+            billData.customer_mobile,
+            storeCreditAmount,
+            getBusinessDate()
+        ],
+        (lookupErr, storeCredit) => {
 
-    SET
-        remaining_balance = 0,
-        status = 'REDEEMED'
-
-    WHERE
-        store_credit_no = ?
-
-        AND customer_mobile = ?
-
-        AND status = 'ISSUED'
-
-        AND remaining_balance > 0
-
-        AND ABS(remaining_balance - ?) < 0.01
-
-        AND valid_until >= ?
-    `,
-    [
-        storeCreditNo,
-
-        billData.customer_mobile,
-
-        storeCreditAmount,
-
-        getBusinessDate()
-    ],
-
-        function(err){
-
-            if(err){
-
+            if(lookupErr){
                 db.run("ROLLBACK");
-
-                reject(err);
-
+                reject(lookupErr);
                 return;
-
             }
 
-            if(this.changes !== 1){
-
+            if(!storeCredit){
                 db.run("ROLLBACK");
-
                 reject(
                     new Error(
                         "Store Credit redemption failed. The credit may be invalid, expired, already redeemed, or does not belong to this customer."
                     )
                 );
-
                 return;
-
             }
 
-            commit();
+            const redeemedAmount =
+                Number(storeCredit.remaining_balance);
+
+            db.run(
+                `
+                UPDATE store_credits
+                SET
+                    remaining_balance = 0,
+                    status = 'REDEEMED'
+                WHERE id = ?
+                  AND status = 'ISSUED'
+                  AND remaining_balance = ?
+                `,
+                [storeCredit.id, redeemedAmount],
+                function(updateErr){
+
+                    if(updateErr){
+                        db.run("ROLLBACK");
+                        reject(updateErr);
+                        return;
+                    }
+
+                    if(this.changes !== 1){
+                        db.run("ROLLBACK");
+                        reject(
+                            new Error(
+                                "Store Credit redemption failed. The credit changed before redemption completed."
+                            )
+                        );
+                        return;
+                    }
+
+                    db.run(
+                        `
+                        INSERT INTO customer_credit_transactions
+                        (
+                            customer_id,
+                            transaction_type,
+                            amount,
+                            reference_type,
+                            reference_id,
+                            remarks,
+                            created_by,
+                            created_at
+                        )
+                        VALUES
+                        (?, 'CREDIT_REDEEMED', ?, 'BILL', ?, ?, 'Administrator', ?)
+                        `,
+                        [
+                            storeCredit.customer_id || null,
+                            -Math.abs(redeemedAmount),
+                            billData.bill_no,
+                            `Store Credit ${storeCreditNo}`,
+                            new Date().toISOString()
+                        ],
+                        ledgerErr => {
+
+                            if(ledgerErr){
+                                db.run("ROLLBACK");
+                                reject(ledgerErr);
+                                return;
+                            }
+
+                            commit();
+
+                        }
+                    );
+
+                }
+            );
 
         }
-
     );
 
 }

@@ -232,6 +232,271 @@ function insertReturnItemWithInventory(
 
 }
 
+function normalizeCustomerMobile(value) {
+
+    return String(value || "").trim();
+
+}
+
+function insertReturnCreditLedger(
+    customerId,
+    storeCreditNo,
+    returnNo,
+    amount,
+    createdBy
+) {
+
+    return new Promise((resolve, reject) => {
+
+        db.run(
+            `
+            INSERT INTO customer_credit_transactions
+            (
+                customer_id,
+                transaction_type,
+                amount,
+                reference_type,
+                reference_id,
+                remarks,
+                created_by,
+                created_at
+            )
+            VALUES (?, 'RETURN_CREDIT', ?, 'RETURN', ?, ?, ?, ?)
+            `,
+            [
+                customerId || null,
+                amount,
+                returnNo,
+                `Store Credit ${storeCreditNo}`,
+                createdBy,
+                new Date().toISOString()
+            ],
+            ledgerErr => {
+                if (ledgerErr) {
+                    reject(ledgerErr);
+                    return;
+                }
+                resolve();
+            }
+        );
+
+    });
+
+}
+
+function applyStoreCreditForReturn(
+    returnId,
+    returnData,
+    originalBillNo,
+    createdBy
+) {
+
+    return new Promise((resolve, reject) => {
+
+        const customerMobile =
+            normalizeCustomerMobile(
+                returnData.customer_mobile
+            );
+        const creditAmount =
+            Number(returnData.return_amount);
+        const businessDate = getBusinessDate();
+
+        if (!customerMobile) {
+            reject(
+                new Error(
+                    "Customer mobile number is required for Store Credit."
+                )
+            );
+            return;
+        }
+
+        if (
+            !Number.isFinite(creditAmount) ||
+            creditAmount <= 0
+        ) {
+            reject(
+                new Error(
+                    "Store Credit amount must be greater than zero."
+                )
+            );
+            return;
+        }
+
+        db.get(
+            `
+            SELECT
+                id,
+                store_credit_no,
+                customer_id,
+                issue_date,
+                valid_until,
+                original_amount,
+                remaining_balance
+            FROM store_credits
+            WHERE TRIM(customer_mobile) = ?
+              AND status = 'ISSUED'
+              AND remaining_balance > 0
+              AND valid_until >= ?
+            ORDER BY id ASC
+            LIMIT 1
+            `,
+            [customerMobile, businessDate],
+            (lookupErr, activeCredit) => {
+
+                if (lookupErr) {
+                    reject(lookupErr);
+                    return;
+                }
+
+                if (activeCredit) {
+
+                    db.run(
+                        `
+                        UPDATE store_credits
+                        SET
+                            original_amount =
+                                original_amount + ?,
+                            remaining_balance =
+                                remaining_balance + ?
+                        WHERE id = ?
+                          AND status = 'ISSUED'
+                          AND remaining_balance > 0
+                          AND valid_until >= ?
+                        `,
+                        [
+                            creditAmount,
+                            creditAmount,
+                            activeCredit.id,
+                            businessDate
+                        ],
+                        function(updateErr) {
+
+                            if (updateErr) {
+                                reject(updateErr);
+                                return;
+                            }
+
+                            if (this.changes !== 1) {
+                                reject(
+                                    new Error(
+                                        "Active Store Credit changed before accumulation completed."
+                                    )
+                                );
+                                return;
+                            }
+
+                            insertReturnCreditLedger(
+                                activeCredit.customer_id ||
+                                    returnData.customer_id ||
+                                    null,
+                                activeCredit.store_credit_no,
+                                returnData.return_no,
+                                creditAmount,
+                                createdBy
+                            )
+                                .then(() => resolve({
+                                    store_credit_no:
+                                        activeCredit.store_credit_no,
+                                    issue_date:
+                                        activeCredit.issue_date,
+                                    valid_until:
+                                        activeCredit.valid_until,
+                                    available_balance:
+                                        Number(
+                                            activeCredit.remaining_balance
+                                        ) + creditAmount
+                                }))
+                                .catch(reject);
+
+                        }
+                    );
+
+                    return;
+                }
+
+                getNextStoreCreditNumber()
+                    .then(storeCreditNo => {
+
+                        const validUntil =
+                            addBusinessCalendarDays(
+                                businessDate,
+                                180
+                            );
+
+                        db.run(
+                            `
+                            INSERT INTO store_credits
+                            (
+                                store_credit_no,
+                                return_id,
+                                original_bill_no,
+                                customer_id,
+                                customer_name,
+                                customer_mobile,
+                                issue_date,
+                                valid_until,
+                                original_amount,
+                                remaining_balance,
+                                status,
+                                created_by,
+                                created_at
+                            )
+                            VALUES
+                            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ISSUED', ?, ?)
+                            `,
+                            [
+                                storeCreditNo,
+                                returnId,
+                                originalBillNo,
+                                returnData.customer_id || null,
+                                returnData.customer_name,
+                                customerMobile,
+                                businessDate,
+                                validUntil,
+                                creditAmount,
+                                creditAmount,
+                                createdBy,
+                                new Date().toISOString()
+                            ],
+                            insertErr => {
+
+                                if (insertErr) {
+                                    reject(insertErr);
+                                    return;
+                                }
+
+                                insertReturnCreditLedger(
+                                    returnData.customer_id || null,
+                                    storeCreditNo,
+                                    returnData.return_no,
+                                    creditAmount,
+                                    createdBy
+                                )
+                                    .then(() => resolve({
+                                        store_credit_no:
+                                            storeCreditNo,
+                                        issue_date:
+                                            businessDate,
+                                        valid_until:
+                                            validUntil,
+                                        available_balance:
+                                            creditAmount
+                                    }))
+                                    .catch(reject);
+
+                            }
+                        );
+
+                    })
+                    .catch(reject);
+
+            }
+        );
+
+    });
+
+}
+
 
 /* ===========================================
    GET BILL FOR RETURN
@@ -735,122 +1000,37 @@ function saveReturn(returnData) {
                                     )
                                 )
                                 .then(() =>
-                                    getNextStoreCreditNumber()
+                                    applyStoreCreditForReturn(
+                                        returnId,
+                                        returnData,
+                                        authoritativeBillNo,
+                                        createdBy
+                                    )
                                 )
+                                .then(storeCredit => {
 
-                                                .then(
-                                                    storeCreditNo => {
+                                    db.run(
+                                        "COMMIT",
+                                        commitErr => {
 
-                                                        const issueDateText =
-                                                            getBusinessDate();
+                                            if (commitErr) {
+                                                db.run("ROLLBACK");
+                                                reject(commitErr);
+                                                return;
+                                            }
 
-                                                        const validUntilText =
-                                                            addBusinessCalendarDays(
-                                                                issueDateText,
-                                                                180
-                                                            );
+                                            resolve({
+                                                success: true,
+                                                return_id: returnId,
+                                                return_no:
+                                                    returnData.return_no,
+                                                ...storeCredit
+                                            });
 
-                                                        db.run(
-                                                            `
-                                                            INSERT INTO store_credits
-                                                            (
-                                                                store_credit_no,
-                                                                return_id,
-                                                                original_bill_no,
-                                                                customer_id,
-                                                                customer_name,
-                                                                customer_mobile,
-                                                                issue_date,
-                                                                valid_until,
-                                                                original_amount,
-                                                                remaining_balance,
-                                                                status,
-                                                                created_by,
-                                                                created_at
-                                                            )
+                                        }
+                                    );
 
-                                                            VALUES
-                                                            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                                            `,
-                                                            [
-                                                                storeCreditNo,
-                                                                returnId,
-                                                                authoritativeBillNo,
-                                                                returnData.customer_id || null,
-                                                                returnData.customer_name,
-                                                                returnData.customer_mobile,
-                                                                issueDateText,
-                                                                validUntilText,
-                                                                returnData.return_amount,
-                                                                returnData.return_amount,
-                                                                "ISSUED",
-                                                                createdBy,
-                                                                new Date().toISOString()
-                                                            ],
-                                                            function(
-                                                                storeCreditErr
-                                                            ) {
-
-                                                                if (
-                                                                    storeCreditErr
-                                                                ) {
-
-                                                                    db.run(
-                                                                        "ROLLBACK"
-                                                                    );
-
-                                                                    reject(
-                                                                        storeCreditErr
-                                                                    );
-
-                                                                    return;
-
-                                                                }
-
-                                                                db.run(
-                                                                    "COMMIT",
-                                                                    commitErr => {
-
-                                                                        if (
-                                                                            commitErr
-                                                                        ) {
-
-                                                                            db.run(
-                                                                                "ROLLBACK"
-                                                                            );
-
-                                                                            reject(
-                                                                                commitErr
-                                                                            );
-
-                                                                            return;
-
-                                                                        }
-
-                                                                        resolve({
-                                                                            success: true,
-
-                                                                            return_id:
-                                                                                returnId,
-
-                                                                            return_no:
-                                                                                returnData.return_no,
-
-                                                                            store_credit_no:
-                                                                                storeCreditNo,
-
-                                                                            valid_until:
-                                                                                validUntilText
-                                                                        });
-
-                                                                    }
-                                                                );
-
-                                                            }
-                                                        );
-
-                                                    }
-                                                )
+                                })
 
                                                 .catch(error => {
 

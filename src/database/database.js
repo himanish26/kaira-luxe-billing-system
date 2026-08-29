@@ -755,7 +755,7 @@ db.serialize(() => {
 
             id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-            customer_id INTEGER NOT NULL,
+            customer_id INTEGER,
 
             transaction_type TEXT NOT NULL,
 
@@ -1729,6 +1729,208 @@ function migrateBillPaymentColumns() {
 }
 
 /* ===========================================
+   ALLOW LEDGER ROWS WITHOUT CUSTOMER MASTER ID
+=========================================== */
+
+function migrateCustomerCreditCustomerIdNullable() {
+
+    return new Promise((resolve, reject) => {
+
+        const run = (sql, params = []) =>
+            new Promise((runResolve, runReject) => {
+                db.run(sql, params, runErr => {
+                    if (runErr) {
+                        runReject(runErr);
+                        return;
+                    }
+                    runResolve();
+                });
+            });
+
+        const get = (sql, params = []) =>
+            new Promise((getResolve, getReject) => {
+                db.get(sql, params, (getErr, row) => {
+                    if (getErr) {
+                        getReject(getErr);
+                        return;
+                    }
+                    getResolve(row);
+                });
+            });
+
+        const all = (sql, params = []) =>
+            new Promise((allResolve, allReject) => {
+                db.all(sql, params, (allErr, rows) => {
+                    if (allErr) {
+                        allReject(allErr);
+                        return;
+                    }
+                    allResolve(rows);
+                });
+            });
+
+        let transactionStarted = false;
+
+        (async () => {
+
+            try {
+
+                const columns = await all(
+                    "PRAGMA table_info(customer_credit_transactions)"
+                );
+
+                const customerIdColumn = columns.find(
+                    column => column.name === "customer_id"
+                );
+
+                if (!customerIdColumn) {
+                    throw new Error(
+                        "customer_credit_transactions.customer_id column not found"
+                    );
+                }
+
+                if (Number(customerIdColumn.notnull) === 0) {
+                    resolve();
+                    return;
+                }
+
+                await run("BEGIN IMMEDIATE TRANSACTION");
+                transactionStarted = true;
+
+                const tableDefinition = await get(
+                    `
+                    SELECT sql
+                    FROM sqlite_master
+                    WHERE type = 'table'
+                      AND name = 'customer_credit_transactions'
+                    `
+                );
+
+                if (!tableDefinition || !tableDefinition.sql) {
+                    throw new Error(
+                        "customer_credit_transactions table definition not found"
+                    );
+                }
+
+                const schemaObjects = await all(
+                    `
+                    SELECT type, name, sql
+                    FROM sqlite_master
+                    WHERE tbl_name = 'customer_credit_transactions'
+                      AND type IN ('index', 'trigger')
+                      AND sql IS NOT NULL
+                    ORDER BY type, name
+                    `
+                );
+
+                const beforeRows = await all(
+                    "SELECT * FROM customer_credit_transactions ORDER BY id"
+                );
+
+                let rebuiltSql = tableDefinition.sql.replace(
+                    /CREATE TABLE(?: IF NOT EXISTS)?\s+customer_credit_transactions/i,
+                    "CREATE TABLE customer_credit_transactions_new"
+                );
+
+                rebuiltSql = rebuiltSql.replace(
+                    /(\bcustomer_id\s+INTEGER)\s+NOT\s+NULL/i,
+                    "$1"
+                );
+
+                if (
+                    !/CREATE TABLE customer_credit_transactions_new/i.test(
+                        rebuiltSql
+                    ) ||
+                    /customer_id\s+INTEGER\s+NOT\s+NULL/i.test(
+                        rebuiltSql
+                    )
+                ) {
+                    throw new Error(
+                        "Unable to build nullable customer credit ledger schema"
+                    );
+                }
+
+                const columnList = columns
+                    .map(column =>
+                        `"${String(column.name).replace(/"/g, '""')}"`
+                    )
+                    .join(", ");
+
+                await run(rebuiltSql);
+                await run(
+                    `
+                    INSERT INTO customer_credit_transactions_new
+                    (${columnList})
+                    SELECT ${columnList}
+                    FROM customer_credit_transactions
+                    `
+                );
+                await run("DROP TABLE customer_credit_transactions");
+                await run(
+                    `
+                    ALTER TABLE customer_credit_transactions_new
+                    RENAME TO customer_credit_transactions
+                    `
+                );
+
+                for (const schemaObject of schemaObjects) {
+                    await run(schemaObject.sql);
+                }
+
+                const afterColumns = await all(
+                    "PRAGMA table_info(customer_credit_transactions)"
+                );
+                const afterCustomerId = afterColumns.find(
+                    column => column.name === "customer_id"
+                );
+                const afterRows = await all(
+                    "SELECT * FROM customer_credit_transactions ORDER BY id"
+                );
+
+                if (
+                    !afterCustomerId ||
+                    Number(afterCustomerId.notnull) !== 0 ||
+                    JSON.stringify(beforeRows) !== JSON.stringify(afterRows)
+                ) {
+                    throw new Error(
+                        "Customer credit ledger migration verification failed"
+                    );
+                }
+
+                await run("COMMIT");
+                transactionStarted = false;
+
+                console.log(
+                    "✓ Customer credit ledger customer_id is nullable."
+                );
+                resolve();
+
+            }
+            catch (migrationErr) {
+
+                if (transactionStarted) {
+                    try {
+                        await run("ROLLBACK");
+                    }
+                    catch (rollbackErr) {
+                        console.error(
+                            "Customer credit ledger rollback failed:",
+                            rollbackErr.message
+                        );
+                    }
+                }
+
+                reject(migrationErr);
+
+            }
+
+        })();
+
+    });
+
+}
+
+/* ===========================================
    ENFORCE ONE RETURN PER ORIGINAL BILL
 =========================================== */
 
@@ -2088,6 +2290,8 @@ try {
         await runDatabaseMigrations();
 
         await migrateProductDiscountColumn();
+
+        await migrateCustomerCreditCustomerIdNullable();
 
         await migrateReturnUniquenessEnforcement();
 
