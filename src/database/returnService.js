@@ -5,6 +5,56 @@ const {
     addBusinessCalendarDays
 } = require("./businessDate");
 
+function normalizeOriginalBillNo(value) {
+
+    return String(value || "")
+        .trim()
+        .toUpperCase();
+
+}
+
+function mapReturnDatabaseError(error) {
+
+    const message =
+        error && error.message
+            ? error.message
+            : String(error || "");
+
+    if (
+        message.includes(
+            "KLBS_RETURN_ALREADY_COMPLETED"
+        )
+    ) {
+        return new Error(
+            "RETURN COMPLETED / FURTHER RETURNS NOT ALLOWED\n\n" +
+            "This original bill has already been returned."
+        );
+    }
+
+    if (
+        message.includes(
+            "KLBS_RETURN_ORIGINAL_BILL_REQUIRED"
+        )
+    ) {
+        return new Error(
+            "Original bill number is required for a return."
+        );
+    }
+
+    if (
+        message.includes(
+            "KLBS_RETURN_ORIGINAL_BILL_IMMUTABLE"
+        )
+    ) {
+        return new Error(
+            "Return integrity error: the original bill reference cannot be changed."
+        );
+    }
+
+    return error;
+
+}
+
 
 /* ===========================================
    GET BILL FOR RETURN
@@ -14,15 +64,24 @@ function getBillForReturn(billNo) {
 
     return new Promise((resolve, reject) => {
 
+        const canonicalBillNo =
+            normalizeOriginalBillNo(billNo);
+
+        if (!canonicalBillNo) {
+            resolve(null);
+            return;
+        }
+
         db.get(
 
             `
             SELECT *
             FROM bills
-            WHERE bill_no = ?
+            WHERE UPPER(TRIM(bill_no)) = ?
+            LIMIT 1
             `,
 
-            [billNo],
+            [canonicalBillNo],
 
             (err, bill) => {
 
@@ -57,12 +116,14 @@ function getBillForReturn(billNo) {
                         return_no,
                         created_at
                     FROM returns
-                    WHERE original_bill_no = ?
+                    WHERE
+                        UPPER(TRIM(original_bill_no)) =
+                        UPPER(TRIM(?))
                     ORDER BY id DESC
                     LIMIT 1
                     `,
 
-                    [billNo],
+                    [bill.bill_no],
 
                     (returnErr, existingReturn) => {
 
@@ -117,7 +178,7 @@ function getBillForReturn(billNo) {
                             ORDER BY bi.id ASC
                             `,
 
-                            [billNo],
+                            [bill.bill_no],
 
                             (itemsErr, items) => {
 
@@ -312,20 +373,70 @@ function saveReturn(returnData) {
 
     return new Promise((resolve, reject) => {
 
+        const canonicalBillNo =
+            normalizeOriginalBillNo(
+                returnData.original_bill_no
+            );
+
+        if (!canonicalBillNo) {
+            reject(
+                new Error(
+                    "Original bill number is required for a return."
+                )
+            );
+            return;
+        }
+
+        db.get(
+            `
+            SELECT bill_no
+            FROM bills
+            WHERE UPPER(TRIM(bill_no)) = ?
+            LIMIT 1
+            `,
+            [canonicalBillNo],
+            (billErr, authoritativeBill) => {
+
+                if (billErr) {
+                    reject(billErr);
+                    return;
+                }
+
+                if (!authoritativeBill) {
+                    reject(
+                        new Error(
+                            "Original bill not found."
+                        )
+                    );
+                    return;
+                }
+
+                const authoritativeBillNo =
+                    authoritativeBill.bill_no;
+
         db.serialize(() => {
 
-            db.run("BEGIN TRANSACTION");
+            db.run(
+                "BEGIN IMMEDIATE TRANSACTION",
+                beginErr => {
+
+                    if (beginErr) {
+                        reject(beginErr);
+                        return;
+                    }
 
             db.get(
                 `
                 SELECT
                     return_no
                 FROM returns
-                WHERE original_bill_no = ?
+                WHERE
+                    UPPER(TRIM(original_bill_no)) =
+                    UPPER(TRIM(?))
                 LIMIT 1
                 `,
                 [
-                    returnData.original_bill_no
+                    authoritativeBillNo
                 ],
                 (checkErr, existingReturn) => {
 
@@ -382,7 +493,7 @@ function saveReturn(returnData) {
                         `,
                         [
                             returnData.return_no,
-                            returnData.original_bill_no,
+                            authoritativeBillNo,
                             returnData.customer_id || null,
                             returnData.customer_name,
                             returnData.customer_mobile,
@@ -397,8 +508,25 @@ function saveReturn(returnData) {
 
                             if (err) {
 
-                                db.run("ROLLBACK");
-                                reject(err);
+                                db.run(
+                                    "ROLLBACK",
+                                    rollbackErr => {
+
+                                        if (rollbackErr) {
+                                            console.error(
+                                                "Return rollback failed:",
+                                                rollbackErr.message
+                                            );
+                                        }
+
+                                        reject(
+                                            mapReturnDatabaseError(
+                                                err
+                                            )
+                                        );
+
+                                    }
+                                );
                                 return;
 
                             }
@@ -528,7 +656,7 @@ function saveReturn(returnData) {
                                                             [
                                                                 storeCreditNo,
                                                                 returnId,
-                                                                returnData.original_bill_no,
+                                                                authoritativeBillNo,
                                                                 returnData.customer_id || null,
                                                                 returnData.customer_name,
                                                                 returnData.customer_mobile,
@@ -628,7 +756,13 @@ function saveReturn(returnData) {
                 }
             );
 
+                }
+            );
+
         });
+
+            }
+        );
 
     });
 

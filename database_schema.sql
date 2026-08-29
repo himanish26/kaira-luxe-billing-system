@@ -351,6 +351,46 @@ CREATE INDEX idx_inventory_created_at
 CREATE INDEX idx_return_original_bill
         ON returns(original_bill_no)
     ;
+CREATE INDEX idx_returns_original_bill_canonical
+        ON returns(UPPER(TRIM(original_bill_no)))
+    ;
+CREATE TRIGGER trg_returns_one_per_original_bill_insert
+BEFORE INSERT ON returns
+FOR EACH ROW
+BEGIN
+    SELECT CASE
+        WHEN NEW.original_bill_no IS NULL
+          OR TRIM(NEW.original_bill_no) = ''
+        THEN RAISE(
+            ABORT,
+            'KLBS_RETURN_ORIGINAL_BILL_REQUIRED'
+        )
+    END;
+
+    SELECT CASE
+        WHEN EXISTS (
+            SELECT 1
+            FROM returns
+            WHERE UPPER(TRIM(original_bill_no)) =
+                  UPPER(TRIM(NEW.original_bill_no))
+        )
+        THEN RAISE(
+            ABORT,
+            'KLBS_RETURN_ALREADY_COMPLETED'
+        )
+    END;
+END;
+CREATE TRIGGER trg_returns_original_bill_immutable
+BEFORE UPDATE OF original_bill_no ON returns
+FOR EACH ROW
+WHEN UPPER(TRIM(NEW.original_bill_no)) <>
+     UPPER(TRIM(OLD.original_bill_no))
+BEGIN
+    SELECT RAISE(
+        ABORT,
+        'KLBS_RETURN_ORIGINAL_BILL_IMMUTABLE'
+    );
+END;
 CREATE INDEX idx_return_customer
         ON returns(customer_id)
     ;

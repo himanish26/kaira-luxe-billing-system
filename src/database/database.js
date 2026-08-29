@@ -1728,6 +1728,337 @@ function migrateBillPaymentColumns() {
 
 }
 
+/* ===========================================
+   ENFORCE ONE RETURN PER ORIGINAL BILL
+=========================================== */
+
+function migrateReturnUniquenessEnforcement() {
+
+    return new Promise((resolve, reject) => {
+
+        const run = (sql, params = []) =>
+            new Promise((runResolve, runReject) => {
+
+                db.run(
+                    sql,
+                    params,
+                    runErr => {
+
+                        if (runErr) {
+                            runReject(runErr);
+                            return;
+                        }
+
+                        runResolve();
+
+                    }
+                );
+
+            });
+
+        const get = (sql, params = []) =>
+            new Promise((getResolve, getReject) => {
+
+                db.get(
+                    sql,
+                    params,
+                    (getErr, row) => {
+
+                        if (getErr) {
+                            getReject(getErr);
+                            return;
+                        }
+
+                        getResolve(row);
+
+                    }
+                );
+
+            });
+
+        let transactionStarted = false;
+
+        (async () => {
+
+            try {
+
+                await run("BEGIN IMMEDIATE TRANSACTION");
+                transactionStarted = true;
+
+                const returnsTable = await get(
+                    `
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'table'
+                      AND name = 'returns'
+                    `
+                );
+
+                if (!returnsTable) {
+                    throw new Error(
+                        "Return uniqueness migration failed: returns table not found."
+                    );
+                }
+
+                const preMigrationCounts = await get(
+                    `
+                    SELECT
+                        (SELECT COUNT(*) FROM returns)
+                            AS returns_count,
+                        (SELECT COUNT(*) FROM return_items)
+                            AS return_items_count,
+                        (SELECT COUNT(*) FROM store_credits)
+                            AS store_credits_count,
+                        (
+                            SELECT COUNT(*)
+                            FROM (
+                                SELECT
+                                    UPPER(TRIM(original_bill_no))
+                                        AS canonical_bill
+                                FROM returns
+                                GROUP BY
+                                    UPPER(TRIM(original_bill_no))
+                            )
+                        ) AS canonical_bill_count,
+                        (
+                            SELECT COUNT(*)
+                            FROM (
+                                SELECT
+                                    UPPER(TRIM(original_bill_no))
+                                        AS canonical_bill
+                                FROM returns
+                                GROUP BY
+                                    UPPER(TRIM(original_bill_no))
+                                HAVING COUNT(*) > 1
+                            )
+                        ) AS duplicate_group_count
+                    `
+                );
+
+                await run(
+                    `
+                    CREATE INDEX IF NOT EXISTS
+                        idx_returns_original_bill_canonical
+                    ON returns (
+                        UPPER(TRIM(original_bill_no))
+                    )
+                    `
+                );
+
+                await run(
+                    `
+                    DROP TRIGGER IF EXISTS
+                        trg_returns_one_per_original_bill_insert
+                    `
+                );
+
+                await run(
+                    `
+                    CREATE TRIGGER
+                        trg_returns_one_per_original_bill_insert
+                    BEFORE INSERT ON returns
+                    FOR EACH ROW
+                    BEGIN
+                        SELECT CASE
+                            WHEN NEW.original_bill_no IS NULL
+                              OR TRIM(NEW.original_bill_no) = ''
+                            THEN RAISE(
+                                ABORT,
+                                'KLBS_RETURN_ORIGINAL_BILL_REQUIRED'
+                            )
+                        END;
+
+                        SELECT CASE
+                            WHEN EXISTS (
+                                SELECT 1
+                                FROM returns
+                                WHERE
+                                    UPPER(TRIM(original_bill_no)) =
+                                    UPPER(TRIM(NEW.original_bill_no))
+                            )
+                            THEN RAISE(
+                                ABORT,
+                                'KLBS_RETURN_ALREADY_COMPLETED'
+                            )
+                        END;
+                    END
+                    `
+                );
+
+                await run(
+                    `
+                    DROP TRIGGER IF EXISTS
+                        trg_returns_original_bill_immutable
+                    `
+                );
+
+                await run(
+                    `
+                    CREATE TRIGGER
+                        trg_returns_original_bill_immutable
+                    BEFORE UPDATE OF original_bill_no
+                    ON returns
+                    FOR EACH ROW
+                    WHEN
+                        UPPER(TRIM(NEW.original_bill_no)) <>
+                        UPPER(TRIM(OLD.original_bill_no))
+                    BEGIN
+                        SELECT RAISE(
+                            ABORT,
+                            'KLBS_RETURN_ORIGINAL_BILL_IMMUTABLE'
+                        );
+                    END
+                    `
+                );
+
+                const canonicalIndex = await get(
+                    `
+                    SELECT
+                        name,
+                        [unique] AS is_unique
+                    FROM pragma_index_list('returns')
+                    WHERE name =
+                        'idx_returns_original_bill_canonical'
+                    `
+                );
+
+                if (
+                    !canonicalIndex ||
+                    Number(canonicalIndex.is_unique) !== 0
+                ) {
+                    throw new Error(
+                        "Return uniqueness migration failed: canonical index missing or unique."
+                    );
+                }
+
+                const insertTrigger = await get(
+                    `
+                    SELECT sql
+                    FROM sqlite_master
+                    WHERE type = 'trigger'
+                      AND name =
+                        'trg_returns_one_per_original_bill_insert'
+                    `
+                );
+
+                const immutableTrigger = await get(
+                    `
+                    SELECT sql
+                    FROM sqlite_master
+                    WHERE type = 'trigger'
+                      AND name =
+                        'trg_returns_original_bill_immutable'
+                    `
+                );
+
+                const insertTriggerSql =
+                    insertTrigger && insertTrigger.sql
+                        ? insertTrigger.sql.toUpperCase()
+                        : "";
+
+                const immutableTriggerSql =
+                    immutableTrigger && immutableTrigger.sql
+                        ? immutableTrigger.sql.toUpperCase()
+                        : "";
+
+                if (
+                    !insertTriggerSql.includes(
+                        "KLBS_RETURN_ALREADY_COMPLETED"
+                    ) ||
+                    !insertTriggerSql.includes(
+                        "KLBS_RETURN_ORIGINAL_BILL_REQUIRED"
+                    ) ||
+                    !insertTriggerSql.includes(
+                        "UPPER(TRIM(ORIGINAL_BILL_NO))"
+                    ) ||
+                    !insertTriggerSql.includes(
+                        "UPPER(TRIM(NEW.ORIGINAL_BILL_NO))"
+                    )
+                ) {
+                    throw new Error(
+                        "Return uniqueness migration failed: insert trigger verification failed."
+                    );
+                }
+
+                if (
+                    !immutableTriggerSql.includes(
+                        "KLBS_RETURN_ORIGINAL_BILL_IMMUTABLE"
+                    ) ||
+                    !immutableTriggerSql.includes(
+                        "UPPER(TRIM(NEW.ORIGINAL_BILL_NO))"
+                    ) ||
+                    !immutableTriggerSql.includes(
+                        "UPPER(TRIM(OLD.ORIGINAL_BILL_NO))"
+                    )
+                ) {
+                    throw new Error(
+                        "Return uniqueness migration failed: immutability trigger verification failed."
+                    );
+                }
+
+                const postMigrationCounts = await get(
+                    `
+                    SELECT
+                        (SELECT COUNT(*) FROM returns)
+                            AS returns_count,
+                        (SELECT COUNT(*) FROM return_items)
+                            AS return_items_count,
+                        (SELECT COUNT(*) FROM store_credits)
+                            AS store_credits_count
+                    `
+                );
+
+                if (
+                    preMigrationCounts.returns_count !==
+                        postMigrationCounts.returns_count ||
+                    preMigrationCounts.return_items_count !==
+                        postMigrationCounts.return_items_count ||
+                    preMigrationCounts.store_credits_count !==
+                        postMigrationCounts.store_credits_count
+                ) {
+                    throw new Error(
+                        "Return uniqueness migration failed: business row counts changed."
+                    );
+                }
+
+                await run("COMMIT");
+                transactionStarted = false;
+
+                console.log(
+                    "✓ One-return-per-original-bill enforcement ready: " +
+                    `${preMigrationCounts.canonical_bill_count} canonical bill locks, ` +
+                    `${preMigrationCounts.duplicate_group_count} grandfathered duplicate groups.`
+                );
+
+                resolve();
+
+            }
+            catch (migrationErr) {
+
+                if (transactionStarted) {
+
+                    try {
+                        await run("ROLLBACK");
+                    }
+                    catch (rollbackErr) {
+                        console.error(
+                            "Return uniqueness migration rollback failed:",
+                            rollbackErr.message
+                        );
+                    }
+
+                }
+
+                reject(migrationErr);
+
+            }
+
+        })();
+
+    });
+
+}
+
 // ============================================================
 // DATABASE READY CHECKPOINT
 // All database initialization operations queued above must
@@ -1757,6 +2088,8 @@ try {
         await runDatabaseMigrations();
 
         await migrateProductDiscountColumn();
+
+        await migrateReturnUniquenessEnforcement();
 
         await initializeSmtpSettings();
 
