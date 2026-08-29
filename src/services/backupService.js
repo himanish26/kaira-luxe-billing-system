@@ -8,6 +8,7 @@ const {
 const packageJson = require("../../package.json");
 const archiver = require("archiver");
 const AdmZip = require("adm-zip");
+const sqlite3 = require("sqlite3").verbose();
 const DEFAULT_BACKUP_FOLDER = path.join(
     os.homedir(),
     "Documents",
@@ -19,9 +20,10 @@ const {
     getSettings
 } = require("../database/settingsService");
 
+const database = require("../database/database");
 const {
     closeDatabase
-} = require("../database/database");
+} = database;
 
 const {
 
@@ -42,6 +44,122 @@ function ensureDirectory(folderPath) {
         });
 
     }
+
+}
+
+function createSQLiteSnapshot(snapshotPath) {
+
+    return new Promise((resolve, reject) => {
+        let backup;
+
+        backup = database.backup(
+            snapshotPath,
+            initializeErr => {
+
+            if (initializeErr) {
+                reject(initializeErr);
+                return;
+            }
+
+            backup.step(
+                -1,
+                (stepErr, completed) => {
+
+                    if (stepErr) {
+                        reject(stepErr);
+                        return;
+                    }
+
+                    backup.finish(() => {
+                        if (!completed) {
+                            reject(
+                                new Error(
+                                    "SQLite backup did not complete."
+                                )
+                            );
+                            return;
+                        }
+                        resolve();
+                    });
+
+                }
+            );
+
+        });
+    });
+
+}
+
+function validateSQLiteDatabase(databasePath) {
+
+    return new Promise((resolve, reject) => {
+
+        const validationDb = new sqlite3.Database(
+            databasePath,
+            sqlite3.OPEN_READONLY,
+            openErr => {
+
+                if (openErr) {
+                    reject(openErr);
+                    return;
+                }
+
+                validationDb.get(
+                    "PRAGMA integrity_check",
+                    [],
+                    (integrityErr, integrityRow) => {
+
+                        if (
+                            integrityErr ||
+                            !integrityRow ||
+                            integrityRow.integrity_check !== "ok"
+                        ) {
+                            validationDb.close(() =>
+                                reject(
+                                    integrityErr ||
+                                    new Error(
+                                        "SQLite integrity_check failed."
+                                    )
+                                )
+                            );
+                            return;
+                        }
+
+                        validationDb.all(
+                            "PRAGMA foreign_key_check",
+                            [],
+                            (foreignKeyErr, violations) => {
+
+                                validationDb.close(closeErr => {
+                                    if (foreignKeyErr || closeErr) {
+                                        reject(
+                                            foreignKeyErr || closeErr
+                                        );
+                                        return;
+                                    }
+
+                                    if (violations.length > 0) {
+                                        reject(
+                                            new Error(
+                                                "SQLite foreign_key_check failed."
+                                            )
+                                        );
+                                        return;
+                                    }
+
+                                    resolve();
+                                });
+
+                            }
+                        );
+
+                    }
+                );
+
+            }
+        );
+
+    });
 
 }
 
@@ -103,10 +221,13 @@ async function createBackup() {
     backupFileName
 );
 
-    const databasePath = path.join(
-    app.getPath("userData"),
-    "billing.db"
-);
+    const snapshotPath = path.join(
+        app.getPath("temp"),
+        `klbs_backup_${timestamp}.db`
+    );
+
+    await createSQLiteSnapshot(snapshotPath);
+    await validateSQLiteDatabase(snapshotPath);
 
     return new Promise((resolve, reject) => {
 
@@ -127,6 +248,10 @@ async function createBackup() {
     "close",
 
     async () => {
+
+        if (fs.existsSync(snapshotPath)) {
+            fs.unlinkSync(snapshotPath);
+        }
 
         try {
 
@@ -165,6 +290,10 @@ async function createBackup() {
     "error",
 
     async (err) => {
+
+        if (fs.existsSync(snapshotPath)) {
+            fs.unlinkSync(snapshotPath);
+        }
 
         try {
 
@@ -242,7 +371,7 @@ archive.append(
 );
 
         archive.file(
-    databasePath,
+    snapshotPath,
     {
         name: "Database/billing.db"
     }
@@ -487,7 +616,17 @@ const settingsExists = entries.some(
 
 async function restoreBackup(zipPath) {
 
+    let liveDatabase = null;
+    let backupDatabase = null;
+
     try {
+
+        const backupValidation =
+            await validateBackup(zipPath);
+
+        if (!backupValidation.success) {
+            return backupValidation;
+        }
 
         
 
@@ -570,12 +709,16 @@ console.log(
             extractedDatabase
         );
 
-    const liveDatabase = path.join(
+    await validateSQLiteDatabase(
+        extractedDatabase
+    );
+
+    liveDatabase = path.join(
     app.getPath("userData"),
     "billing.db"
 );
 
-const backupDatabase = path.join(
+backupDatabase = path.join(
     app.getPath("userData"),
     "billing.db.bak"
 );
@@ -617,6 +760,8 @@ fs.copyFileSync(
 console.log(
     "STEP 1 : Database copied."
 );
+
+await validateSQLiteDatabase(liveDatabase);
 
 // Ensure the restored database is writable.
 
@@ -745,6 +890,28 @@ return {
     catch (error) {
 
     console.error(error);
+
+    if (
+        liveDatabase &&
+        backupDatabase &&
+        fs.existsSync(backupDatabase)
+    ) {
+        try {
+            if (fs.existsSync(liveDatabase)) {
+                fs.unlinkSync(liveDatabase);
+            }
+            fs.renameSync(
+                backupDatabase,
+                liveDatabase
+            );
+        }
+        catch (restoreOriginalError) {
+            console.error(
+                "Original database recovery failed:",
+                restoreOriginalError
+            );
+        }
+    }
 
     try {
 

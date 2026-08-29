@@ -24,7 +24,37 @@ const db = new sqlite3.Database(dbPath, (err) => {
     } else {
         console.log('Database Connected Successfully');
 
-        createTables();
+        db.run(
+            "PRAGMA foreign_keys = ON",
+            pragmaErr => {
+
+                if (pragmaErr) {
+                    databaseReadyReject(pragmaErr);
+                    return;
+                }
+
+                db.get(
+                    "PRAGMA foreign_keys",
+                    [],
+                    (verifyErr, row) => {
+
+                        if (verifyErr || !row || row.foreign_keys !== 1) {
+                            databaseReadyReject(
+                                verifyErr ||
+                                new Error(
+                                    "SQLite foreign key enforcement could not be enabled."
+                                )
+                            );
+                            return;
+                        }
+
+                        createTables();
+
+                    }
+                );
+
+            }
+        );
     }
 });
 
@@ -1416,7 +1446,14 @@ function migrateStoreCreditSchema() {
 
                 db.serialize(() => {
 
-            db.run("BEGIN TRANSACTION");
+            db.run(
+                "BEGIN IMMEDIATE TRANSACTION",
+                beginErr => {
+
+                    if (beginErr) {
+                        reject(beginErr);
+                        return;
+                    }
 
             db.run(
 
@@ -1613,6 +1650,9 @@ function migrateStoreCreditSchema() {
 
                 }
 
+            );
+
+                }
             );
 
                 });

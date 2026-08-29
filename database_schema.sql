@@ -226,6 +226,48 @@ CREATE TABLE return_items (
                 REFERENCES returns(id)
 
         );
+CREATE TABLE store_credits (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            store_credit_no TEXT UNIQUE NOT NULL,
+
+            return_id INTEGER NOT NULL,
+
+            original_bill_no TEXT NOT NULL,
+
+            customer_id INTEGER,
+
+            customer_name TEXT NOT NULL,
+
+            customer_mobile TEXT NOT NULL,
+
+            issue_date TEXT NOT NULL,
+
+            valid_until TEXT NOT NULL,
+
+            original_amount REAL NOT NULL DEFAULT 0,
+
+            remaining_balance REAL NOT NULL DEFAULT 0,
+
+            status TEXT NOT NULL DEFAULT 'ISSUED',
+
+            created_by TEXT DEFAULT 'Administrator',
+
+            created_at TEXT NOT NULL,
+
+            CHECK (
+                status IN (
+                    'ISSUED',
+                    'REDEEMED',
+                    'EXPIRED'
+                )
+            ),
+
+            FOREIGN KEY (return_id)
+                REFERENCES returns(id)
+
+        );
 CREATE TABLE customer_credit_transactions (
 
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -446,6 +488,10 @@ CREATE TABLE bills (
     upi_amount REAL,
 
     card_amount REAL,
+
+    store_credit_amount REAL DEFAULT 0,
+
+    gift_voucher_amount REAL DEFAULT 0,
 
     payment_status TEXT,
 

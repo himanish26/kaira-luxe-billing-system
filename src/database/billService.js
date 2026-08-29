@@ -76,9 +76,23 @@ function saveBill(billData) {
 
         db.serialize(() => {
 
-            db.run("BEGIN TRANSACTION");
-
             db.run(
+                "BEGIN IMMEDIATE TRANSACTION",
+                beginErr => {
+
+                    if(beginErr){
+                        reject(beginErr);
+                        return;
+                    }
+
+                    insertBill();
+
+                }
+            );
+
+            function insertBill(){
+
+                db.run(
 
                 `
                 INSERT INTO bills
@@ -160,7 +174,9 @@ function saveBill(billData) {
 
                 }
 
-            );
+                );
+
+            }
 
             function insertItems(){
 
@@ -282,57 +298,74 @@ function saveBill(billData) {
 
 function createSaleInventoryTransactions(){
 
-    let pending =
-        billData.items.length;
+    const items = billData.items || [];
+    const now = new Date().toISOString();
 
-if(pending === 0){
-    redeemStoreCreditAndCommit();
-    return;
-}
+    function insertMovement(index){
 
-    const now =
-        new Date().toISOString();
+        if(index >= items.length){
+            redeemStoreCreditAndCommit();
+            return;
+        }
 
-    billData.items.forEach(item => {
+        const item = items[index];
+        const saleQuantity = Number(item.qty);
+
+        if(
+            !Number.isFinite(saleQuantity) ||
+            saleQuantity <= 0
+        ){
+            db.run("ROLLBACK");
+            reject(
+                new Error(
+                    `Invalid sale quantity for barcode: ${item.barcode}`
+                )
+            );
+            return;
+        }
 
         db.get(
-
             `
-            SELECT id
-            FROM products
-            WHERE barcode = ?
+            SELECT
+                p.id,
+                p.barcode,
+                COALESCE(SUM(it.quantity), 0) AS current_stock
+            FROM products p
+            LEFT JOIN inventory_transactions it
+                ON it.product_id = p.id
+            WHERE p.barcode = ?
+            GROUP BY p.id
             `,
-
             [item.barcode],
-
             (err, product) => {
 
                 if(err){
-
                     db.run("ROLLBACK");
-
                     reject(err);
-
                     return;
-
                 }
 
                 if(!product){
-
                     db.run("ROLLBACK");
-
                     reject(
                         new Error(
                             `Product not found for barcode: ${item.barcode}`
                         )
                     );
-
                     return;
+                }
 
+                if(saleQuantity > Number(product.current_stock)){
+                    db.run("ROLLBACK");
+                    reject(
+                        new Error(
+                            `Insufficient stock for barcode ${product.barcode}. Available stock: ${product.current_stock}`
+                        )
+                    );
+                    return;
                 }
 
                 db.run(
-
                     `
                     INSERT INTO inventory_transactions
                     (
@@ -347,55 +380,35 @@ if(pending === 0){
                         created_at
                     )
                     VALUES
-                    (
-                        ?,
-                        ?,
-                        'SALE',
-                        ?,
-                        'BILL',
-                        ?,
-                        ?,
-                        'Administrator',
-                        ?
-                    )
+                    (?, ?, 'SALE', ?, 'BILL', ?, ?, 'Administrator', ?)
                     `,
-
                     [
                         product.id,
-                        item.barcode,
-                        -Math.abs(Number(item.qty)),
+                        product.barcode,
+                        -saleQuantity,
                         billData.bill_no,
                         `Sale against bill ${billData.bill_no}`,
                         now
                     ],
-
-                    (insertErr) => {
+                    insertErr => {
 
                         if(insertErr){
-
                             db.run("ROLLBACK");
-
                             reject(insertErr);
-
                             return;
-
                         }
 
-                        pending--;
-
-if(pending === 0){
-    redeemStoreCreditAndCommit();
-}
+                        insertMovement(index + 1);
 
                     }
-
                 );
 
             }
-
         );
 
-    });
+    }
+
+    insertMovement(0);
 
 }
 
@@ -550,19 +563,23 @@ function redeemStoreCreditAndCommit(){
 
                 else{
 
-                await logInvoiceGenerated(
+                    try {
+                        await logInvoiceGenerated(
+                            billData.bill_no,
+                            billData.net_amount,
+                            billData.total_qty
+                        );
+                    }
+                    catch (logError) {
+                        console.error(
+                            "Invoice activity logging failed:",
+                            logError.message
+                        );
+                    }
 
-                    billData.bill_no,
+                    resolve(true);
 
-                    billData.net_amount,
-
-                    billData.total_qty
-
-                );
-
-                resolve(true);
-
-            }
+                }
 
         }
 
