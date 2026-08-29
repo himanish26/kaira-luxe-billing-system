@@ -1,5 +1,10 @@
 const db = require("./database");
 
+const {
+    getBusinessDate,
+    addBusinessCalendarDays
+} = require("./businessDate");
+
 
 /* ===========================================
    GET BILL FOR RETURN
@@ -489,28 +494,14 @@ function saveReturn(returnData) {
                                                 .then(
                                                     storeCreditNo => {
 
-                                                        const issueDate =
-                                                            new Date();
-
-                                                        const validUntil =
-                                                            new Date(
-                                                                issueDate
-                                                            );
-
-                                                        validUntil.setDate(
-                                                            validUntil.getDate() +
-                                                            180
-                                                        );
-
                                                         const issueDateText =
-                                                            issueDate
-                                                                .toISOString()
-                                                                .split("T")[0];
+                                                            getBusinessDate();
 
                                                         const validUntilText =
-                                                            validUntil
-                                                                .toISOString()
-                                                                .split("T")[0];
+                                                            addBusinessCalendarDays(
+                                                                issueDateText,
+                                                                180
+                                                            );
 
                                                         db.run(
                                                             `
@@ -702,10 +693,7 @@ function getStoreCreditDetails(storeCreditNo) {
 
                 }
 
-                const today =
-                    new Date()
-                        .toISOString()
-                        .split("T")[0];
+                const today = getBusinessDate();
 
                 if (
 
@@ -768,10 +756,7 @@ function getAvailableStoreCreditByMobile(
 
     return new Promise((resolve, reject) => {
 
-        const today =
-            new Date()
-                .toISOString()
-                .split("T")[0];
+        const today = getBusinessDate();
 
         db.get(
 
@@ -831,18 +816,7 @@ function getAvailableStoreCreditByMobile(
 
 function getStoreCreditForReprint(storeCreditNo) {
 
-    const now = new Date();
-
-    const today =
-        new Intl.DateTimeFormat(
-            "en-CA",
-            {
-                timeZone: "Asia/Kolkata",
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit"
-            }
-        ).format(now);
+    const today = getBusinessDate();
 
     return new Promise((resolve, reject) => {
 

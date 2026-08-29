@@ -173,93 +173,6 @@ function createTables() {
 )
         `);
 
-                /* ===========================================
-           RETURNS
-        =========================================== */
-
-        db.run(`
-            CREATE TABLE IF NOT EXISTS returns (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                return_no TEXT UNIQUE,
-
-                original_bill_no TEXT NOT NULL,
-
-                customer_name TEXT,
-
-                customer_mobile TEXT,
-
-                return_type TEXT NOT NULL,
-
-                returned_amount REAL DEFAULT 0,
-
-                replacement_amount REAL DEFAULT 0,
-
-                difference_amount REAL DEFAULT 0,
-
-                store_credit_amount REAL DEFAULT 0,
-
-                status TEXT DEFAULT 'COMPLETED',
-
-                return_date TEXT,
-
-                return_time TEXT,
-
-                created_at TEXT
-
-            )
-        `);
-
-
-        /* ===========================================
-           RETURN ITEMS
-        =========================================== */
-
-        db.run(`
-            CREATE TABLE IF NOT EXISTS return_items (
-
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                return_no TEXT NOT NULL,
-
-                original_bill_no TEXT NOT NULL,
-
-                original_bill_item_id INTEGER NOT NULL,
-
-                barcode TEXT,
-
-                product_name TEXT,
-
-                brand TEXT,
-
-                category TEXT,
-
-                size TEXT,
-
-                colour TEXT,
-
-                return_qty INTEGER NOT NULL,
-
-                original_mrp REAL,
-
-                original_discount_percent REAL,
-
-                original_discount_amount REAL,
-
-                original_gst_rate REAL,
-
-                original_taxable_amount REAL,
-
-                original_gst_amount REAL,
-
-                original_net_amount REAL,
-
-                created_at TEXT
-
-            )
-        `);
-
         db.run(`
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1129,233 +1042,292 @@ db.serialize(() => {
 
 function initializeOpeningStock() {
 
-    db.get(
-        `
-        SELECT status
-        FROM inventory_initialization
-        WHERE initialization_type = 'OPENING_STOCK'
-        `,
-        [],
-        (err, row) => {
+    return new Promise((resolve, reject) => {
 
-            if (err) {
-                console.error(
-                    'Opening Stock Check Error:',
-                    err.message
-                );
-                return;
-            }
+        db.get(
+            `
+            SELECT status
+            FROM inventory_initialization
+            WHERE initialization_type = 'OPENING_STOCK'
+            `,
+            [],
+            (err, row) => {
 
-            if (row && row.status === 'COMPLETED') {
+                if (err) {
 
-                console.log(
-                    '✓ Opening Stock already initialized. Skipping.'
-                );
-
-                return;
-            }
-
-            db.all(
-                `
-                SELECT
-                    id,
-                    barcode,
-                    opening_stock
-                FROM products
-                WHERE active = 1
-                  AND COALESCE(opening_stock, 0) > 0
-                `,
-                [],
-                (err, products) => {
-
-                    if (err) {
-                        console.error(
-                            'Opening Stock Product Read Error:',
-                            err.message
-                        );
-                        return;
-                    }
-
-                    if (!products || products.length === 0) {
-
-                        console.log(
-                            'Opening Stock not initialized: no opening stock found.'
-                        );
-
-                        return;
-                    }
-
-                    const totalProducts = products.length;
-
-                    const totalQuantity =
-                        products.reduce(
-                            (total, product) =>
-                                total +
-                                Number(product.opening_stock || 0),
-                            0
-                        );
-
-                    console.log(
-                        `Opening Stock detected: ${totalProducts} products / ${totalQuantity} units`
+                    console.error(
+                        'Opening Stock Check Error:',
+                        err.message
                     );
 
-                    db.serialize(() => {
+                    reject(err);
+                    return;
+                }
 
-                        db.run('BEGIN TRANSACTION');
+                if (row && row.status === 'COMPLETED') {
 
-                        let transactionError = null;
+                    console.log(
+                        '✓ Opening Stock already initialized. Skipping.'
+                    );
 
-                        const insert = db.prepare(`
-                            INSERT INTO inventory_transactions
-                            (
-                                product_id,
-                                barcode,
-                                transaction_type,
-                                quantity,
-                                reference_type,
-                                reference_id,
-                                remarks,
-                                created_by,
-                                created_at
-                            )
-                            VALUES
-                            (
-                                ?,
-                                ?,
-                                'OPENING',
-                                ?,
-                                'OPENING_STOCK',
-                                'RC5',
-                                ?,
-                                'Administrator',
-                                ?
-                            )
-                        `);
+                    resolve();
+                    return;
+                }
 
-                        const now = new Date().toISOString();
+                db.all(
+                    `
+                    SELECT
+                        id,
+                        barcode,
+                        opening_stock
+                    FROM products
+                    WHERE active = 1
+                      AND COALESCE(opening_stock, 0) > 0
+                    `,
+                    [],
+                    (err, products) => {
 
-                        products.forEach((product) => {
+                        if (err) {
 
-                            if (transactionError) {
-                                return;
-                            }
-
-                            insert.run(
-                                product.id,
-                                product.barcode || null,
-                                Number(product.opening_stock),
-                                'Initial opening stock',
-                                now,
-                                (err) => {
-
-                                    if (err && !transactionError) {
-                                        transactionError = err;
-                                    }
-
-                                }
+                            console.error(
+                                'Opening Stock Product Read Error:',
+                                err.message
                             );
 
-                        });
+                            reject(err);
+                            return;
+                        }
 
-                        insert.finalize((err) => {
+                        if (!products || products.length === 0) {
 
-                            if (err && !transactionError) {
-                                transactionError = err;
-                            }
+                            console.log(
+                                'Opening Stock not initialized: no opening stock found.'
+                            );
 
-                            if (transactionError) {
+                            resolve();
+                            return;
+                        }
 
-                                db.run(
-                                    'ROLLBACK',
-                                    () => {
+                        const totalProducts =
+                            products.length;
 
-                                        console.error(
-                                            'Opening Stock initialization failed. Transaction rolled back:',
-                                            transactionError.message
-                                        );
+                        const totalQuantity =
+                            products.reduce(
+                                (total, product) =>
+                                    total +
+                                    Number(
+                                        product.opening_stock || 0
+                                    ),
+                                0
+                            );
 
-                                    }
-                                );
+                        console.log(
+                            `Opening Stock detected: ${totalProducts} products / ${totalQuantity} units`
+                        );
 
-                                return;
-                            }
+                        db.serialize(() => {
 
                             db.run(
-                                `
-                                INSERT INTO inventory_initialization
-                                (
-                                    initialization_type,
-                                    status,
-                                    initialized_at,
-                                    initialized_by,
-                                    remarks
-                                )
-                                VALUES
-                                (
-                                    'OPENING_STOCK',
-                                    'COMPLETED',
-                                    ?,
-                                    'Administrator',
-                                    ?
-                                )
-                                `,
-                                [
-                                    now,
-                                    `${totalProducts} products / ${totalQuantity} units`
-                                ],
-                                (err) => {
+                                'BEGIN TRANSACTION',
+                                (beginErr) => {
 
-                                    if (err) {
+                                    if (beginErr) {
 
-                                        db.run(
-                                            'ROLLBACK',
-                                            () => {
-
-                                                console.error(
-                                                    'Opening Stock control record failed. Transaction rolled back:',
-                                                    err.message
-                                                );
-
-                                            }
-                                        );
-
+                                        reject(beginErr);
                                         return;
                                     }
 
-                                    db.run(
-                                        'COMMIT',
-                                        (err) => {
+                                    const now =
+                                        new Date().toISOString();
 
-                                            if (err) {
+                                    const insert =
+                                        db.prepare(`
+                                            INSERT INTO inventory_transactions
+                                            (
+                                                product_id,
+                                                barcode,
+                                                transaction_type,
+                                                quantity,
+                                                reference_type,
+                                                reference_id,
+                                                remarks,
+                                                created_by,
+                                                created_at
+                                            )
+                                            VALUES
+                                            (
+                                                ?,
+                                                ?,
+                                                'OPENING',
+                                                ?,
+                                                'OPENING_STOCK',
+                                                'RC5',
+                                                ?,
+                                                'Administrator',
+                                                ?
+                                            )
+                                        `);
 
-                                                console.error(
-                                                    'Opening Stock commit failed:',
-                                                    err.message
-                                                );
+                                    let pending =
+                                        products.length;
 
-                                                return;
-                                            }
+                                    let transactionError =
+                                        null;
 
-                                            console.log(
-                                                `✓ Opening Stock initialized successfully: ${totalProducts} products / ${totalQuantity} units`
+                                    products.forEach(
+                                        (product) => {
+
+                                            insert.run(
+                                                [
+                                                    product.id,
+                                                    product.barcode || null,
+                                                    Number(
+                                                        product.opening_stock
+                                                    ),
+                                                    'Initial opening stock',
+                                                    now
+                                                ],
+                                                (insertErr) => {
+
+                                                    if (
+                                                        insertErr &&
+                                                        !transactionError
+                                                    ) {
+
+                                                        transactionError =
+                                                            insertErr;
+                                                    }
+
+                                                    pending--;
+
+                                                    if (pending !== 0) {
+                                                        return;
+                                                    }
+
+                                                    insert.finalize(
+                                                        (finalizeErr) => {
+
+                                                            if (
+                                                                finalizeErr &&
+                                                                !transactionError
+                                                            ) {
+
+                                                                transactionError =
+                                                                    finalizeErr;
+                                                            }
+
+                                                            if (
+                                                                transactionError
+                                                            ) {
+
+                                                                db.run(
+                                                                    'ROLLBACK',
+                                                                    () => {
+
+                                                                        console.error(
+                                                                            'Opening Stock initialization failed. Transaction rolled back:',
+                                                                            transactionError.message
+                                                                        );
+
+                                                                        reject(
+                                                                            transactionError
+                                                                        );
+                                                                    }
+                                                                );
+
+                                                                return;
+                                                            }
+
+                                                            db.run(
+                                                                `
+                                                                INSERT INTO inventory_initialization
+                                                                (
+                                                                    initialization_type,
+                                                                    status,
+                                                                    initialized_at,
+                                                                    initialized_by,
+                                                                    remarks
+                                                                )
+                                                                VALUES
+                                                                (
+                                                                    'OPENING_STOCK',
+                                                                    'COMPLETED',
+                                                                    ?,
+                                                                    'Administrator',
+                                                                    ?
+                                                                )
+                                                                `,
+                                                                [
+                                                                    now,
+                                                                    `${totalProducts} products / ${totalQuantity} units`
+                                                                ],
+                                                                (controlErr) => {
+
+                                                                    if (
+                                                                        controlErr
+                                                                    ) {
+
+                                                                        db.run(
+                                                                            'ROLLBACK',
+                                                                            () => {
+
+                                                                                console.error(
+                                                                                    'Opening Stock control record failed. Transaction rolled back:',
+                                                                                    controlErr.message
+                                                                                );
+
+                                                                                reject(
+                                                                                    controlErr
+                                                                                );
+                                                                            }
+                                                                        );
+
+                                                                        return;
+                                                                    }
+
+                                                                    db.run(
+                                                                        'COMMIT',
+                                                                        (commitErr) => {
+
+                                                                            if (
+                                                                                commitErr
+                                                                            ) {
+
+                                                                                console.error(
+                                                                                    'Opening Stock commit failed:',
+                                                                                    commitErr.message
+                                                                                );
+
+                                                                                reject(
+                                                                                    commitErr
+                                                                                );
+
+                                                                                return;
+                                                                            }
+
+                                                                            console.log(
+                                                                                `✓ Opening Stock initialized successfully: ${totalProducts} products / ${totalQuantity} units`
+                                                                            );
+
+                                                                            resolve();
+                                                                        }
+                                                                    );
+                                                                }
+                                                            );
+                                                        }
+                                                    );
+                                                }
                                             );
-
                                         }
                                     );
-
                                 }
                             );
-
                         });
-
-                    });
-
-                }
-            );
-
-        }
-    );
-
+                    }
+                );
+            }
+        );
+    });
 }
 
 async function initializeSmtpSettings() {
@@ -1483,7 +1455,52 @@ function migrateStoreCreditSchema() {
 
     return new Promise((resolve, reject) => {
 
-        db.serialize(() => {
+        db.all(
+            `PRAGMA table_info(store_credits)`,
+            [],
+            (err, columns) => {
+
+                if (err) {
+
+                    reject(err);
+                    return;
+
+                }
+
+                const statusColumn =
+                    columns.find(
+                        column => column.name === "status"
+                    );
+
+                if (!statusColumn) {
+
+                    reject(
+                        new Error(
+                            "store_credits.status column not found"
+                        )
+                    );
+
+                    return;
+
+                }
+
+                // New RC5 schema is already active.
+                // No migration required.
+                if (
+                    statusColumn.dflt_value === "'ISSUED'" ||
+                    statusColumn.dflt_value === '"ISSUED"'
+                ) {
+
+                    console.log(
+                        "✓ Store Credit schema already up to date."
+                    );
+
+                    resolve();
+                    return;
+
+                }
+
+                db.serialize(() => {
 
             db.run("BEGIN TRANSACTION");
 
@@ -1684,7 +1701,10 @@ function migrateStoreCreditSchema() {
 
             );
 
-        });
+                });
+
+            }
+        );
 
     });
 
@@ -1820,13 +1840,13 @@ db.serialize(() => {
 
 try {
 
-    await initializeSmtpSettings();
+        await initializeSmtpSettings();
 
-    await initializeOpeningStock();
+        await migrateStoreCreditSchema();
 
-    await migrateStoreCreditSchema();
+        await migrateBillPaymentColumns();
 
-    await migrateBillPaymentColumns();
+        await initializeOpeningStock();
 
     console.log(
         '✓ Database Initialization Complete'

@@ -1,6 +1,10 @@
 const db = require("./database");
 
 const {
+    getBusinessDate
+} = require("./businessDate");
+
+const {
 
     logInvoiceGenerated,
 
@@ -443,9 +447,7 @@ function redeemStoreCreditAndCommit(){
 
         storeCreditAmount,
 
-        new Date()
-            .toISOString()
-            .split("T")[0]
+        getBusinessDate()
     ],
 
         function(err){
@@ -490,13 +492,14 @@ function redeemStoreCreditAndCommit(){
 
         async (err)=>{
 
-            if(err){
+                if(err){
 
-                reject(err);
+                    reject(err);
+                    return;
 
-            }
+                }
 
-            else{
+                else{
 
                 await logInvoiceGenerated(
 

@@ -1,5 +1,21 @@
 console.log("Kaira Luxe Dashboard Loaded");
 
+const klbsBusinessDateFormatter = new Intl.DateTimeFormat(
+    "en-CA",
+    {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    }
+);
+
+function getKLBSBusinessDate(value = new Date()) {
+    return klbsBusinessDateFormatter.format(
+        value instanceof Date ? value : new Date(value)
+    );
+}
+
 /* =====================================
    SCREEN REFERENCES
 ===================================== */
@@ -1582,10 +1598,7 @@ if (verifyStoreCreditBtn) {
                     return;
                 }
 
-                const today =
-                    new Date()
-                        .toISOString()
-                        .split("T")[0];
+                const today = getKLBSBusinessDate();
 
 const payable =
     Number(
@@ -2458,9 +2471,7 @@ try {
                 returnAmount,
 
             issue_date:
-                new Date()
-                    .toISOString()
-                    .split("T")[0],
+                getKLBSBusinessDate(),
 
             valid_until:
                 result.valid_until
