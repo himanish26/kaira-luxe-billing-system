@@ -55,6 +55,183 @@ function mapReturnDatabaseError(error) {
 
 }
 
+function resolveReturnItemProducts(
+    originalBillNo,
+    items
+) {
+
+    if (!Array.isArray(items) || items.length === 0) {
+        return Promise.reject(
+            new Error("No return items selected.")
+        );
+    }
+
+    return Promise.all(
+        items.map(item =>
+            new Promise((resolve, reject) => {
+
+                const returnQuantity =
+                    Number(item.quantity);
+
+                if (
+                    !Number.isFinite(returnQuantity) ||
+                    returnQuantity <= 0
+                ) {
+                    reject(
+                        new Error(
+                            "Returned quantity must be greater than zero."
+                        )
+                    );
+                    return;
+                }
+
+                db.get(
+                    `
+                    SELECT
+                        p.id AS product_id,
+                        p.barcode AS barcode,
+                        bi.product_name AS product_name
+                    FROM bill_items bi
+                    INNER JOIN products p
+                        ON p.barcode = bi.barcode
+                    WHERE bi.id = ?
+                      AND bi.bill_no = ?
+                    LIMIT 1
+                    `,
+                    [
+                        item.original_bill_item_id,
+                        originalBillNo
+                    ],
+                    (resolveErr, product) => {
+
+                        if (resolveErr) {
+                            reject(resolveErr);
+                            return;
+                        }
+
+                        if (!product) {
+                            reject(
+                                new Error(
+                                    "Unable to resolve the returned product from the original bill."
+                                )
+                            );
+                            return;
+                        }
+
+                        resolve({
+                            ...item,
+                            product_id: product.product_id,
+                            barcode: product.barcode,
+                            product_name:
+                                product.product_name ||
+                                item.product_name ||
+                                "",
+                            quantity: returnQuantity
+                        });
+
+                    }
+                );
+
+            })
+        )
+    );
+
+}
+
+function insertReturnItemWithInventory(
+    returnId,
+    returnNo,
+    originalBillNo,
+    item,
+    createdBy
+) {
+
+    return new Promise((resolve, reject) => {
+
+        const createdAt = new Date().toISOString();
+
+        db.run(
+            `
+            INSERT INTO return_items
+            (
+                return_id,
+                product_id,
+                barcode,
+                product_name,
+                original_bill_item_id,
+                quantity,
+                unit_value,
+                return_value,
+                remarks,
+                created_at
+            )
+            VALUES
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+            [
+                returnId,
+                item.product_id,
+                item.barcode,
+                item.product_name,
+                item.original_bill_item_id,
+                item.quantity,
+                item.unit_value,
+                item.return_value,
+                item.remarks || "",
+                createdAt
+            ],
+            itemErr => {
+
+                if (itemErr) {
+                    reject(itemErr);
+                    return;
+                }
+
+                db.run(
+                    `
+                    INSERT INTO inventory_transactions
+                    (
+                        product_id,
+                        barcode,
+                        transaction_type,
+                        quantity,
+                        reference_type,
+                        reference_id,
+                        remarks,
+                        created_by,
+                        created_at
+                    )
+                    VALUES
+                    (?, ?, 'RETURN', ?, 'RETURN', ?, ?, ?, ?)
+                    `,
+                    [
+                        item.product_id,
+                        item.barcode,
+                        item.quantity,
+                        returnNo,
+                        `Return against bill ${originalBillNo}`,
+                        createdBy,
+                        createdAt
+                    ],
+                    inventoryErr => {
+
+                        if (inventoryErr) {
+                            reject(inventoryErr);
+                            return;
+                        }
+
+                        resolve();
+
+                    }
+                );
+
+            }
+        );
+
+    });
+
+}
+
 
 /* ===========================================
    GET BILL FOR RETURN
@@ -534,90 +711,32 @@ function saveReturn(returnData) {
                             const returnId =
                                 this.lastID;
 
-                            let pending =
-                                returnData.items.length;
+                            const createdBy =
+                                returnData.created_by ||
+                                "Administrator";
 
-                            if (pending === 0) {
-
-                                db.run("ROLLBACK");
-
-                                reject(
-                                    new Error(
-                                        "No return items selected."
+                            resolveReturnItemProducts(
+                                authoritativeBillNo,
+                                returnData.items
+                            )
+                                .then(resolvedItems =>
+                                    resolvedItems.reduce(
+                                        (chain, item) =>
+                                            chain.then(() =>
+                                                insertReturnItemWithInventory(
+                                                    returnId,
+                                                    returnData.return_no,
+                                                    authoritativeBillNo,
+                                                    item,
+                                                    createdBy
+                                                )
+                                            ),
+                                        Promise.resolve()
                                     )
-                                );
-
-                                return;
-
-                            }
-
-                            let failed = false;
-
-                            returnData.items.forEach(
-                                item => {
-
-                                    db.run(
-                                        `
-                                        INSERT INTO return_items
-                                        (
-                                            return_id,
-                                            product_id,
-                                            barcode,
-                                            product_name,
-                                            original_bill_item_id,
-                                            quantity,
-                                            unit_value,
-                                            return_value,
-                                            remarks,
-                                            created_at
-                                        )
-
-                                        VALUES
-                                        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                        `,
-                                        [
-                                            returnId,
-                                            item.product_id || null,
-                                            item.barcode || "",
-                                            item.product_name || "",
-                                            item.original_bill_item_id,
-                                            item.quantity,
-                                            item.unit_value,
-                                            item.return_value,
-                                            item.remarks || "",
-                                            new Date().toISOString()
-                                        ],
-                                        function(itemErr) {
-
-                                            if (failed) {
-
-                                                return;
-
-                                            }
-
-                                            if (itemErr) {
-
-                                                failed = true;
-
-                                                db.run(
-                                                    "ROLLBACK"
-                                                );
-
-                                                reject(itemErr);
-
-                                                return;
-
-                                            }
-
-                                            pending--;
-
-                                            if (pending !== 0) {
-
-                                                return;
-
-                                            }
-
-                                            getNextStoreCreditNumber()
+                                )
+                                .then(() =>
+                                    getNextStoreCreditNumber()
+                                )
 
                                                 .then(
                                                     storeCreditNo => {
@@ -665,8 +784,7 @@ function saveReturn(returnData) {
                                                                 returnData.return_amount,
                                                                 returnData.return_amount,
                                                                 "ISSUED",
-                                                                returnData.created_by ||
-                                                                    "Administrator",
+                                                                createdBy,
                                                                 new Date().toISOString()
                                                             ],
                                                             function(
@@ -737,18 +855,22 @@ function saveReturn(returnData) {
                                                 .catch(error => {
 
                                                     db.run(
-                                                        "ROLLBACK"
+                                                        "ROLLBACK",
+                                                        rollbackErr => {
+
+                                                            if (rollbackErr) {
+                                                                console.error(
+                                                                    "Return rollback failed:",
+                                                                    rollbackErr.message
+                                                                );
+                                                            }
+
+                                                            reject(error);
+
+                                                        }
                                                     );
 
-                                                    reject(error);
-
                                                 });
-
-                                        }
-                                    );
-
-                                }
-                            );
 
                         }
                     );
