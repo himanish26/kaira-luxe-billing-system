@@ -9,6 +9,54 @@ const {
 } = require("./logService");
 
 
+const PRODUCT_MASTER_FIELDS = new Set([
+    "barcode",
+    "sku",
+    "brand",
+    "segment",
+    "category",
+    "season",
+    "collection",
+    "product_name",
+    "style_code",
+    "size",
+    "colour",
+    "mrp",
+    "discount",
+    "selling_price",
+    "cost_price",
+    "gst_rate",
+    "hsn_code",
+    "opening_stock",
+    "reorder_level",
+    "supplier",
+    "active"
+]);
+
+
+function normalizeProductMasterRow(row) {
+
+    const normalized = {};
+
+    Object.entries(row).forEach(([header, value]) => {
+
+        const field = String(header)
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "_")
+            .replace(/^_+|_+$/g, "");
+
+        if (PRODUCT_MASTER_FIELDS.has(field)) {
+            normalized[field] = value;
+        }
+
+    });
+
+    return normalized;
+
+}
+
+
 function importProducts(filePath) {
 
     return new Promise((resolve, reject) => {
@@ -28,7 +76,9 @@ function importProducts(filePath) {
                 ];
 
             const products =
-                XLSX.utils.sheet_to_json(sheet);
+                XLSX.utils
+                    .sheet_to_json(sheet)
+                    .map(normalizeProductMasterRow);
 
 
             /* ===========================================

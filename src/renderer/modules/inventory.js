@@ -1,5 +1,7 @@
 console.log("Inventory Module Loaded");
 
+let inventoryProductsRequestId = 0;
+
 /* ===========================================
    OPEN PRODUCT MASTER
 =========================================== */
@@ -103,52 +105,17 @@ async function loadInventorySummary() {
 
 async function loadProducts() {
 
+    const requestId =
+        ++inventoryProductsRequestId;
+
     const products =
         await window.electronAPI.getProducts();
 
-    const tbody =
-        document.getElementById("inventoryTableBody");
-
-    const tableContainer =
-        document.getElementById("inventoryTableContainer");
-
-    const emptyState =
-        document.getElementById("inventoryEmptyState");
-
-    tbody.innerHTML = "";
-
-    if (products.length === 0) {
-
-        tableContainer.style.display = "none";
-
-        emptyState.style.display = "flex";
-
+    if (requestId !== inventoryProductsRequestId) {
         return;
-
     }
 
-    tableContainer.style.display = "block";
-
-    emptyState.style.display = "none";
-
-    products.forEach(product => {
-
-        tbody.innerHTML += `
-        <tr>
-            <td>${product.barcode}</td>
-            <td>${product.brand}</td>
-            <td>${product.segment || ""}</td>
-            <td>${product.category}</td>
-            <td>${product.season || ""}</td>
-            <td>${product.collection || ""}</td>
-            <td>${product.product_name}</td>
-            <td>${product.size}</td>
-            <td>${product.current_stock ?? product.opening_stock ?? 0}</td>
-            <td>₹${Number(product.mrp).toFixed(2)}</td>
-        </tr>
-        `;
-
-    });
+    renderInventoryProducts(products);
 
 }
 
@@ -169,8 +136,25 @@ Please import a Product Master Excel file before creating new billing.`
 
 async function searchProducts(keyword) {
 
+    const requestId =
+        ++inventoryProductsRequestId;
+
     const products =
         await window.electronAPI.searchProducts(keyword);
+
+    if (requestId !== inventoryProductsRequestId) {
+        return;
+    }
+
+    renderInventoryProducts(products);
+
+}
+
+/* ===========================================
+   RENDER AUTHORITATIVE PRODUCT/STOCK PAIRS
+=========================================== */
+
+function renderInventoryProducts(products) {
 
     const tbody =
         document.getElementById("inventoryTableBody");
