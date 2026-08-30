@@ -179,7 +179,13 @@ CREATE TABLE returns (
 
             return_no TEXT UNIQUE NOT NULL,
 
+            credit_note_no TEXT,
+
             original_bill_no TEXT NOT NULL,
+
+            business_date TEXT,
+
+            original_bill_date TEXT,
 
             customer_id INTEGER,
 
@@ -192,6 +198,26 @@ CREATE TABLE returns (
             remarks TEXT,
 
             return_amount REAL NOT NULL DEFAULT 0,
+
+            gross_reversal REAL,
+
+            discount_reversal REAL,
+
+            taxable_reversal REAL,
+
+            cgst_reversal REAL,
+
+            sgst_reversal REAL,
+
+            gst_reversal REAL,
+
+            net_reversal REAL,
+
+            accounting_status TEXT NOT NULL DEFAULT 'LEGACY_UNASSESSED'
+                CHECK (accounting_status IN ('LEGACY_UNASSESSED', 'COMPLETED')),
+
+            accounting_snapshot_version INTEGER
+                CHECK (accounting_snapshot_version IS NULL OR accounting_snapshot_version = 1),
 
             created_by TEXT DEFAULT 'Administrator',
 
@@ -217,6 +243,26 @@ CREATE TABLE return_items (
             unit_value REAL NOT NULL DEFAULT 0,
 
             return_value REAL NOT NULL DEFAULT 0,
+
+            mrp REAL,
+
+            gross_reversal REAL,
+
+            discount_percent REAL,
+
+            discount_reversal REAL,
+
+            taxable_reversal REAL,
+
+            gst_rate REAL,
+
+            cgst_reversal REAL,
+
+            sgst_reversal REAL,
+
+            gst_reversal REAL,
+
+            net_reversal REAL,
 
             remarks TEXT,
 
@@ -396,6 +442,13 @@ CREATE INDEX idx_return_original_bill
 CREATE INDEX idx_returns_original_bill_canonical
         ON returns(UPPER(TRIM(original_bill_no)))
     ;
+CREATE UNIQUE INDEX idx_returns_credit_note_canonical
+        ON returns(UPPER(TRIM(credit_note_no)))
+        WHERE credit_note_no IS NOT NULL
+    ;
+CREATE INDEX idx_returns_accounting_date_status
+        ON returns(business_date, accounting_status)
+    ;
 CREATE TRIGGER trg_returns_one_per_original_bill_insert
 BEFORE INSERT ON returns
 FOR EACH ROW
@@ -432,6 +485,114 @@ BEGIN
         ABORT,
         'KLBS_RETURN_ORIGINAL_BILL_IMMUTABLE'
     );
+END;
+CREATE TRIGGER trg_returns_accounting_insert_valid
+BEFORE INSERT ON returns
+FOR EACH ROW
+WHEN NEW.accounting_status = 'COMPLETED'
+BEGIN
+    SELECT CASE WHEN
+        NEW.accounting_snapshot_version IS NOT 1 OR
+        NEW.credit_note_no IS NULL OR
+        TRIM(NEW.credit_note_no) NOT GLOB
+            'CN[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' OR
+        NEW.business_date IS NULL OR
+        NEW.original_bill_date IS NULL OR
+        NEW.gross_reversal IS NULL OR
+        NEW.discount_reversal IS NULL OR
+        NEW.taxable_reversal IS NULL OR
+        NEW.cgst_reversal IS NULL OR
+        NEW.sgst_reversal IS NULL OR
+        NEW.gst_reversal IS NULL OR
+        NEW.net_reversal IS NULL OR
+        NEW.return_amount IS NOT NEW.net_reversal
+    THEN RAISE(ABORT, 'KLBS_RETURN_ACCOUNTING_INVALID') END;
+END;
+CREATE TRIGGER trg_returns_accounting_immutable_update
+BEFORE UPDATE ON returns
+FOR EACH ROW
+WHEN OLD.accounting_status = 'COMPLETED' AND (
+    NEW.return_no IS NOT OLD.return_no OR
+    NEW.credit_note_no IS NOT OLD.credit_note_no OR
+    NEW.original_bill_no IS NOT OLD.original_bill_no OR
+    NEW.business_date IS NOT OLD.business_date OR
+    NEW.original_bill_date IS NOT OLD.original_bill_date OR
+    NEW.return_amount IS NOT OLD.return_amount OR
+    NEW.gross_reversal IS NOT OLD.gross_reversal OR
+    NEW.discount_reversal IS NOT OLD.discount_reversal OR
+    NEW.taxable_reversal IS NOT OLD.taxable_reversal OR
+    NEW.cgst_reversal IS NOT OLD.cgst_reversal OR
+    NEW.sgst_reversal IS NOT OLD.sgst_reversal OR
+    NEW.gst_reversal IS NOT OLD.gst_reversal OR
+    NEW.net_reversal IS NOT OLD.net_reversal OR
+    NEW.accounting_status IS NOT OLD.accounting_status OR
+    NEW.accounting_snapshot_version IS NOT OLD.accounting_snapshot_version OR
+    NEW.customer_id IS NOT OLD.customer_id OR
+    NEW.customer_name IS NOT OLD.customer_name OR
+    NEW.customer_mobile IS NOT OLD.customer_mobile OR
+    NEW.return_reason IS NOT OLD.return_reason OR
+    NEW.remarks IS NOT OLD.remarks OR
+    NEW.created_by IS NOT OLD.created_by OR
+    NEW.created_at IS NOT OLD.created_at
+)
+BEGIN
+    SELECT RAISE(ABORT, 'KLBS_RETURN_ACCOUNTING_IMMUTABLE');
+END;
+CREATE TRIGGER trg_returns_accounting_immutable_delete
+BEFORE DELETE ON returns
+FOR EACH ROW
+WHEN OLD.accounting_status = 'COMPLETED'
+BEGIN
+    SELECT RAISE(ABORT, 'KLBS_RETURN_ACCOUNTING_IMMUTABLE');
+END;
+CREATE TRIGGER trg_return_items_accounting_insert_valid
+BEFORE INSERT ON return_items
+FOR EACH ROW
+WHEN EXISTS (
+    SELECT 1 FROM returns
+    WHERE id = NEW.return_id
+      AND accounting_status = 'COMPLETED'
+)
+BEGIN
+    SELECT CASE WHEN
+        NEW.original_bill_item_id IS NULL OR
+        NEW.product_id IS NULL OR
+        NEW.quantity <= 0 OR
+        NEW.mrp IS NULL OR
+        NEW.gross_reversal IS NULL OR
+        NEW.discount_percent IS NULL OR
+        NEW.discount_reversal IS NULL OR
+        NEW.taxable_reversal IS NULL OR
+        NEW.gst_rate IS NULL OR
+        NEW.cgst_reversal IS NULL OR
+        NEW.sgst_reversal IS NULL OR
+        NEW.gst_reversal IS NULL OR
+        NEW.net_reversal IS NULL OR
+        NEW.unit_value IS NOT NEW.mrp OR
+        NEW.return_value IS NOT NEW.net_reversal
+    THEN RAISE(ABORT, 'KLBS_RETURN_ACCOUNTING_INVALID') END;
+END;
+CREATE TRIGGER trg_return_items_accounting_immutable_update
+BEFORE UPDATE ON return_items
+FOR EACH ROW
+WHEN EXISTS (
+    SELECT 1 FROM returns
+    WHERE id = OLD.return_id
+      AND accounting_status = 'COMPLETED'
+)
+BEGIN
+    SELECT RAISE(ABORT, 'KLBS_RETURN_ACCOUNTING_IMMUTABLE');
+END;
+CREATE TRIGGER trg_return_items_accounting_immutable_delete
+BEFORE DELETE ON return_items
+FOR EACH ROW
+WHEN EXISTS (
+    SELECT 1 FROM returns
+    WHERE id = OLD.return_id
+      AND accounting_status = 'COMPLETED'
+)
+BEGIN
+    SELECT RAISE(ABORT, 'KLBS_RETURN_ACCOUNTING_IMMUTABLE');
 END;
 CREATE INDEX idx_return_customer
         ON returns(customer_id)

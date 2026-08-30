@@ -751,7 +751,13 @@ db.serialize(() => {
 
             return_no TEXT UNIQUE NOT NULL,
 
+            credit_note_no TEXT,
+
             original_bill_no TEXT NOT NULL,
+
+            business_date TEXT,
+
+            original_bill_date TEXT,
 
             customer_id INTEGER,
 
@@ -764,6 +770,26 @@ db.serialize(() => {
             remarks TEXT,
 
             return_amount REAL NOT NULL DEFAULT 0,
+
+            gross_reversal REAL,
+
+            discount_reversal REAL,
+
+            taxable_reversal REAL,
+
+            cgst_reversal REAL,
+
+            sgst_reversal REAL,
+
+            gst_reversal REAL,
+
+            net_reversal REAL,
+
+            accounting_status TEXT NOT NULL DEFAULT 'LEGACY_UNASSESSED'
+                CHECK (accounting_status IN ('LEGACY_UNASSESSED', 'COMPLETED')),
+
+            accounting_snapshot_version INTEGER
+                CHECK (accounting_snapshot_version IS NULL OR accounting_snapshot_version = 1),
 
             created_by TEXT DEFAULT 'Administrator',
 
@@ -796,6 +822,26 @@ db.serialize(() => {
             unit_value REAL NOT NULL DEFAULT 0,
 
             return_value REAL NOT NULL DEFAULT 0,
+
+            mrp REAL,
+
+            gross_reversal REAL,
+
+            discount_percent REAL,
+
+            discount_reversal REAL,
+
+            taxable_reversal REAL,
+
+            gst_rate REAL,
+
+            cgst_reversal REAL,
+
+            sgst_reversal REAL,
+
+            gst_reversal REAL,
+
+            net_reversal REAL,
 
             remarks TEXT,
 
@@ -2380,6 +2426,379 @@ function migrateReturnUniquenessEnforcement() {
 
 }
 
+/* ===========================================
+   CREDIT NOTE ACCOUNTING SNAPSHOT
+=========================================== */
+
+function migrateCreditNoteAccounting() {
+
+    const run = (sql, params = []) =>
+        new Promise((resolve, reject) => {
+            db.run(sql, params, error => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                resolve();
+            });
+        });
+
+    const get = (sql, params = []) =>
+        new Promise((resolve, reject) => {
+            db.get(sql, params, (error, row) => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                resolve(row);
+            });
+        });
+
+    const all = (sql, params = []) =>
+        new Promise((resolve, reject) => {
+            db.all(sql, params, (error, rows) => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                resolve(rows);
+            });
+        });
+
+    return (async () => {
+
+        let transactionStarted = false;
+
+        try {
+            await run("BEGIN IMMEDIATE TRANSACTION");
+            transactionStarted = true;
+
+            const tables = await all(`
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name IN ('returns', 'return_items')
+            `);
+
+            if (tables.length !== 2) {
+                throw new Error(
+                    "Credit Note accounting migration requires returns and return_items tables."
+                );
+            }
+
+            const preCounts = await get(`
+                SELECT
+                    (SELECT COUNT(*) FROM returns) AS returns_count,
+                    (SELECT COUNT(*) FROM return_items) AS return_items_count
+            `);
+
+            const returnColumns = new Map(
+                (await all("PRAGMA table_info(returns)"))
+                    .map(column => [column.name, column])
+            );
+            const returnItemColumns = new Map(
+                (await all("PRAGMA table_info(return_items)"))
+                    .map(column => [column.name, column])
+            );
+
+            const preAuthoritativeCount =
+                returnColumns.has("accounting_status")
+                    ? Number((await get(`
+                        SELECT COUNT(*) AS count
+                        FROM returns
+                        WHERE accounting_status = 'COMPLETED'
+                    `)).count)
+                    : 0;
+
+            const returnMigrations = [
+                ["credit_note_no", "TEXT"],
+                ["business_date", "TEXT"],
+                ["original_bill_date", "TEXT"],
+                ["gross_reversal", "REAL"],
+                ["discount_reversal", "REAL"],
+                ["taxable_reversal", "REAL"],
+                ["cgst_reversal", "REAL"],
+                ["sgst_reversal", "REAL"],
+                ["gst_reversal", "REAL"],
+                ["net_reversal", "REAL"],
+                [
+                    "accounting_status",
+                    "TEXT NOT NULL DEFAULT 'LEGACY_UNASSESSED'"
+                ],
+                ["accounting_snapshot_version", "INTEGER"]
+            ];
+
+            const itemMigrations = [
+                ["mrp", "REAL"],
+                ["gross_reversal", "REAL"],
+                ["discount_percent", "REAL"],
+                ["discount_reversal", "REAL"],
+                ["taxable_reversal", "REAL"],
+                ["gst_rate", "REAL"],
+                ["cgst_reversal", "REAL"],
+                ["sgst_reversal", "REAL"],
+                ["gst_reversal", "REAL"],
+                ["net_reversal", "REAL"]
+            ];
+
+            for (const [name, definition] of returnMigrations) {
+                if (!returnColumns.has(name)) {
+                    await run(
+                        `ALTER TABLE returns ADD COLUMN ${name} ${definition}`
+                    );
+                }
+            }
+
+            for (const [name, definition] of itemMigrations) {
+                if (!returnItemColumns.has(name)) {
+                    await run(
+                        `ALTER TABLE return_items ADD COLUMN ${name} ${definition}`
+                    );
+                }
+            }
+
+            await run(`
+                CREATE UNIQUE INDEX IF NOT EXISTS
+                    idx_returns_credit_note_canonical
+                ON returns (UPPER(TRIM(credit_note_no)))
+                WHERE credit_note_no IS NOT NULL
+            `);
+
+            await run(`
+                CREATE INDEX IF NOT EXISTS
+                    idx_returns_accounting_date_status
+                ON returns (business_date, accounting_status)
+            `);
+
+            const triggers = [
+                "trg_returns_accounting_insert_valid",
+                "trg_returns_accounting_immutable_update",
+                "trg_returns_accounting_immutable_delete",
+                "trg_return_items_accounting_insert_valid",
+                "trg_return_items_accounting_immutable_update",
+                "trg_return_items_accounting_immutable_delete"
+            ];
+
+            for (const trigger of triggers) {
+                await run(`DROP TRIGGER IF EXISTS ${trigger}`);
+            }
+
+            await run(`
+                CREATE TRIGGER trg_returns_accounting_insert_valid
+                BEFORE INSERT ON returns
+                FOR EACH ROW
+                WHEN NEW.accounting_status = 'COMPLETED'
+                BEGIN
+                    SELECT CASE WHEN
+                        NEW.accounting_snapshot_version IS NOT 1 OR
+                        NEW.credit_note_no IS NULL OR
+                        TRIM(NEW.credit_note_no) NOT GLOB
+                            'CN[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]' OR
+                        NEW.business_date IS NULL OR
+                        NEW.original_bill_date IS NULL OR
+                        NEW.gross_reversal IS NULL OR
+                        NEW.discount_reversal IS NULL OR
+                        NEW.taxable_reversal IS NULL OR
+                        NEW.cgst_reversal IS NULL OR
+                        NEW.sgst_reversal IS NULL OR
+                        NEW.gst_reversal IS NULL OR
+                        NEW.net_reversal IS NULL OR
+                        NEW.return_amount IS NOT NEW.net_reversal
+                    THEN RAISE(
+                        ABORT,
+                        'KLBS_RETURN_ACCOUNTING_INVALID'
+                    ) END;
+                END
+            `);
+
+            await run(`
+                CREATE TRIGGER trg_returns_accounting_immutable_update
+                BEFORE UPDATE ON returns
+                FOR EACH ROW
+                WHEN OLD.accounting_status = 'COMPLETED' AND (
+                    NEW.return_no IS NOT OLD.return_no OR
+                    NEW.credit_note_no IS NOT OLD.credit_note_no OR
+                    NEW.original_bill_no IS NOT OLD.original_bill_no OR
+                    NEW.business_date IS NOT OLD.business_date OR
+                    NEW.original_bill_date IS NOT OLD.original_bill_date OR
+                    NEW.return_amount IS NOT OLD.return_amount OR
+                    NEW.gross_reversal IS NOT OLD.gross_reversal OR
+                    NEW.discount_reversal IS NOT OLD.discount_reversal OR
+                    NEW.taxable_reversal IS NOT OLD.taxable_reversal OR
+                    NEW.cgst_reversal IS NOT OLD.cgst_reversal OR
+                    NEW.sgst_reversal IS NOT OLD.sgst_reversal OR
+                    NEW.gst_reversal IS NOT OLD.gst_reversal OR
+                    NEW.net_reversal IS NOT OLD.net_reversal OR
+                    NEW.accounting_status IS NOT OLD.accounting_status OR
+                    NEW.accounting_snapshot_version IS NOT
+                        OLD.accounting_snapshot_version OR
+                    NEW.customer_id IS NOT OLD.customer_id OR
+                    NEW.customer_name IS NOT OLD.customer_name OR
+                    NEW.customer_mobile IS NOT OLD.customer_mobile OR
+                    NEW.return_reason IS NOT OLD.return_reason OR
+                    NEW.remarks IS NOT OLD.remarks OR
+                    NEW.created_by IS NOT OLD.created_by OR
+                    NEW.created_at IS NOT OLD.created_at
+                )
+                BEGIN
+                    SELECT RAISE(
+                        ABORT,
+                        'KLBS_RETURN_ACCOUNTING_IMMUTABLE'
+                    );
+                END
+            `);
+
+            await run(`
+                CREATE TRIGGER trg_returns_accounting_immutable_delete
+                BEFORE DELETE ON returns
+                FOR EACH ROW
+                WHEN OLD.accounting_status = 'COMPLETED'
+                BEGIN
+                    SELECT RAISE(
+                        ABORT,
+                        'KLBS_RETURN_ACCOUNTING_IMMUTABLE'
+                    );
+                END
+            `);
+
+            await run(`
+                CREATE TRIGGER trg_return_items_accounting_insert_valid
+                BEFORE INSERT ON return_items
+                FOR EACH ROW
+                WHEN EXISTS (
+                    SELECT 1 FROM returns
+                    WHERE id = NEW.return_id
+                      AND accounting_status = 'COMPLETED'
+                )
+                BEGIN
+                    SELECT CASE WHEN
+                        NEW.original_bill_item_id IS NULL OR
+                        NEW.product_id IS NULL OR
+                        NEW.quantity <= 0 OR
+                        NEW.mrp IS NULL OR
+                        NEW.gross_reversal IS NULL OR
+                        NEW.discount_percent IS NULL OR
+                        NEW.discount_reversal IS NULL OR
+                        NEW.taxable_reversal IS NULL OR
+                        NEW.gst_rate IS NULL OR
+                        NEW.cgst_reversal IS NULL OR
+                        NEW.sgst_reversal IS NULL OR
+                        NEW.gst_reversal IS NULL OR
+                        NEW.net_reversal IS NULL OR
+                        NEW.unit_value IS NOT NEW.mrp OR
+                        NEW.return_value IS NOT NEW.net_reversal
+                    THEN RAISE(
+                        ABORT,
+                        'KLBS_RETURN_ACCOUNTING_INVALID'
+                    ) END;
+                END
+            `);
+
+            await run(`
+                CREATE TRIGGER trg_return_items_accounting_immutable_update
+                BEFORE UPDATE ON return_items
+                FOR EACH ROW
+                WHEN EXISTS (
+                    SELECT 1 FROM returns
+                    WHERE id = OLD.return_id
+                      AND accounting_status = 'COMPLETED'
+                )
+                BEGIN
+                    SELECT RAISE(
+                        ABORT,
+                        'KLBS_RETURN_ACCOUNTING_IMMUTABLE'
+                    );
+                END
+            `);
+
+            await run(`
+                CREATE TRIGGER trg_return_items_accounting_immutable_delete
+                BEFORE DELETE ON return_items
+                FOR EACH ROW
+                WHEN EXISTS (
+                    SELECT 1 FROM returns
+                    WHERE id = OLD.return_id
+                      AND accounting_status = 'COMPLETED'
+                )
+                BEGIN
+                    SELECT RAISE(
+                        ABORT,
+                        'KLBS_RETURN_ACCOUNTING_IMMUTABLE'
+                    );
+                END
+            `);
+
+            const postCounts = await get(`
+                SELECT
+                    (SELECT COUNT(*) FROM returns) AS returns_count,
+                    (SELECT COUNT(*) FROM return_items) AS return_items_count,
+                    (SELECT COUNT(*) FROM returns
+                     WHERE accounting_status = 'COMPLETED')
+                        AS authoritative_count
+            `);
+
+            if (
+                preCounts.returns_count !== postCounts.returns_count ||
+                preCounts.return_items_count !== postCounts.return_items_count ||
+                Number(postCounts.authoritative_count) !==
+                    preAuthoritativeCount
+            ) {
+                throw new Error(
+                    "Credit Note accounting migration changed historical business data."
+                );
+            }
+
+            const cnIndex = await get(`
+                SELECT [unique] AS is_unique, partial
+                FROM pragma_index_list('returns')
+                WHERE name = 'idx_returns_credit_note_canonical'
+            `);
+            const accountingIndex = await get(`
+                SELECT name
+                FROM pragma_index_list('returns')
+                WHERE name = 'idx_returns_accounting_date_status'
+            `);
+            const installedTriggers = await get(`
+                SELECT COUNT(*) AS count
+                FROM sqlite_master
+                WHERE type = 'trigger'
+                  AND name IN (
+                    'trg_returns_accounting_insert_valid',
+                    'trg_returns_accounting_immutable_update',
+                    'trg_returns_accounting_immutable_delete',
+                    'trg_return_items_accounting_insert_valid',
+                    'trg_return_items_accounting_immutable_update',
+                    'trg_return_items_accounting_immutable_delete'
+                  )
+            `);
+
+            if (
+                !cnIndex ||
+                Number(cnIndex.is_unique) !== 1 ||
+                Number(cnIndex.partial) !== 1 ||
+                !accountingIndex ||
+                Number(installedTriggers.count) !== 6
+            ) {
+                throw new Error(
+                    "Credit Note accounting schema verification failed."
+                );
+            }
+
+            await run("COMMIT");
+            transactionStarted = false;
+            console.log("✓ Credit Note accounting schema ready.");
+        }
+        catch (error) {
+            if (transactionStarted) {
+                await run("ROLLBACK").catch(() => {});
+            }
+            throw error;
+        }
+
+    })();
+
+}
+
 // ============================================================
 // DATABASE READY CHECKPOINT
 // All database initialization operations queued above must
@@ -2415,6 +2834,8 @@ try {
         await migrateCustomerCreditCustomerIdNullable();
 
         await migrateReturnUniquenessEnforcement();
+
+        await migrateCreditNoteAccounting();
 
         await initializeSmtpSettings();
 

@@ -13,6 +13,51 @@ function normalizeOriginalBillNo(value) {
 
 }
 
+function toPaise(value) {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) {
+        throw new Error("Invalid monetary value in original bill item.");
+    }
+    return Math.round((amount + Number.EPSILON) * 100);
+}
+
+function fromPaise(value) {
+    if (!Number.isSafeInteger(value)) {
+        throw new Error("Invalid paise value.");
+    }
+    return value / 100;
+}
+
+function roundHalfUp(numerator, denominator) {
+    if (
+        !Number.isSafeInteger(numerator) ||
+        !Number.isSafeInteger(denominator) ||
+        numerator < 0 ||
+        denominator <= 0
+    ) {
+        throw new Error("Invalid accounting allocation.");
+    }
+    return Math.floor(
+        ((numerator * 2) + denominator) /
+        (denominator * 2)
+    );
+}
+
+function allocate(totalPaise, returnedQuantity, soldQuantity) {
+    return roundHalfUp(
+        totalPaise * returnedQuantity,
+        soldQuantity
+    );
+}
+
+function getDocumentPrefix(type, businessDate) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(businessDate);
+    if (!match || !["RT", "CN"].includes(type)) {
+        throw new Error("Invalid Return/Credit Note business date.");
+    }
+    return `${type}${match[3]}${match[2]}${match[1].slice(-2)}`;
+}
+
 function mapReturnDatabaseError(error) {
 
     const message =
@@ -55,7 +100,7 @@ function mapReturnDatabaseError(error) {
 
 }
 
-function resolveReturnItemProducts(
+function resolveAuthoritativeReturnItems(
     originalBillNo,
     items
 ) {
@@ -66,20 +111,45 @@ function resolveReturnItemProducts(
         );
     }
 
+    const seenItemIds = new Set();
+
     return Promise.all(
         items.map(item =>
             new Promise((resolve, reject) => {
 
+                const originalBillItemId =
+                    Number(item.original_bill_item_id);
                 const returnQuantity =
                     Number(item.quantity);
 
                 if (
+                    !Number.isInteger(originalBillItemId) ||
+                    originalBillItemId <= 0
+                ) {
+                    reject(
+                        new Error("Invalid original bill item ID.")
+                    );
+                    return;
+                }
+
+                if (seenItemIds.has(originalBillItemId)) {
+                    reject(
+                        new Error(
+                            "Duplicate original bill item in return request."
+                        )
+                    );
+                    return;
+                }
+                seenItemIds.add(originalBillItemId);
+
+                if (
                     !Number.isFinite(returnQuantity) ||
+                    !Number.isInteger(returnQuantity) ||
                     returnQuantity <= 0
                 ) {
                     reject(
                         new Error(
-                            "Returned quantity must be greater than zero."
+                            "Returned quantity must be a positive whole number."
                         )
                     );
                     return;
@@ -90,7 +160,13 @@ function resolveReturnItemProducts(
                     SELECT
                         p.id AS product_id,
                         p.barcode AS barcode,
-                        bi.product_name AS product_name
+                        bi.product_name AS product_name,
+                        bi.qty AS sold_quantity,
+                        bi.mrp,
+                        bi.discount_percent,
+                        bi.taxable_amount,
+                        bi.gst_rate,
+                        bi.net_amount
                     FROM bill_items bi
                     INNER JOIN products p
                         ON p.barcode = bi.barcode
@@ -99,7 +175,7 @@ function resolveReturnItemProducts(
                     LIMIT 1
                     `,
                     [
-                        item.original_bill_item_id,
+                        originalBillItemId,
                         originalBillNo
                     ],
                     (resolveErr, product) => {
@@ -118,16 +194,114 @@ function resolveReturnItemProducts(
                             return;
                         }
 
-                        resolve({
-                            ...item,
-                            product_id: product.product_id,
-                            barcode: product.barcode,
-                            product_name:
-                                product.product_name ||
-                                item.product_name ||
-                                "",
-                            quantity: returnQuantity
-                        });
+                        try {
+                            const soldQuantity =
+                                Number(product.sold_quantity);
+
+                            if (
+                                !Number.isInteger(soldQuantity) ||
+                                soldQuantity <= 0 ||
+                                returnQuantity > soldQuantity
+                            ) {
+                                throw new Error(
+                                    "Returned quantity exceeds the original quantity sold."
+                                );
+                            }
+
+                            const mrpPaise = toPaise(product.mrp);
+                            const originalNetPaise =
+                                toPaise(product.net_amount);
+                            const originalTaxablePaise =
+                                toPaise(product.taxable_amount);
+                            const discountPercent =
+                                Number(product.discount_percent);
+                            const gstRate =
+                                Number(product.gst_rate);
+
+                            if (
+                                !Number.isFinite(discountPercent) ||
+                                discountPercent < 0 ||
+                                !Number.isFinite(gstRate) ||
+                                gstRate < 0
+                            ) {
+                                throw new Error(
+                                    "Original bill item rates are invalid."
+                                );
+                            }
+                            const grossPaise =
+                                mrpPaise * returnQuantity;
+                            const netPaise = allocate(
+                                originalNetPaise,
+                                returnQuantity,
+                                soldQuantity
+                            );
+                            const taxablePaise = allocate(
+                                originalTaxablePaise,
+                                returnQuantity,
+                                soldQuantity
+                            );
+                            const discountPaise =
+                                grossPaise - netPaise;
+                            const gstPaise =
+                                netPaise - taxablePaise;
+
+                            if (
+                                !Number.isSafeInteger(grossPaise) ||
+                                discountPaise < 0 ||
+                                taxablePaise < 0 ||
+                                gstPaise < 0
+                            ) {
+                                throw new Error(
+                                    "Original bill item financial values cannot be reconciled."
+                                );
+                            }
+
+                            const cgstPaise =
+                                roundHalfUp(gstPaise, 2);
+                            const sgstPaise =
+                                gstPaise - cgstPaise;
+
+                            resolve({
+                                original_bill_item_id:
+                                    originalBillItemId,
+                                product_id: product.product_id,
+                                barcode: product.barcode,
+                                product_name:
+                                    product.product_name || "",
+                                quantity: returnQuantity,
+                                mrp: fromPaise(mrpPaise),
+                                gross_reversal:
+                                    fromPaise(grossPaise),
+                                discount_percent:
+                                    discountPercent,
+                                discount_reversal:
+                                    fromPaise(discountPaise),
+                                taxable_reversal:
+                                    fromPaise(taxablePaise),
+                                gst_rate:
+                                    gstRate,
+                                cgst_reversal:
+                                    fromPaise(cgstPaise),
+                                sgst_reversal:
+                                    fromPaise(sgstPaise),
+                                gst_reversal:
+                                    fromPaise(gstPaise),
+                                net_reversal:
+                                    fromPaise(netPaise),
+                                paise: {
+                                    gross: grossPaise,
+                                    discount: discountPaise,
+                                    taxable: taxablePaise,
+                                    cgst: cgstPaise,
+                                    sgst: sgstPaise,
+                                    gst: gstPaise,
+                                    net: netPaise
+                                }
+                            });
+                        }
+                        catch (calculationError) {
+                            reject(calculationError);
+                        }
 
                     }
                 );
@@ -162,11 +336,21 @@ function insertReturnItemWithInventory(
                 quantity,
                 unit_value,
                 return_value,
+                mrp,
+                gross_reversal,
+                discount_percent,
+                discount_reversal,
+                taxable_reversal,
+                gst_rate,
+                cgst_reversal,
+                sgst_reversal,
+                gst_reversal,
+                net_reversal,
                 remarks,
                 created_at
             )
             VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `,
             [
                 returnId,
@@ -175,9 +359,19 @@ function insertReturnItemWithInventory(
                 item.product_name,
                 item.original_bill_item_id,
                 item.quantity,
-                item.unit_value,
-                item.return_value,
-                item.remarks || "",
+                item.mrp,
+                item.net_reversal,
+                item.mrp,
+                item.gross_reversal,
+                item.discount_percent,
+                item.discount_reversal,
+                item.taxable_reversal,
+                item.gst_rate,
+                item.cgst_reversal,
+                item.sgst_reversal,
+                item.gst_reversal,
+                item.net_reversal,
+                "",
                 createdAt
             ],
             itemErr => {
@@ -811,262 +1005,316 @@ function getNextStoreCreditNumber() {
    SAVE RETURN
 =========================================== */
 
-function saveReturn(returnData) {
+async function saveReturn(returnData) {
 
-    return new Promise((resolve, reject) => {
+    const canonicalBillNo = normalizeOriginalBillNo(
+        returnData.original_bill_no
+    );
 
-        const canonicalBillNo =
-            normalizeOriginalBillNo(
-                returnData.original_bill_no
-            );
+    if (!canonicalBillNo) {
+        throw new Error(
+            "Original bill number is required for a return."
+        );
+    }
 
-        if (!canonicalBillNo) {
-            reject(
-                new Error(
-                    "Original bill number is required for a return."
-                )
-            );
-            return;
-        }
+    const run = (sql, params = []) =>
+        new Promise((resolve, reject) => {
+            db.run(sql, params, function(error) {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                resolve({
+                    lastID: this.lastID,
+                    changes: this.changes
+                });
+            });
+        });
 
-        db.get(
+    const get = (sql, params = []) =>
+        new Promise((resolve, reject) => {
+            db.get(sql, params, (error, row) => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                resolve(row);
+            });
+        });
+
+    const nextNumber = async (type, businessDate) => {
+        const prefix = getDocumentPrefix(type, businessDate);
+        const column = type === "RT"
+            ? "return_no"
+            : "credit_note_no";
+        const row = await get(
             `
-            SELECT bill_no
+            SELECT ${column} AS document_no
+            FROM returns
+            WHERE UPPER(TRIM(${column})) LIKE ?
+            ORDER BY UPPER(TRIM(${column})) DESC
+            LIMIT 1
+            `,
+            [`${prefix}%`]
+        );
+        const next = row && row.document_no
+            ? Number(String(row.document_no).slice(-3)) + 1
+            : 1;
+        if (!Number.isInteger(next) || next < 1 || next > 999) {
+            throw new Error(`${type} daily number sequence exhausted.`);
+        }
+        return prefix + String(next).padStart(3, "0");
+    };
+
+    let transactionStarted = false;
+
+    try {
+        await run("BEGIN IMMEDIATE TRANSACTION");
+        transactionStarted = true;
+
+        const authoritativeBill = await get(
+            `
+            SELECT bill_no, bill_date
             FROM bills
             WHERE UPPER(TRIM(bill_no)) = ?
             LIMIT 1
             `,
-            [canonicalBillNo],
-            (billErr, authoritativeBill) => {
+            [canonicalBillNo]
+        );
 
-                if (billErr) {
-                    reject(billErr);
-                    return;
-                }
+        if (!authoritativeBill) {
+            throw new Error("Original bill not found.");
+        }
 
-                if (!authoritativeBill) {
-                    reject(
-                        new Error(
-                            "Original bill not found."
-                        )
-                    );
-                    return;
-                }
+        const authoritativeBillNo = authoritativeBill.bill_no;
+        const existingReturn = await get(
+            `
+            SELECT return_no
+            FROM returns
+            WHERE UPPER(TRIM(original_bill_no)) = UPPER(TRIM(?))
+            LIMIT 1
+            `,
+            [authoritativeBillNo]
+        );
 
-                const authoritativeBillNo =
-                    authoritativeBill.bill_no;
+        if (existingReturn) {
+            throw new Error(
+                "RETURN COMPLETED / FURTHER RETURNS NOT ALLOWED\n\n" +
+                "This original bill has already been returned.\n\n" +
+                `Return No: ${existingReturn.return_no}`
+            );
+        }
 
-        db.serialize(() => {
+        const resolvedItems = await resolveAuthoritativeReturnItems(
+            authoritativeBillNo,
+            returnData.items
+        );
 
-            db.run(
-                "BEGIN IMMEDIATE TRANSACTION",
-                beginErr => {
-
-                    if (beginErr) {
-                        reject(beginErr);
-                        return;
-                    }
-
-            db.get(
-                `
-                SELECT
-                    return_no
-                FROM returns
-                WHERE
-                    UPPER(TRIM(original_bill_no)) =
-                    UPPER(TRIM(?))
-                LIMIT 1
-                `,
-                [
-                    authoritativeBillNo
-                ],
-                (checkErr, existingReturn) => {
-
-                    if (checkErr) {
-
-                        db.run("ROLLBACK");
-                        reject(checkErr);
-                        return;
-
-                    }
-
-                    /*
-                    ============================================
-                    HARD LOCK
-                    ONE ORIGINAL BILL CAN HAVE ONLY ONE RETURN
-                    ============================================
-                    */
-
-                    if (existingReturn) {
-
-                        db.run("ROLLBACK");
-
-                        reject(
-                            new Error(
-                                "RETURN COMPLETED / FURTHER RETURNS NOT ALLOWED\n\n" +
-                                "This original bill has already been returned.\n\n" +
-                                "Return No: " +
-                                existingReturn.return_no
-                            )
+        const totals = resolvedItems.reduce(
+            (result, item) => {
+                for (const key of Object.keys(result)) {
+                    result[key] += item.paise[key];
+                    if (!Number.isSafeInteger(result[key])) {
+                        throw new Error(
+                            "Return accounting total exceeds safe limits."
                         );
-
-                        return;
-
                     }
-
-                    db.run(
-                        `
-                        INSERT INTO returns
-                        (
-                            return_no,
-                            original_bill_no,
-                            customer_id,
-                            customer_name,
-                            customer_mobile,
-                            return_reason,
-                            remarks,
-                            return_amount,
-                            created_by,
-                            created_at
-                        )
-
-                        VALUES
-                        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        `,
-                        [
-                            returnData.return_no,
-                            authoritativeBillNo,
-                            returnData.customer_id || null,
-                            returnData.customer_name,
-                            returnData.customer_mobile,
-                            returnData.return_reason,
-                            returnData.remarks || "",
-                            returnData.return_amount,
-                            returnData.created_by ||
-                                "Administrator",
-                            new Date().toISOString()
-                        ],
-                        function(err) {
-
-                            if (err) {
-
-                                db.run(
-                                    "ROLLBACK",
-                                    rollbackErr => {
-
-                                        if (rollbackErr) {
-                                            console.error(
-                                                "Return rollback failed:",
-                                                rollbackErr.message
-                                            );
-                                        }
-
-                                        reject(
-                                            mapReturnDatabaseError(
-                                                err
-                                            )
-                                        );
-
-                                    }
-                                );
-                                return;
-
-                            }
-
-                            const returnId =
-                                this.lastID;
-
-                            const createdBy =
-                                returnData.created_by ||
-                                "Administrator";
-
-                            resolveReturnItemProducts(
-                                authoritativeBillNo,
-                                returnData.items
-                            )
-                                .then(resolvedItems =>
-                                    resolvedItems.reduce(
-                                        (chain, item) =>
-                                            chain.then(() =>
-                                                insertReturnItemWithInventory(
-                                                    returnId,
-                                                    returnData.return_no,
-                                                    authoritativeBillNo,
-                                                    item,
-                                                    createdBy
-                                                )
-                                            ),
-                                        Promise.resolve()
-                                    )
-                                )
-                                .then(() =>
-                                    applyStoreCreditForReturn(
-                                        returnId,
-                                        returnData,
-                                        authoritativeBillNo,
-                                        createdBy
-                                    )
-                                )
-                                .then(storeCredit => {
-
-                                    db.run(
-                                        "COMMIT",
-                                        commitErr => {
-
-                                            if (commitErr) {
-                                                db.run("ROLLBACK");
-                                                reject(commitErr);
-                                                return;
-                                            }
-
-                                            resolve({
-                                                success: true,
-                                                return_id: returnId,
-                                                return_no:
-                                                    returnData.return_no,
-                                                ...storeCredit
-                                            });
-
-                                        }
-                                    );
-
-                                })
-
-                                                .catch(error => {
-
-                                                    db.run(
-                                                        "ROLLBACK",
-                                                        rollbackErr => {
-
-                                                            if (rollbackErr) {
-                                                                console.error(
-                                                                    "Return rollback failed:",
-                                                                    rollbackErr.message
-                                                                );
-                                                            }
-
-                                                            reject(error);
-
-                                                        }
-                                                    );
-
-                                                });
-
-                        }
-                    );
-
                 }
-            );
-
-                }
-            );
-
-        });
-
+                return result;
+            },
+            {
+                gross: 0,
+                discount: 0,
+                taxable: 0,
+                cgst: 0,
+                sgst: 0,
+                gst: 0,
+                net: 0
             }
         );
 
-    });
+        if (
+            totals.gross - totals.discount !== totals.net ||
+            totals.taxable + totals.gst !== totals.net ||
+            totals.cgst + totals.sgst !== totals.gst ||
+            totals.net <= 0
+        ) {
+            throw new Error(
+                "Return accounting values do not reconcile."
+            );
+        }
+
+        const businessDate = getBusinessDate();
+        const returnNo = await nextNumber("RT", businessDate);
+        const creditNoteNo = await nextNumber("CN", businessDate);
+        const createdBy =
+            returnData.created_by || "Administrator";
+        const createdAt = new Date().toISOString();
+
+        const parentInsert = await run(
+            `
+            INSERT INTO returns
+            (
+                return_no,
+                credit_note_no,
+                original_bill_no,
+                business_date,
+                original_bill_date,
+                customer_id,
+                customer_name,
+                customer_mobile,
+                return_reason,
+                remarks,
+                return_amount,
+                gross_reversal,
+                discount_reversal,
+                taxable_reversal,
+                cgst_reversal,
+                sgst_reversal,
+                gst_reversal,
+                net_reversal,
+                accounting_status,
+                accounting_snapshot_version,
+                created_by,
+                created_at
+            )
+            VALUES
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             'COMPLETED', 1, ?, ?)
+            `,
+            [
+                returnNo,
+                creditNoteNo,
+                authoritativeBillNo,
+                businessDate,
+                authoritativeBill.bill_date,
+                returnData.customer_id || null,
+                returnData.customer_name,
+                returnData.customer_mobile,
+                returnData.return_reason,
+                returnData.remarks || "",
+                fromPaise(totals.net),
+                fromPaise(totals.gross),
+                fromPaise(totals.discount),
+                fromPaise(totals.taxable),
+                fromPaise(totals.cgst),
+                fromPaise(totals.sgst),
+                fromPaise(totals.gst),
+                fromPaise(totals.net),
+                createdBy,
+                createdAt
+            ]
+        );
+
+        const returnId = parentInsert.lastID;
+
+        for (const item of resolvedItems) {
+            await insertReturnItemWithInventory(
+                returnId,
+                returnNo,
+                authoritativeBillNo,
+                item,
+                createdBy
+            );
+        }
+
+        const authoritativeReturnData = {
+            ...returnData,
+            return_no: returnNo,
+            return_amount: fromPaise(totals.net)
+        };
+        const storeCredit = await applyStoreCreditForReturn(
+            returnId,
+            authoritativeReturnData,
+            authoritativeBillNo,
+            createdBy
+        );
+
+        const verification = await get(
+            `
+            SELECT
+                r.return_amount,
+                r.gross_reversal,
+                r.discount_reversal,
+                r.taxable_reversal,
+                r.cgst_reversal,
+                r.sgst_reversal,
+                r.gst_reversal,
+                r.net_reversal,
+                SUM(ri.gross_reversal) AS item_gross,
+                SUM(ri.discount_reversal) AS item_discount,
+                SUM(ri.taxable_reversal) AS item_taxable,
+                SUM(ri.cgst_reversal) AS item_cgst,
+                SUM(ri.sgst_reversal) AS item_sgst,
+                SUM(ri.gst_reversal) AS item_gst,
+                SUM(ri.net_reversal) AS item_net
+            FROM returns r
+            INNER JOIN return_items ri ON ri.return_id = r.id
+            WHERE r.id = ?
+            GROUP BY r.id
+            `,
+            [returnId]
+        );
+
+        const comparisons = [
+            [verification.return_amount, totals.net],
+            [verification.gross_reversal, totals.gross],
+            [verification.discount_reversal, totals.discount],
+            [verification.taxable_reversal, totals.taxable],
+            [verification.cgst_reversal, totals.cgst],
+            [verification.sgst_reversal, totals.sgst],
+            [verification.gst_reversal, totals.gst],
+            [verification.net_reversal, totals.net],
+            [verification.item_gross, totals.gross],
+            [verification.item_discount, totals.discount],
+            [verification.item_taxable, totals.taxable],
+            [verification.item_cgst, totals.cgst],
+            [verification.item_sgst, totals.sgst],
+            [verification.item_gst, totals.gst],
+            [verification.item_net, totals.net]
+        ];
+
+        if (
+            !verification ||
+            comparisons.some(
+                ([value, expected]) => toPaise(value) !== expected
+            )
+        ) {
+            throw new Error(
+                "Persisted Return/Credit Note accounting verification failed."
+            );
+        }
+
+        await run("COMMIT");
+        transactionStarted = false;
+
+        return {
+            success: true,
+            return_id: returnId,
+            return_no: returnNo,
+            credit_note_no: creditNoteNo,
+            return_amount: fromPaise(totals.net),
+            gross_reversal: fromPaise(totals.gross),
+            discount_reversal: fromPaise(totals.discount),
+            taxable_reversal: fromPaise(totals.taxable),
+            cgst_reversal: fromPaise(totals.cgst),
+            sgst_reversal: fromPaise(totals.sgst),
+            gst_reversal: fromPaise(totals.gst),
+            net_reversal: fromPaise(totals.net),
+            ...storeCredit
+        };
+    }
+    catch (error) {
+        if (transactionStarted) {
+            await run("ROLLBACK").catch(rollbackError => {
+                console.error(
+                    "Return rollback failed:",
+                    rollbackError.message
+                );
+            });
+        }
+        throw mapReturnDatabaseError(error);
+    }
 
 }
 
