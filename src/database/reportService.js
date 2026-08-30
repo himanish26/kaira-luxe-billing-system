@@ -12,6 +12,21 @@ const {
 
 } = require("./excelExporter");
 
+function toPaise(value) {
+    const amount = Number(value || 0);
+    if (!Number.isFinite(amount)) {
+        throw new Error("Invalid Credit Note accounting value in report data.");
+    }
+    return Math.round((amount + Number.EPSILON) * 100);
+}
+
+function fromPaise(value) {
+    if (!Number.isSafeInteger(value)) {
+        throw new Error("Credit Note report total exceeds safe limits.");
+    }
+    return value / 100;
+}
+
 /* ===========================================
    BUSINESS REPORT
 =========================================== */
@@ -198,6 +213,132 @@ async function getGSTReport(fromDate, toDate) {
 }
 
 /* ===========================================
+   AUTHORITATIVE CREDIT NOTE REPORT DATA
+=========================================== */
+
+async function getCompletedCreditNoteItems(fromDate, toDate) {
+
+    return new Promise((resolve, reject) => {
+
+        const sql = `
+            SELECT
+                r.credit_note_no,
+                r.business_date AS credit_note_date,
+                r.return_no,
+                r.original_bill_no,
+                r.original_bill_date,
+                r.customer_name,
+                r.customer_mobile,
+                ri.id AS return_item_id,
+                ri.barcode,
+                obi.brand,
+                ri.product_name,
+                NULL AS style_code,
+                obi.colour,
+                obi.size,
+                obi.category,
+                ri.quantity AS quantity_returned,
+                ri.mrp,
+                ri.gross_reversal,
+                ri.discount_percent,
+                ri.discount_reversal,
+                ri.taxable_reversal,
+                ri.gst_rate,
+                ri.cgst_reversal,
+                ri.sgst_reversal,
+                ri.gst_reversal,
+                ri.net_reversal
+            FROM returns r
+            INNER JOIN return_items ri
+                ON ri.return_id = r.id
+            LEFT JOIN bill_items obi
+                ON obi.id = ri.original_bill_item_id
+            WHERE r.accounting_status = 'COMPLETED'
+              AND r.credit_note_no IS NOT NULL
+              AND TRIM(r.credit_note_no) <> ''
+              AND r.accounting_snapshot_version = 1
+              AND DATE(r.business_date) BETWEEN ? AND ?
+            ORDER BY
+                r.business_date,
+                UPPER(TRIM(r.credit_note_no)),
+                ri.id
+        `;
+
+        db.all(sql, [fromDate, toDate], (error, rows) => {
+            if (error) {
+                reject(error);
+                return;
+            }
+            resolve(rows || []);
+        });
+
+    });
+
+}
+
+function groupCreditNoteGSTReversals(items) {
+
+    const grouped = new Map();
+
+    for (const item of items) {
+        const key = [
+            String(item.credit_note_no || "").trim().toUpperCase(),
+            String(item.gst_rate)
+        ].join("|");
+
+        if (!grouped.has(key)) {
+            grouped.set(key, {
+                credit_note_no: item.credit_note_no,
+                credit_note_date: item.credit_note_date,
+                return_no: item.return_no,
+                original_bill_no: item.original_bill_no,
+                original_bill_date: item.original_bill_date,
+                gst_rate: item.gst_rate,
+                taxable_reversal_paise: 0,
+                cgst_reversal_paise: 0,
+                sgst_reversal_paise: 0,
+                gst_reversal_paise: 0,
+                net_reversal_paise: 0
+            });
+        }
+
+        const row = grouped.get(key);
+        row.taxable_reversal_paise += toPaise(item.taxable_reversal);
+        row.cgst_reversal_paise += toPaise(item.cgst_reversal);
+        row.sgst_reversal_paise += toPaise(item.sgst_reversal);
+        row.gst_reversal_paise += toPaise(item.gst_reversal);
+        row.net_reversal_paise += toPaise(item.net_reversal);
+
+        for (const value of [
+            row.taxable_reversal_paise,
+            row.cgst_reversal_paise,
+            row.sgst_reversal_paise,
+            row.gst_reversal_paise,
+            row.net_reversal_paise
+        ]) {
+            if (!Number.isSafeInteger(value)) {
+                throw new Error("Credit Note GST report total exceeds safe limits.");
+            }
+        }
+    }
+
+    return Array.from(grouped.values()).map(row => ({
+        credit_note_no: row.credit_note_no,
+        credit_note_date: row.credit_note_date,
+        return_no: row.return_no,
+        original_bill_no: row.original_bill_no,
+        original_bill_date: row.original_bill_date,
+        gst_rate: row.gst_rate,
+        taxable_reversal: fromPaise(row.taxable_reversal_paise),
+        cgst_reversal: fromPaise(row.cgst_reversal_paise),
+        sgst_reversal: fromPaise(row.sgst_reversal_paise),
+        gst_reversal: fromPaise(row.gst_reversal_paise),
+        net_reversal: fromPaise(row.net_reversal_paise)
+    }));
+
+}
+
+/* ===========================================
    PRODUCT SALES REPORT
 =========================================== */
 
@@ -316,14 +457,21 @@ async function exportReport(
 
         case "business": {
 
-    const data =
-        await getBusinessReport(
+    const [data, creditNoteItems] =
+        await Promise.all([
+            getBusinessReport(
             request.fromDate,
             request.toDate
-        );
+            ),
+            getCompletedCreditNoteItems(
+                request.fromDate,
+                request.toDate
+            )
+        ]);
 
     return await exportBusinessReport(
         data,
+        creditNoteItems,
         filePath,
         request.fromDate,
         request.toDate
@@ -333,14 +481,21 @@ async function exportReport(
 
         case "gst": {
 
-            const data =
-                await getGSTReport(
+            const [data, creditNoteItems] =
+                await Promise.all([
+                    getGSTReport(
                     request.fromDate,
                     request.toDate
-                );
+                    ),
+                    getCompletedCreditNoteItems(
+                        request.fromDate,
+                        request.toDate
+                    )
+                ]);
 
             return await exportGSTReport(
     data,
+    groupCreditNoteGSTReversals(creditNoteItems),
     filePath,
     request.fromDate,
     request.toDate
@@ -492,6 +647,10 @@ module.exports = {
     getBusinessReport,
 
     getGSTReport,
+
+    getCompletedCreditNoteItems,
+
+    groupCreditNoteGSTReversals,
 
     getProductSalesReport,
 
