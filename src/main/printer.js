@@ -3,6 +3,7 @@ const {
     dialog
 } = require("electron");
 const path = require("path");
+const fs = require("fs/promises");
 
 const { getSettings } = require("../database/settingsService");
 
@@ -403,6 +404,103 @@ await printWindow.webContents.executeJavaScript(
 
 }
 
+function createCreditNoteWindow() {
+    return new BrowserWindow({
+        show: false,
+        width: 302,
+        height: 1000,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        }
+    });
+}
+
+async function loadCreditNoteDocument(printWindow, creditNoteData) {
+    const settings = await getSettings();
+    await printWindow.loadFile(
+        path.join(__dirname, "../renderer/creditNote.html")
+    );
+    await printWindow.webContents.executeJavaScript(
+        `window.creditNoteData = ${JSON.stringify(creditNoteData)};
+         window.storeSettings = ${JSON.stringify(settings)};
+         if (window.loadCreditNote) { loadCreditNote(); }`
+    );
+    return settings;
+}
+
+async function printCreditNote(creditNoteData) {
+    const printWindow = createCreditNoteWindow();
+    try {
+        const settings = await loadCreditNoteDocument(
+            printWindow,
+            creditNoteData
+        );
+        return await new Promise((resolve, reject) => {
+            printWindow.webContents.print(
+                {
+                    silent: true,
+                    printBackground: true,
+                    deviceName: settings.default_printer,
+                    margins: { marginType: "none" },
+                    landscape: false,
+                    scaleFactor: 100,
+                    usePrinterDefaultPageSize: true
+                },
+                (success, error) => {
+                    if (success) {
+                        resolve({ success: true });
+                        return;
+                    }
+                    reject(
+                        new Error(error || "Credit Note printing failed.")
+                    );
+                }
+            );
+        });
+    }
+    finally {
+        if (!printWindow.isDestroyed()) {
+            printWindow.close();
+        }
+    }
+}
+
+async function saveCreditNotePdf(creditNoteData) {
+    const printWindow = createCreditNoteWindow();
+    try {
+        await loadCreditNoteDocument(printWindow, creditNoteData);
+        const safeCreditNoteNo = String(
+            creditNoteData.credit_note_no || "Credit_Note"
+        ).replace(/[^A-Za-z0-9_-]/g, "_");
+        const selection = await dialog.showSaveDialog({
+            title: "Save Credit Note PDF",
+            defaultPath: `Credit_Note_${safeCreditNoteNo}.pdf`,
+            filters: [{ name: "PDF Documents", extensions: ["pdf"] }]
+        });
+        if (selection.canceled || !selection.filePath) {
+            return { success: false, canceled: true };
+        }
+        const pdf = await printWindow.webContents.printToPDF({
+            printBackground: true,
+            pageSize: "A4",
+            margins: {
+                top: 0.25,
+                bottom: 0.25,
+                left: 0.25,
+                right: 0.25
+            }
+        });
+        await fs.writeFile(selection.filePath, pdf);
+        return { success: true, filePath: selection.filePath };
+    }
+    finally {
+        if (!printWindow.isDestroyed()) {
+            printWindow.close();
+        }
+    }
+}
+
 async function printTestReceipt(printerName) {
 
     return new Promise((resolve, reject) => {
@@ -738,6 +836,10 @@ module.exports = {
     printStoreCredit,
 
     saveBillPdf,
+
+    printCreditNote,
+
+    saveCreditNotePdf,
 
     printTestReceipt,
 

@@ -5776,6 +5776,24 @@ async function viewReturn(returnNo) {
                 ).replace(/\//g, "-")
                 : "-";
 
+        const viewCreditNoteBtn = document.getElementById(
+            "viewCreditNoteBtn"
+        );
+        const creditNoteUnavailableMessage = document.getElementById(
+            "creditNoteUnavailableMessage"
+        );
+        const creditNoteAvailable =
+            details.accounting_status === "COMPLETED" &&
+            details.accounting_snapshot_version === 1 &&
+            Boolean(String(details.credit_note_no || "").trim());
+
+        viewCreditNoteBtn.style.display =
+            creditNoteAvailable ? "inline-block" : "none";
+        viewCreditNoteBtn.dataset.identifier =
+            creditNoteAvailable ? details.credit_note_no : "";
+        creditNoteUnavailableMessage.style.display =
+            creditNoteAvailable ? "none" : "inline";
+
 
         const itemsBody =
             document.getElementById(
@@ -5862,6 +5880,151 @@ if (viewReturnBackBtn) {
     );
 
 }
+
+let currentCreditNoteIdentifier = "";
+
+function formatCreditNoteViewDate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ""));
+    return match ? `${match[3]}-${match[2]}-${match[1]}` : "-";
+}
+
+function formatCreditNoteViewMoney(value) {
+    return `₹${Number(value || 0).toFixed(2)}`;
+}
+
+async function viewCreditNote(identifier) {
+    try {
+        const details = await window.electronAPI.getCreditNoteDetails(
+            identifier
+        );
+        if (!details || details.success === false) {
+            alert(
+                details && details.error
+                    ? details.error
+                    : "Unable to load Credit Note."
+            );
+            return;
+        }
+        if (details.available !== true) {
+            alert(
+                details.reason ||
+                "Credit Note is not available for this historical return."
+            );
+            return;
+        }
+
+        currentCreditNoteIdentifier = details.credit_note_no;
+        document.getElementById("viewReturnScreen").style.display = "none";
+        document.getElementById("viewCreditNoteScreen").style.display = "block";
+
+        const values = {
+            cnViewNo: details.credit_note_no,
+            cnViewDate: formatCreditNoteViewDate(details.credit_note_date),
+            cnViewReturnNo: details.return_no,
+            cnViewBillNo: details.original_bill_no,
+            cnViewBillDate: formatCreditNoteViewDate(details.original_bill_date),
+            cnViewCustomer: details.customer_name,
+            cnViewMobile: details.customer_mobile,
+            cnViewReason: details.return_reason,
+            cnViewRemarks: details.remarks
+        };
+        for (const [id, value] of Object.entries(values)) {
+            document.getElementById(id).textContent = value || "-";
+        }
+
+        const itemsBody = document.getElementById("cnViewItemsBody");
+        itemsBody.replaceChildren();
+        (details.items || []).forEach(item => {
+            const row = document.createElement("tr");
+            const values = [
+                item.product_name || "-",
+                item.barcode || "-",
+                String(item.quantity),
+                formatCreditNoteViewMoney(item.mrp),
+                formatCreditNoteViewMoney(item.gross_reversal),
+                formatCreditNoteViewMoney(item.discount_reversal),
+                formatCreditNoteViewMoney(item.taxable_reversal),
+                `${Number(item.gst_rate || 0).toFixed(2)}%`,
+                formatCreditNoteViewMoney(item.cgst_reversal),
+                formatCreditNoteViewMoney(item.sgst_reversal),
+                formatCreditNoteViewMoney(item.gst_reversal),
+                formatCreditNoteViewMoney(item.net_reversal)
+            ];
+            values.forEach(value => {
+                const cell = document.createElement("td");
+                cell.textContent = value;
+                row.appendChild(cell);
+            });
+            itemsBody.appendChild(row);
+        });
+
+        for (const [id, field] of [
+            ["cnViewGross", "gross_reversal"],
+            ["cnViewDiscount", "discount_reversal"],
+            ["cnViewTaxable", "taxable_reversal"],
+            ["cnViewCgst", "cgst_reversal"],
+            ["cnViewSgst", "sgst_reversal"],
+            ["cnViewGst", "gst_reversal"],
+            ["cnViewNet", "net_reversal"]
+        ]) {
+            document.getElementById(id).textContent =
+                formatCreditNoteViewMoney(details[field]);
+        }
+
+        const settlementRow = document.getElementById("cnViewSettlementRow");
+        settlementRow.style.display = details.store_credit_no ? "flex" : "none";
+        document.getElementById("cnViewStoreCredit").textContent =
+            details.store_credit_no || "";
+        resetScrollPosition();
+    }
+    catch (error) {
+        console.error("VIEW CREDIT NOTE ERROR:", error);
+        alert("Unable to load Credit Note.");
+    }
+}
+
+const viewCreditNoteBtn = document.getElementById("viewCreditNoteBtn");
+if (viewCreditNoteBtn) {
+    viewCreditNoteBtn.addEventListener("click", () => {
+        viewCreditNote(viewCreditNoteBtn.dataset.identifier);
+    });
+}
+
+document.getElementById("viewCreditNoteBackBtn").addEventListener(
+    "click",
+    () => {
+        document.getElementById("viewCreditNoteScreen").style.display = "none";
+        document.getElementById("viewReturnScreen").style.display = "block";
+        resetScrollPosition();
+    }
+);
+
+document.getElementById("printCreditNoteBtn").addEventListener(
+    "click",
+    async () => {
+        const result = await window.electronAPI.printCreditNote(
+            currentCreditNoteIdentifier
+        );
+        if (!result || result.success !== true) {
+            alert(result && result.error ? result.error : "Credit Note printing failed.");
+        }
+    }
+);
+
+document.getElementById("saveCreditNotePdfBtn").addEventListener(
+    "click",
+    async () => {
+        const result = await window.electronAPI.saveCreditNotePdf(
+            currentCreditNoteIdentifier
+        );
+        if (result && result.canceled) {
+            return;
+        }
+        if (!result || result.success !== true) {
+            alert(result && result.error ? result.error : "Credit Note PDF could not be saved.");
+        }
+    }
+);
 
 
 /* =====================================

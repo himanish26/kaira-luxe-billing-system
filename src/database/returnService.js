@@ -1581,6 +1581,9 @@ function getReturnDetails(returnNo) {
                 r.return_reason,
                 r.remarks,
                 r.return_amount,
+                r.credit_note_no,
+                r.accounting_status,
+                r.accounting_snapshot_version,
                 r.created_by,
                 r.created_at,
 
@@ -1673,6 +1676,220 @@ sc.valid_until
 
 }
 
+/* ===========================================
+   GET AUTHORITATIVE CREDIT NOTE DOCUMENT
+=========================================== */
+
+async function getCreditNoteDetails(identifier) {
+
+    const canonicalIdentifier = String(identifier || "")
+        .trim()
+        .toUpperCase();
+
+    if (!canonicalIdentifier) {
+        throw new Error("Credit Note or Return number is required.");
+    }
+
+    const get = (sql, params = []) =>
+        new Promise((resolve, reject) => {
+            db.get(sql, params, (error, row) => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                resolve(row || null);
+            });
+        });
+
+    const all = (sql, params = []) =>
+        new Promise((resolve, reject) => {
+            db.all(sql, params, (error, rows) => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                resolve(rows || []);
+            });
+        });
+
+    const creditNote = await get(
+        `
+        SELECT
+            r.id,
+            r.credit_note_no,
+            r.return_no,
+            r.original_bill_no,
+            r.business_date,
+            r.original_bill_date,
+            r.customer_name,
+            r.customer_mobile,
+            r.return_reason,
+            r.remarks,
+            r.return_amount,
+            r.gross_reversal,
+            r.discount_reversal,
+            r.taxable_reversal,
+            r.cgst_reversal,
+            r.sgst_reversal,
+            r.gst_reversal,
+            r.net_reversal,
+            r.accounting_status,
+            r.accounting_snapshot_version,
+            r.created_by,
+            r.created_at,
+            sc.store_credit_no
+        FROM returns r
+        LEFT JOIN store_credits sc ON sc.return_id = r.id
+        WHERE UPPER(TRIM(r.credit_note_no)) = ?
+           OR UPPER(TRIM(r.return_no)) = ?
+        LIMIT 1
+        `,
+        [canonicalIdentifier, canonicalIdentifier]
+    );
+
+    if (!creditNote) {
+        return null;
+    }
+
+    if (
+        creditNote.accounting_status !== "COMPLETED" ||
+        creditNote.accounting_snapshot_version !== 1 ||
+        !String(creditNote.credit_note_no || "").trim()
+    ) {
+        return {
+            available: false,
+            return_no: creditNote.return_no,
+            reason:
+                "Credit Note is not available for this historical return."
+        };
+    }
+
+    const items = await all(
+        `
+        SELECT
+            id,
+            barcode,
+            product_name,
+            quantity,
+            mrp,
+            gross_reversal,
+            discount_percent,
+            discount_reversal,
+            taxable_reversal,
+            gst_rate,
+            cgst_reversal,
+            sgst_reversal,
+            gst_reversal,
+            net_reversal
+        FROM return_items
+        WHERE return_id = ?
+        ORDER BY id ASC
+        `,
+        [creditNote.id]
+    );
+
+    const moneyFields = [
+        "gross_reversal",
+        "discount_reversal",
+        "taxable_reversal",
+        "cgst_reversal",
+        "sgst_reversal",
+        "gst_reversal",
+        "net_reversal"
+    ];
+    const totals = Object.fromEntries(
+        moneyFields.map(field => [field, 0])
+    );
+
+    let valid = items.length > 0;
+    for (const item of items) {
+        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+            valid = false;
+        }
+        for (const field of moneyFields) {
+            try {
+                totals[field] += toPaise(item[field]);
+            }
+            catch (_) {
+                valid = false;
+            }
+        }
+        try {
+            const gross = toPaise(item.gross_reversal);
+            const discount = toPaise(item.discount_reversal);
+            const taxable = toPaise(item.taxable_reversal);
+            const cgst = toPaise(item.cgst_reversal);
+            const sgst = toPaise(item.sgst_reversal);
+            const gst = toPaise(item.gst_reversal);
+            const net = toPaise(item.net_reversal);
+            if (
+                gross - discount !== net ||
+                taxable + gst !== net ||
+                cgst + sgst !== gst
+            ) {
+                valid = false;
+            }
+        }
+        catch (_) {
+            valid = false;
+        }
+    }
+
+    for (const field of moneyFields) {
+        try {
+            if (toPaise(creditNote[field]) !== totals[field]) {
+                valid = false;
+            }
+        }
+        catch (_) {
+            valid = false;
+        }
+    }
+
+    try {
+        if (
+            toPaise(creditNote.return_amount) !==
+            toPaise(creditNote.net_reversal)
+        ) {
+            valid = false;
+        }
+    }
+    catch (_) {
+        valid = false;
+    }
+
+    if (!valid) {
+        throw new Error(
+            "Credit Note data could not be verified. Please contact the administrator."
+        );
+    }
+
+    return {
+        available: true,
+        credit_note_no: creditNote.credit_note_no,
+        credit_note_date: creditNote.business_date,
+        return_no: creditNote.return_no,
+        return_date: creditNote.business_date,
+        original_bill_no: creditNote.original_bill_no,
+        original_bill_date: creditNote.original_bill_date,
+        customer_name: creditNote.customer_name,
+        customer_mobile: creditNote.customer_mobile,
+        return_reason: creditNote.return_reason,
+        remarks: creditNote.remarks,
+        gross_reversal: creditNote.gross_reversal,
+        discount_reversal: creditNote.discount_reversal,
+        taxable_reversal: creditNote.taxable_reversal,
+        cgst_reversal: creditNote.cgst_reversal,
+        sgst_reversal: creditNote.sgst_reversal,
+        gst_reversal: creditNote.gst_reversal,
+        net_reversal: creditNote.net_reversal,
+        store_credit_no: creditNote.store_credit_no || null,
+        created_by: creditNote.created_by,
+        created_at: creditNote.created_at,
+        items
+    };
+}
+
 module.exports = {
 
     getBillForReturn,
@@ -1689,6 +1906,8 @@ module.exports = {
 
     getStoreCreditForReprint,
 
-    getReturnDetails
+    getReturnDetails,
+
+    getCreditNoteDetails
 
 };

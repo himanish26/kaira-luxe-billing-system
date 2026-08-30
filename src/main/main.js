@@ -90,7 +90,8 @@ const {
     getStoreCreditDetails,
     getAvailableStoreCreditByMobile,
     getStoreCreditForReprint,
-    getReturnDetails
+    getReturnDetails,
+    getCreditNoteDetails
 } = require("../database/returnService");
 
 const {
@@ -218,7 +219,9 @@ const {
 
     printTestReceipt,
 
-    printDayClosingReceipt
+    printDayClosingReceipt,
+    printCreditNote,
+    saveCreditNotePdf
 
 } = require("./printer");
 
@@ -830,6 +833,63 @@ ipcMain.handle(
             returnNo
         );
 
+    }
+);
+
+ipcMain.handle(
+    "get-credit-note-details",
+    async (event, identifier) => {
+        try {
+            return await getCreditNoteDetails(identifier);
+        }
+        catch (error) {
+            console.error("GET CREDIT NOTE ERROR:", error);
+            return { success: false, error: error.message };
+        }
+    }
+);
+
+ipcMain.handle(
+    "print-credit-note",
+    async (event, identifier) => {
+        try {
+            const details = await getCreditNoteDetails(identifier);
+            if (!details || details.available !== true) {
+                return {
+                    success: false,
+                    error: details && details.reason
+                        ? details.reason
+                        : "Credit Note is not available."
+                };
+            }
+            return await printCreditNote(details);
+        }
+        catch (error) {
+            console.error("PRINT CREDIT NOTE ERROR:", error);
+            return { success: false, error: error.message };
+        }
+    }
+);
+
+ipcMain.handle(
+    "save-credit-note-pdf",
+    async (event, identifier) => {
+        try {
+            const details = await getCreditNoteDetails(identifier);
+            if (!details || details.available !== true) {
+                return {
+                    success: false,
+                    error: details && details.reason
+                        ? details.reason
+                        : "Credit Note is not available."
+                };
+            }
+            return await saveCreditNotePdf(details);
+        }
+        catch (error) {
+            console.error("SAVE CREDIT NOTE PDF ERROR:", error);
+            return { success: false, error: error.message };
+        }
     }
 );
 

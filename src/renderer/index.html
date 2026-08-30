@@ -1746,6 +1746,75 @@ returned after purchase.
 
     </div>
 
+    <div class="invoice-actions">
+        <button id="viewCreditNoteBtn" style="display:none;">
+            View Credit Note
+        </button>
+        <span id="creditNoteUnavailableMessage" style="display:none;">
+            Credit Note is not available for this historical return.
+        </span>
+    </div>
+
+</div>
+
+<!-- =====================================
+     VIEW CREDIT NOTE SCREEN
+===================================== -->
+
+<div id="viewCreditNoteScreen" style="display:none;">
+    <div class="bill-top-bar">
+        <button id="viewCreditNoteBackBtn" class="back-btn">← Return Details</button>
+    </div>
+
+    <h1 class="billing-page-title">CREDIT NOTE</h1>
+
+    <div class="invoice-info-card">
+        <div class="invoice-row">
+            <div><b>Credit Note No.</b><br><span id="cnViewNo"></span></div>
+            <div><b>Credit Note Date</b><br><span id="cnViewDate"></span></div>
+        </div>
+        <hr>
+        <div class="invoice-row">
+            <div><b>Linked Return No.</b><br><span id="cnViewReturnNo"></span></div>
+            <div><b>Original Tax Invoice No.</b><br><span id="cnViewBillNo"></span></div>
+            <div><b>Original Tax Invoice Date</b><br><span id="cnViewBillDate"></span></div>
+        </div>
+        <hr>
+        <div class="invoice-row">
+            <div><b>Customer</b><br><span id="cnViewCustomer"></span></div>
+            <div><b>Mobile</b><br><span id="cnViewMobile"></span></div>
+        </div>
+    </div>
+
+    <div class="table-container" style="overflow-x:auto;">
+        <table>
+            <thead><tr>
+                <th>Product</th><th>Barcode</th><th>Qty</th><th>MRP</th>
+                <th>Gross</th><th>Discount</th><th>Taxable</th><th>GST Rate</th>
+                <th>CGST</th><th>SGST</th><th>GST</th><th>Net</th>
+            </tr></thead>
+            <tbody id="cnViewItemsBody"></tbody>
+        </table>
+    </div>
+
+    <div class="invoice-info-card">
+        <div class="invoice-row"><div>Gross Reversal</div><b id="cnViewGross"></b></div>
+        <div class="invoice-row"><div>Discount Reversal</div><b id="cnViewDiscount"></b></div>
+        <div class="invoice-row"><div>Taxable Reversal</div><b id="cnViewTaxable"></b></div>
+        <div class="invoice-row"><div>CGST Reversal</div><b id="cnViewCgst"></b></div>
+        <div class="invoice-row"><div>SGST Reversal</div><b id="cnViewSgst"></b></div>
+        <div class="invoice-row"><div>GST Reversal</div><b id="cnViewGst"></b></div>
+        <hr>
+        <div class="invoice-row" style="font-size:22px;"><div><b>Net Credit Note</b></div><b id="cnViewNet"></b></div>
+        <hr>
+        <div class="invoice-row"><div><b>Reason</b><br><span id="cnViewReason"></span></div><div><b>Remarks</b><br><span id="cnViewRemarks"></span></div></div>
+        <div id="cnViewSettlementRow" class="invoice-row"><div><b>Settlement</b><br>Store Credit <span id="cnViewStoreCredit"></span></div></div>
+    </div>
+
+    <div class="invoice-actions">
+        <button id="printCreditNoteBtn">🖨 Print / Reprint</button>
+        <button id="saveCreditNotePdfBtn">Save PDF</button>
+    </div>
 </div>
 
 <!-- =====================================

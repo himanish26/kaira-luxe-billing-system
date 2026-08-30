@@ -1,0 +1,21 @@
+@page { margin: 6mm; }
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    color: #111;
+    background: #fff;
+    font: 11px Arial, sans-serif;
+}
+.credit-note { width: 100%; max-width: 720px; margin: 0 auto; }
+header { text-align: center; border-bottom: 1px dashed #111; padding-bottom: 8px; }
+header h1 { font-size: 19px; margin: 0 0 3px; }
+header h2 { font-size: 16px; margin: 8px 0 0; letter-spacing: 1px; }
+.metadata, .notes { padding: 8px 0; border-bottom: 1px dashed #111; line-height: 1.5; }
+.credit-note-item { padding: 7px 0; border-bottom: 1px dashed #888; }
+.credit-note-item .name { font-weight: 700; }
+.credit-note-item .detail { display: flex; justify-content: space-between; gap: 5px; }
+.totals { padding: 7px 0; border-bottom: 1px dashed #111; }
+.totals div { display: flex; justify-content: space-between; padding: 2px 0; }
+.totals .net { margin-top: 4px; padding-top: 5px; border-top: 1px solid #111; font-size: 14px; font-weight: 800; }
+footer { padding-top: 9px; text-align: center; font-size: 10px; }
+@media print { body { width: auto; } }

@@ -81,6 +81,24 @@ ipcRenderer.invoke(
     returnNo
 ),
 
+getCreditNoteDetails: (identifier) =>
+ipcRenderer.invoke(
+    "get-credit-note-details",
+    identifier
+),
+
+printCreditNote: (identifier) =>
+ipcRenderer.invoke(
+    "print-credit-note",
+    identifier
+),
+
+saveCreditNotePdf: (identifier) =>
+ipcRenderer.invoke(
+    "save-credit-note-pdf",
+    identifier
+),
+
 getAvailableStoreCreditByMobile: (customerMobile) =>
 ipcRenderer.invoke(
     "get-available-store-credit-by-mobile",
