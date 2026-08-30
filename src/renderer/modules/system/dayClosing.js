@@ -546,13 +546,14 @@ async function reopenBusinessDay() {
     try {
 
         requireAdminAuthorization(
-            async () => {
+            "DAY_REOPEN",
+            async grant => {
 
                 try {
 
                     const result =
                         await window.electronAPI
-                            .reopenBusinessDay();
+                            .reopenBusinessDay(grant);
 
                     if (!result.success) {
 

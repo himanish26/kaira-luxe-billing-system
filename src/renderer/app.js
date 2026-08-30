@@ -348,6 +348,158 @@ const aboutCard =
 const adminCard =
     document.getElementById("adminCard");
 
+if (adminCard) {
+    adminCard.addEventListener("click", showAdministratorSecurityPage);
+}
+
+async function showAdministratorSecurityPage() {
+    const status = await window.electronAPI.administratorSecurity.getStatus();
+    const workflow = status.initialized
+        ? `
+            <section class="security-card">
+                <h2>CHANGE ADMINISTRATOR PIN</h2>
+                <div class="security-form-grid">
+                    <label>Current Administrator PIN
+                        <input id="securityCurrentPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
+                    </label>
+                    <label>New Administrator PIN
+                        <input id="securityNewPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
+                    </label>
+                    <label>Confirm Administrator PIN
+                        <input id="securityConfirmPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
+                    </label>
+                </div>
+                <div id="securityChangeMessage" class="security-message"></div>
+                <button id="securityChangePinBtn" class="dashboard-btn security-action-btn">Change PIN</button>
+            </section>
+            <section class="security-recovery-card">
+                <h3>FORGOT ADMINISTRATOR PIN?</h3>
+                <p>Use the Master PIN only to reset the Administrator PIN.</p>
+                <button id="securityOpenRecoveryBtn" class="security-secondary-btn">Reset Using Master PIN</button>
+                <div id="securityRecoveryPanel" class="security-recovery-panel" hidden>
+                    <h2>MASTER RECOVERY</h2>
+                    <div class="security-form-grid">
+                        <label>Master PIN
+                            <input id="securityMasterPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off">
+                        </label>
+                        <label>New Administrator PIN
+                            <input id="securityRecoveryPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
+                        </label>
+                        <label>Confirm Administrator PIN
+                            <input id="securityRecoveryConfirmPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
+                        </label>
+                    </div>
+                    <div id="securityRecoveryMessage" class="security-message"></div>
+                    <button id="securityRecoverBtn" class="dashboard-btn security-action-btn">Reset Administrator PIN</button>
+                </div>
+            </section>`
+        : `
+            <section class="security-card security-initialize-card">
+                <h2>INITIALIZE SECURITY</h2>
+                <p>Enter the provisioned Master PIN to create the store Administrator PIN.</p>
+                <div class="security-form-grid">
+                    <label>Master PIN
+                        <input id="securityMasterPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off">
+                    </label>
+                    <label>New Administrator PIN
+                        <input id="securityRecoveryPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
+                    </label>
+                    <label>Confirm Administrator PIN
+                        <input id="securityRecoveryConfirmPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
+                    </label>
+                </div>
+                <div id="securityRecoveryMessage" class="security-message"></div>
+                <button id="securityRecoverBtn" class="dashboard-btn security-action-btn">Initialize Security</button>
+            </section>`;
+
+renderSettingsPage({
+    title: "ADMINISTRATOR SECURITY",
+    icon: "🔒",
+    subtitle: "Manage the store Administrator PIN and emergency Master PIN recovery.",
+
+    backText: "← Settings",
+
+    backAction: () => {
+
+        settingsPage.style.display = "none";
+        settingsScreen.style.display = "block";
+
+        resetScrollPosition();
+
+    },
+
+    content: `
+            <div class="security-status-grid">
+                <div class="security-status-card"><span>Status</span><strong>${status.initialized ? "Configured" : "Not Configured"}</strong></div>
+                <div class="security-status-card"><span>Master Recovery</span><strong>${status.masterRecoveryProvisioned ? "Provisioned" : "Provisioning Required"}</strong></div>
+            </div>
+            ${workflow}`
+    });
+
+    const changeButton = document.getElementById("securityChangePinBtn");
+    if (changeButton) changeButton.onclick = async () => {
+        const message = document.getElementById("securityChangeMessage");
+        const result = await window.electronAPI.administratorSecurity.changePin({
+            currentPin: document.getElementById("securityCurrentPin").value,
+            newPin: document.getElementById("securityNewPin").value,
+            confirmPin: document.getElementById("securityConfirmPin").value
+        });
+message.textContent =
+    result.success
+        ? "✓ Administrator PIN changed successfully."
+        : result.error;
+
+message.classList.toggle(
+    "success",
+    result.success
+);
+
+if (result.success) {
+
+    document.getElementById(
+        "securityCurrentPin"
+    ).value = "";
+
+    document.getElementById(
+        "securityNewPin"
+    ).value = "";
+
+    document.getElementById(
+        "securityConfirmPin"
+    ).value = "";
+
+}
+    };
+
+    const openRecoveryButton = document.getElementById("securityOpenRecoveryBtn");
+    if (openRecoveryButton) openRecoveryButton.onclick = () => {
+        document.getElementById("securityRecoveryPanel").hidden = false;
+        openRecoveryButton.hidden = true;
+        document.getElementById("securityMasterPin").focus();
+    };
+
+    const recoveryButton = document.getElementById("securityRecoverBtn");
+    if (recoveryButton) recoveryButton.onclick = async () => {
+        const masterPinInput = document.getElementById("securityMasterPin");
+        const newPinInput = document.getElementById("securityRecoveryPin");
+        const confirmPinInput = document.getElementById("securityRecoveryConfirmPin");
+        const message = document.getElementById("securityRecoveryMessage");
+        const result = await window.electronAPI.administratorSecurity.recover({
+            masterPin: masterPinInput.value,
+            newPin: newPinInput.value,
+            confirmPin: confirmPinInput.value
+        });
+        masterPinInput.value = "";
+        newPinInput.value = "";
+        confirmPinInput.value = "";
+        message.textContent = result.success
+            ? (status.initialized ? "Administrator PIN reset successfully." : "Administrator Security initialized successfully.")
+            : result.error;
+        message.classList.toggle("success", result.success);
+        if (result.success) setTimeout(showAdministratorSecurityPage, 600);
+    };
+}
+
 if (storeCard){
 
     storeCard.addEventListener("click", () => {
@@ -635,7 +787,9 @@ document.getElementById("storeLastUpdated").innerText =
 
 unlockBtn.addEventListener("click", () => {
 
-    requireAdminAuthorization(() => {
+    requireAdminAuthorization("RECEIPT_SETTINGS", grant => {
+
+        receiptSettingsGrant = grant;
 
         console.log("Callback Executed");
 
@@ -696,20 +850,15 @@ if (saveReceiptBtn){
         const lastUpdated =
             `${formattedDate} • ${formattedTime}`;
 
-        const current =
-    await window.electronAPI.getSettings();
-
 await window.electronAPI.saveSettings({
 
     receipt_message: msg,
 
-    backup_location: current.backup_location,
-
-    auto_backup_time: current.auto_backup_time,
-
     last_updated: lastUpdated
 
-});
+}, receiptSettingsGrant);
+
+        receiptSettingsGrant = null;
 
         receiptMessage.innerText =
             msg || "Not Set";
@@ -772,8 +921,8 @@ const settingsPageBackBtn =
 const adminDialog =
     document.getElementById("adminDialog");
 
-const adminPassword =
-    document.getElementById("adminPassword");
+const adminPin =
+    document.getElementById("adminPin");
 
 const adminCancelBtn =
     document.getElementById("adminCancelBtn");
@@ -812,6 +961,9 @@ const insufficientStockOkBtn =
     let isEditMode = false;
 
     let adminSuccessCallback = null;
+    let adminCancelCallback = null;
+    let receiptSettingsGrant = null;
+    let adminAuthorizationPurpose = null;
     
     if (settingsPageBackBtn){
 
@@ -827,11 +979,17 @@ const insufficientStockOkBtn =
 
 }
 
-function requireAdminAuthorization(callback){
+function requireAdminAuthorization(purpose, callback){
+
+    if (typeof purpose === "function") {
+        callback = purpose;
+        purpose = "RECEIPT_SETTINGS";
+    }
 
     adminSuccessCallback = callback;
+    adminAuthorizationPurpose = purpose;
 
-    adminPassword.value = "";
+    adminPin.value = "";
 
     document.getElementById("adminError").innerText = "";
 
@@ -839,12 +997,19 @@ function requireAdminAuthorization(callback){
 
     requestAnimationFrame(() => {
 
-        adminPassword.focus();
+        adminPin.focus();
 
-        adminPassword.select();
+        adminPin.select();
 
     });
 
+}
+
+function requestAdminAuthorization(purpose) {
+    return new Promise(resolve => {
+        requireAdminAuthorization(purpose, resolve);
+        adminCancelCallback = () => resolve(null);
+    });
 }
 
 function showProcessingDialog(title = "Processing...") {
@@ -1008,6 +1173,11 @@ if (adminCancelBtn){
     adminCancelBtn.addEventListener("click", () => {
 
         adminDialog.style.display = "none";
+        adminSuccessCallback = null;
+        if (adminCancelCallback) {
+            adminCancelCallback();
+            adminCancelCallback = null;
+        }
 
     });
 
@@ -1015,9 +1185,12 @@ if (adminCancelBtn){
 
 if (adminUnlockBtn){
 
-    adminUnlockBtn.addEventListener("click", () => {
+    adminUnlockBtn.addEventListener("click", async () => {
 
-        if (adminPassword.value === "onelove26@L") {
+        const authorization = await window.electronAPI.administratorSecurity
+            .authorizePin(adminPin.value, adminAuthorizationPurpose);
+
+        if (authorization.success) {
 
     document.getElementById("adminError").innerText = "";
 
@@ -1031,7 +1204,7 @@ if (adminUnlockBtn){
 
     adminDialog.style.display = "none";
 
-    adminPassword.value = "";
+    adminPin.value = "";
 
     adminUnlockBtn.innerText =
         "Unlock";
@@ -1042,9 +1215,10 @@ if (adminUnlockBtn){
 
 if (adminSuccessCallback){
 
-    adminSuccessCallback();
+    adminSuccessCallback(authorization.grant);
 
     adminSuccessCallback = null;
+    adminCancelCallback = null;
 
 }
 
@@ -1054,7 +1228,7 @@ if (adminSuccessCallback){
         else{
 
             document.getElementById("adminError").innerText =
-                "❌ Incorrect administrator password.";
+                "❌ " + (authorization.error || "Authorization failed.");
 
             const dialog =
 
@@ -1068,9 +1242,9 @@ setTimeout(() => {
 
 },350);
 
-            adminPassword.value = "";
+            adminPin.value = "";
 
-            adminPassword.focus();
+            adminPin.focus();
 
         }
 
@@ -1078,9 +1252,9 @@ setTimeout(() => {
 
 }
 
-if (adminPassword){
+if (adminPin){
 
-    adminPassword.addEventListener("keypress", (event) => {
+    adminPin.addEventListener("keypress", (event) => {
 
         if(event.key === "Enter"){
 
@@ -1092,21 +1266,21 @@ if (adminPassword){
 
 }
 
-adminPassword.addEventListener("paste", (event) => {
+adminPin.addEventListener("paste", (event) => {
 
     event.preventDefault();
 
 });
 
-adminPassword.addEventListener("drop", (event) => {
+adminPin.addEventListener("drop", (event) => {
 
     event.preventDefault();
 
 });
 
-adminPassword.addEventListener("focus", () => {
+adminPin.addEventListener("focus", () => {
 
-    adminPassword.select();
+    adminPin.select();
 
 });
 
@@ -1950,6 +2124,11 @@ gst_amount:
             gift_voucher_amount:
                 Number(giftVoucherAppliedAmount) || 0,
 
+            authorization: {
+                ff: ffAuthorizationGrant,
+                giftVoucher: giftVoucherAuthorizationGrant
+            },
+
         items:
     billItems.map(item => {
 
@@ -1992,6 +2171,8 @@ gst_amount:
     billItems = [];
 
     appliedStoreCredit = null;
+    ffAuthorizationGrant = null;
+    giftVoucherAuthorizationGrant = null;
 
     availableStoreCredit = null;
 
@@ -2843,6 +3024,8 @@ let ffPinVerified = false;
 let giftVoucherAppliedAmount = 0;
 
 let pinAuthorizationAction = null;
+let ffAuthorizationGrant = null;
+let giftVoucherAuthorizationGrant = null;
 
 let productNotFoundOpen = false;
 
@@ -3429,17 +3612,16 @@ async function verifyFamilyFriendsPin() {
 
     try {
 
-        const settings =
-            await window.electronAPI.getSettings();
+        const purpose = pinAuthorizationAction === "FF"
+            ? "FF"
+            : "GIFT_VOUCHER";
+        const authorization = await window.electronAPI.administratorSecurity
+            .authorizePin(enteredPin, purpose);
 
-
-        if (
-            !settings ||
-            enteredPin !== String(settings.ff_pin || "")
-        ) {
+        if (!authorization.success) {
 
             ffPinError.innerText =
-                "Incorrect PIN.";
+                authorization.error || "Incorrect PIN.";
 
             ffPinInput.value = "";
 
@@ -3456,6 +3638,13 @@ async function verifyFamilyFriendsPin() {
  */
 const authorizedAction =
     pinAuthorizationAction;
+
+if (authorizedAction === "FF") {
+    ffAuthorizationGrant = authorization.grant;
+}
+else {
+    giftVoucherAuthorizationGrant = authorization.grant;
+}
 
 ffPinInput.value = "";
 
@@ -3845,7 +4034,7 @@ if (giftVoucherApplyBtn) {
             ) {
 
                 giftVoucherAppliedAmountDisplay.textContent =
-                    giftVoucherAppliedAmount.toFixed(2);
+                    `₹${giftVoucherAppliedAmount.toFixed(2)}`;
 
             }
 
@@ -6269,6 +6458,8 @@ const savePaymentCorrectionBtn =
 const cancelPaymentCorrectionBtn =
     document.getElementById("cancelPaymentCorrectionBtn");
 
+let paymentCorrectionAuthorizationGrant = null;
+
     console.log({
     paymentCorrectionModal,
     paymentBillNo,
@@ -6289,7 +6480,9 @@ correctPaymentBtn.onclick = () => {
 
     }
 
-    requireAdminAuthorization(() => {
+    requireAdminAuthorization("PAYMENT_CORRECTION", grant => {
+
+        paymentCorrectionAuthorizationGrant = grant;
 
         console.log("Modal:", paymentCorrectionModal);
         console.log("Bill No:", paymentBillNo);
@@ -6488,7 +6681,9 @@ if (
             corrected_by:
                 "Administrator"
 
-        });
+        }, paymentCorrectionAuthorizationGrant);
+
+    paymentCorrectionAuthorizationGrant = null;
 
         
 

@@ -148,6 +148,190 @@ background:#940046;
 transform:translateY(-2px);
 
 }
+
+/* =====================================
+   ADMINISTRATOR SECURITY
+===================================== */
+
+.security-status-grid{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:22px;
+    max-width:900px;
+    margin:0 auto 28px;
+}
+
+.security-status-card,
+.security-card,
+.security-recovery-card{
+    background:#fff;
+    border:1px solid #ead9e2;
+    border-radius:22px;
+    box-shadow:0 10px 28px rgba(79,0,42,.08);
+}
+
+.security-status-card{
+    padding:24px 28px;
+}
+
+.security-status-card span{
+    display:block;
+    color:#777;
+    font-size:18px;
+    margin-bottom:8px;
+}
+
+.security-status-card strong{
+    color:#7a003c;
+    font-size:25px;
+}
+
+.security-card,
+.security-recovery-card{
+    max-width:900px;
+    margin:0 auto 28px;
+    padding:32px;
+}
+
+.security-card h2,
+.security-recovery-panel h2{
+    color:#7a003c;
+    margin:0 0 22px;
+}
+
+.security-recovery-card h3{
+    margin:0 0 8px;
+    color:#4f002a;
+}
+
+.security-recovery-card{
+    max-width:900px;
+
+    margin:34px auto 28px;
+
+    padding:24px 30px;
+
+    border:1px solid #e4b8c9;
+    border-left:4px solid #8b004b;
+
+    background:#fffafb;
+
+    box-shadow:0 6px 18px rgba(79,0,42,.05);
+}
+
+.security-recovery-card h3{
+    margin:0 0 8px;
+
+    color:#7a003c;
+
+    font-size:22px;
+    font-weight:800;
+}
+
+.security-recovery-card p{
+    margin:0 0 16px;
+
+    color:#666;
+
+    font-size:15px;
+    line-height:1.45;
+}
+
+.security-form-grid{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:20px;
+}
+
+.security-form-grid label{
+    color:#4b3b43;
+    font-size:17px;
+    font-weight:700;
+}
+
+.security-pin-input{
+    width:100%;
+    box-sizing:border-box;
+    margin-top:9px;
+    padding:14px 16px;
+    border:1px solid #cdb7c2;
+    border-radius:12px;
+    font-size:22px;
+    letter-spacing:.22em;
+    background:#fff;
+}
+
+.security-pin-input:focus{
+    outline:none;
+    border-color:#8b004b;
+    box-shadow:0 0 0 3px rgba(139,0,75,.12);
+}
+
+.security-action-btn{
+    width:290px;
+    margin:24px 0 0;
+}
+
+.security-secondary-btn{
+    border:1px solid #8b004b;
+    border-radius:12px;
+    background:#fff;
+    color:#8b004b;
+    padding:12px 20px;
+    font-size:17px;
+    font-weight:700;
+    cursor:pointer;
+}
+
+.security-secondary-btn:hover{
+    background:#8b004b;
+    color:#fff;
+    transform:translateY(-1px);
+}
+
+.security-secondary-btn{
+    transition:
+        background .2s,
+        color .2s,
+        transform .2s;
+}
+
+.security-recovery-panel{
+    border-top:1px solid #ead9e2;
+    margin-top:24px;
+    padding-top:26px;
+}
+
+.security-message{
+    min-height:22px;
+    margin-top:16px;
+    color:#b00020;
+    font-weight:700;
+}
+
+.security-message.success{
+    display:block;
+    min-height:auto;
+    margin-top:16px;
+    padding:12px 16px;
+
+    background:#edf8f1 !important;
+    border:1px solid #b9dfc7;
+    border-radius:10px;
+
+    color:#147a3d !important;
+
+    font-size:16px;
+    font-weight:700;
+    line-height:1.4;
+}
+
+@media(max-width:900px){
+    .security-status-grid,
+    .security-form-grid{
+        grid-template-columns:1fr;
+    }
+}
 .settings-info-card{
 
 max-width:900px;
@@ -388,7 +572,7 @@ transition:.2s;
 transform:translateY(-2px);
 
 }
-.password-box{
+.pin-box{
 
 display:flex;
 
@@ -408,7 +592,7 @@ margin-bottom:20px;
 
 }
 
-.password-box span{
+.pin-box span{
 
 font-size:22px;
 
@@ -416,7 +600,7 @@ margin-right:10px;
 
 }
 
-.password-box input{
+.pin-box input{
 
 border:none;
 

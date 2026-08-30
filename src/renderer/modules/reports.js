@@ -322,7 +322,7 @@ async function startReportExport() {
 
     }
 
-    const exportAction = async () => {
+    const exportAction = async grant => {
 
         exportReportBtn.disabled = true;
 
@@ -331,7 +331,7 @@ async function startReportExport() {
         try {
 
             const result =
-                await window.electronAPI.exportReport(request);
+                await window.electronAPI.exportReport(request, grant);
 
             console.log(result);
 
@@ -361,7 +361,7 @@ async function startReportExport() {
 
     if (report.adminOnly) {
 
-        requireAdminAuthorization(exportAction);
+        requireAdminAuthorization("CUSTOMER_REPORT_EXPORT", exportAction);
 
     }
 

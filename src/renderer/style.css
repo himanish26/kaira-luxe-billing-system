@@ -730,158 +730,441 @@ transform:rotate(360deg);
 }
 
 /* ===========================================
-   PAYMENT PAGE STORE CREDIT AVAILABILITY
+   PAYMENT PAGE
+   STORE CREDIT + GIFT VOUCHER
 =========================================== */
 
-.credit-voucher-payment-section {
-    display: flex;
-    flex-direction: column;
+.credit-voucher-payment-section{
+    display:flex;
+    flex-direction:column;
 
-    gap: 12px;
+    gap:18px;
 
-    margin-top: 16px;
+    margin-top:12px;
+    margin-bottom:24px;
 }
 
-.credit-voucher-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
 
-    min-height: 72px;
+/* ===========================================
+   SPECIAL PAYMENT ROW
+=========================================== */
 
-    padding: 12px 14px;
+.payment-special-row{
+    width:100%;
+    box-sizing:border-box;
 
-    border: 1px solid #d7d7d7;
-    border-radius: 12px;
+    padding:16px 18px;
 
-    background: #ffffff;
+    border:1px solid #d8d8d8;
+    border-radius:12px;
+
+    background:#ffffff;
+
+    transition:
+        border-color .2s,
+        box-shadow .2s,
+        background .2s;
 }
 
-.credit-voucher-btn {
-    min-width: 150px;
-    height: 40px;
 
-    border: none;
-    border-radius: 8px;
+/* ===========================================
+   HEADER
+=========================================== */
 
-    background: #efefef;
-    color: #333333;
+.payment-special-header{
+    display:flex;
 
-    font-weight: 700;
+    align-items:center;
+    justify-content:space-between;
 
-    cursor: pointer;
+    gap:20px;
+
+    margin-bottom:12px;
 }
 
-.credit-voucher-btn:hover {
-    background: #e3e3e3;
+.payment-special-title{
+    font-size:24px;
+    font-weight:700;
+
+    color:#333333;
 }
 
-.store-credit-payment-card {
-    position: relative;
+.payment-special-amount{
+    font-size:24px;
+    font-weight:700;
 
-    align-items: center;
-    justify-content: space-between;
+    color:#333333;
 
-    min-height: 92px;
-
-    padding: 14px 16px;
-
-    border: 1px solid #d7d7d7;
-    border-radius: 12px;
-
-    background: #ffffff;
+    text-align:right;
 }
 
-.credit-voucher-details {
-    display: flex;
-    flex-direction: column;
 
-    gap: 5px;
+/* ===========================================
+   STORE CREDIT INFORMATION
+=========================================== */
+
+.credit-voucher-availability{
+    margin-top:2px;
+    margin-bottom:10px;
+
+    font-size:14px;
+    font-weight:600;
+
+    color:#777777;
 }
 
-.credit-voucher-label {
-    font-size: 16px;
-    font-weight: 700;
+.credit-voucher-validity:not(:empty){
+    margin-bottom:10px;
 }
 
-.credit-voucher-availability {
-    font-size: 13px;
-    font-weight: 700;
+/* ===========================================
+   ACTION BUTTONS
+=========================================== */
 
-    color: #777777;
+.credit-voucher-btn{
+    width:100%;
+    height:48px;
+
+    margin-top:4px;
+
+    border:1px solid #8b004b;
+    border-radius:10px;
+
+    background:#fff8fb;
+    color:#8b004b;
+
+    font-size:16px;
+    font-weight:700;
+
+    cursor:pointer;
+
+    transition:
+        background .2s,
+        color .2s,
+        box-shadow .2s,
+        transform .2s;
 }
 
-.credit-voucher-validity {
-    font-size: 12px;
-
-    color: #777777;
-}
-
-.credit-voucher-action {
-    display: flex;
-    flex-direction: column;
-
-    align-items: flex-end;
-
-    gap: 8px;
-}
-
-.store-credit-payment-card.store-credit-available {
-    border-color: #9b003b;
+.credit-voucher-btn:hover{
+    background:#8b004b;
+    color:#ffffff;
 
     box-shadow:
-        0 0 0 1px rgba(155, 0, 59, 0.10),
-        0 0 18px rgba(155, 0, 59, 0.22);
+        0 5px 14px rgba(139,0,75,.18);
+
+    transform:translateY(-1px);
+}
+
+
+/* ===========================================
+   STORE CREDIT AVAILABLE
+=========================================== */
+
+.store-credit-payment-card.store-credit-available{
+    border-color:#8b004b;
+
+    background:#fff8fb;
 
     animation:
         storeCreditAttention 1.8s ease-in-out infinite;
 }
 
 .store-credit-payment-card.store-credit-available
-.credit-voucher-label {
-    color: #9b003b;
+.payment-special-title{
+    color:#8b004b;
 }
 
 .store-credit-payment-card.store-credit-available
-.credit-voucher-availability {
-    color: #9b003b;
-
-    font-size: 15px;
+.payment-special-amount{
+    color:#8b004b;
 }
 
 .store-credit-payment-card.store-credit-available
-.credit-voucher-btn {
-    background: #9b003b;
-    color: #ffffff;
+.credit-voucher-availability{
+    color:#8b004b;
+
+    font-weight:700;
+}
+
+.store-credit-payment-card.store-credit-available
+.credit-voucher-validity{
+    color:#7a003c;
+}
+
+.store-credit-payment-card.store-credit-available
+.credit-voucher-btn{
+    background:#8b004b;
+    color:#ffffff;
 
     animation:
         storeCreditButtonGlow 1.8s ease-in-out infinite;
 }
 
-@keyframes storeCreditAttention {
+
+/* ===========================================
+   STORE CREDIT ATTENTION / GLOW
+=========================================== */
+
+@keyframes storeCreditAttention{
 
     0%,
-    100% {
-        transform: translateY(0);
+    100%{
+        transform:translateY(0);
+
+        box-shadow:
+            0 0 0 1px rgba(139,0,75,.10),
+            0 5px 16px rgba(139,0,75,.10);
     }
 
-    50% {
-        transform: translateY(-1px);
+    50%{
+        transform:translateY(-1px);
+
+        box-shadow:
+            0 0 0 3px rgba(139,0,75,.18),
+            0 8px 26px rgba(139,0,75,.28);
     }
 
 }
 
-@keyframes storeCreditButtonGlow {
+@keyframes storeCreditButtonGlow{
 
     0%,
-    100% {
+    100%{
         box-shadow:
-            0 0 0 rgba(155, 0, 59, 0);
+            0 3px 10px rgba(139,0,75,.18);
     }
 
-    50% {
+    50%{
         box-shadow:
-            0 0 14px rgba(155, 0, 59, 0.45);
+            0 5px 20px rgba(139,0,75,.42);
     }
 
+}
+
+/* ===========================================
+   FAMILY & FRIENDS BUTTON
+=========================================== */
+
+#familyFriendsBtn.ff-action-btn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+
+    background:#fff3cd !important;
+    color:#8a5a00 !important;
+
+    border:2px solid #d89b16 !important;
+
+    font-weight:800;
+
+    box-shadow:
+        0 3px 10px rgba(216,155,22,.10);
+
+    transition:
+        background .2s,
+        color .2s,
+        border-color .2s,
+        box-shadow .2s,
+        transform .2s;
+}
+
+#familyFriendsBtn.ff-action-btn:hover{
+    background:#ffe8a1 !important;
+    color:#744900 !important;
+
+    border-color:#c98b08 !important;
+
+    box-shadow:
+        0 6px 18px rgba(216,155,22,.22);
+
+    transform:translateY(-1px);
+}
+
+#familyFriendsBtn.ff-action-btn.active{
+    background:#d89b16 !important;
+    color:#ffffff !important;
+
+    border-color:#d89b16 !important;
+
+    box-shadow:
+        0 6px 18px rgba(216,155,22,.32);
+}
+
+/* ===========================================
+   F&F PIN MODAL - COMPACT CONSISTENT LAYOUT
+=========================================== */
+
+#ffPinDialog .modal-content{
+    width:420px;
+
+    padding:
+        34px
+        34px
+        30px;
+
+    border-radius:18px;
+
+    text-align:center;
+}
+
+
+/* TITLE */
+
+#ffPinDialog .modal-content h2{
+    margin:0 0 8px;
+
+    color:#7a003c;
+
+    font-size:30px;
+    font-weight:800;
+
+    line-height:1.15;
+}
+
+
+/* SUBTITLE */
+
+#ffPinDialog .modal-content p{
+    margin:0 0 14px;
+
+    font-size:18px;
+
+    color:#666;
+}
+
+
+/* PIN INPUT */
+
+#ffPinInput{
+    width:100%;
+    height:56px;
+
+    box-sizing:border-box;
+
+    margin:0;
+
+    padding:0 16px;
+
+    font-size:20px;
+
+    border:2px solid #ddd;
+    border-radius:12px;
+}
+
+#ffPinInput:focus{
+    outline:none;
+
+    border-color:#e09a00;
+
+    box-shadow:
+        0 0 0 3px
+        rgba(224,154,0,.10);
+}
+
+
+/* ===========================================
+   ERROR AREA
+=========================================== */
+
+#ffPinError{
+    min-height:24px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    margin:
+        8px
+        0
+        6px !important;
+
+    padding:0 !important;
+
+    color:#d32f2f !important;
+
+    font-size:18px !important;
+    font-weight:800 !important;
+
+    line-height:1.25;
+
+    text-align:center;
+}
+
+
+/* ===========================================
+   ACTION ROW
+=========================================== */
+
+#ffPinDialog .modal-buttons{
+    display:flex;
+
+    gap:16px;
+
+    margin:0 !important;
+    padding:0 !important;
+}
+
+
+/* IMPORTANT:
+   override .dashboard-btn margin:40px auto 0
+*/
+
+#ffPinDialog .modal-buttons button{
+    flex:1;
+
+    height:52px;
+
+    margin:0 !important;
+
+    border-radius:12px;
+
+    font-size:18px;
+    font-weight:800;
+
+    cursor:pointer;
+}
+
+
+/* ===========================================
+   CANCEL
+=========================================== */
+
+#ffPinCancelBtn{
+    background:#eeeeee !important;
+
+    color:#333333 !important;
+
+    border:
+        1px solid
+        #d0d0d0 !important;
+
+    box-shadow:none !important;
+}
+
+#ffPinCancelBtn:hover{
+    background:#e2e2e2 !important;
+
+    color:#222222 !important;
+
+    border-color:#bdbdbd !important;
+}
+
+
+/* ===========================================
+   VERIFY
+=========================================== */
+
+#ffPinVerifyBtn{
+    background:#8b004b !important;
+
+    color:#ffffff !important;
+
+    border:none !important;
+
+    box-shadow:none;
+}
+
+#ffPinVerifyBtn:hover{
+    background:#a00056 !important;
 }

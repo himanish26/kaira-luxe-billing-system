@@ -56,7 +56,7 @@ document
         "click",
         () => {
 
-            requireAdminAuthorization(async () => {
+            requireAdminAuthorization("RESTORE", async grant => {
 
         const result =
     await window.electronAPI.selectRestoreFile();
@@ -138,7 +138,8 @@ if (confirmation.response !== 1) {
 
 const restoreResult =
     await window.electronAPI.restoreBackup(
-        result.filePath
+        result.filePath,
+        grant
     );
 
 if (!restoreResult.success) {
@@ -164,7 +165,7 @@ await window.electronAPI.showMessageBox({
     title: "Restore Complete",
 
     message:
-        "Backup restored successfully.\n\nThe application will now restart."
+        "Backup restored successfully. Administrator Security settings were restored with the database.\n\nThe application will now restart."
 
 });
 

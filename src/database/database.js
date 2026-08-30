@@ -1,6 +1,10 @@
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 const { app } = require("electron");
+const {
+    hashCredential,
+    isCredentialRecord
+} = require("../services/credentialCrypto");
 
 // Development database path
 // Keeps Electron and DB Browser pointed at the same billing.db
@@ -273,6 +277,11 @@ function createTables() {
 
                 ff_pin TEXT,
 
+                admin_pin_hash TEXT,
+
+                admin_security_initialized INTEGER NOT NULL DEFAULT 0
+                    CHECK (admin_security_initialized IN (0, 1)),
+
                 last_updated TEXT
 
             )
@@ -425,6 +434,14 @@ function runDatabaseMigrations() {
                     {
                         name: "ff_pin",
                         sql: `ALTER TABLE settings ADD COLUMN ff_pin TEXT`
+                    },
+                    {
+                        name: "admin_pin_hash",
+                        sql: `ALTER TABLE settings ADD COLUMN admin_pin_hash TEXT`
+                    },
+                    {
+                        name: "admin_security_initialized",
+                        sql: `ALTER TABLE settings ADD COLUMN admin_security_initialized INTEGER NOT NULL DEFAULT 0 CHECK (admin_security_initialized IN (0, 1))`
                     }
                 ].filter(
                     migration =>
@@ -475,6 +492,68 @@ function runDatabaseMigrations() {
 
     });
 
+}
+
+function migrateAdministratorSecurity() {
+    function run(sql, params = []) {
+        return new Promise((resolve, reject) => {
+            db.run(sql, params, error => error ? reject(error) : resolve());
+        });
+    }
+
+    function get(sql, params = []) {
+        return new Promise((resolve, reject) => {
+            db.get(sql, params, (error, row) => error ? reject(error) : resolve(row));
+        });
+    }
+
+    return (async () => {
+        await run("BEGIN IMMEDIATE TRANSACTION");
+        try {
+            const row = await get(`
+                SELECT
+                    ff_pin,
+                    admin_pin_hash,
+                    admin_security_initialized
+                FROM settings
+                WHERE id = 1
+            `);
+
+            if (!row) {
+                throw new Error("Administrator security migration requires settings row id 1.");
+            }
+
+            let pinHash = row.admin_pin_hash;
+            let initialized = row.admin_security_initialized === 1 ? 1 : 0;
+            const historicalPin = String(row.ff_pin || "").trim();
+
+            if (!isCredentialRecord(pinHash) && /^\d{4}$/.test(historicalPin)) {
+                pinHash = await hashCredential(historicalPin);
+            }
+
+            if (isCredentialRecord(pinHash)) {
+                initialized = 1;
+            }
+            else {
+                initialized = 0;
+            }
+
+            await run(`
+                UPDATE settings
+                SET admin_pin_hash = ?,
+                    admin_security_initialized = ?,
+                    ff_pin = CASE WHEN ? = 1 THEN NULL ELSE ff_pin END
+                WHERE id = 1
+            `, [pinHash || null, initialized, initialized]);
+
+            await run("COMMIT");
+            console.log("✓ Administrator security migration complete");
+        }
+        catch (error) {
+            await run("ROLLBACK").catch(() => {});
+            throw error;
+        }
+    })();
 }
 
 function migrateProductDiscountColumn() {
@@ -2328,6 +2407,8 @@ db.serialize(() => {
 try {
 
         await runDatabaseMigrations();
+
+        await migrateAdministratorSecurity();
 
         await migrateProductDiscountColumn();
 

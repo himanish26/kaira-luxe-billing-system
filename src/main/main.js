@@ -49,9 +49,19 @@ const {
     getSystemStatus
 } = require("./statusService");
 
-const {
-    databaseReady
-} = require("../database/database");
+const database = require("../database/database");
+const { databaseReady } = database;
+const masterRecoveryVerifier = require("../config/masterRecoveryVerifier");
+const { createAdministratorSecurityService } = require("../services/administratorSecurityService");
+const administratorSecurity = createAdministratorSecurityService(database, {
+    masterVerifier: masterRecoveryVerifier
+});
+
+function requireSecurityGrant(grant, purpose) {
+    if (!administratorSecurity.consumeGrant(grant, purpose)) {
+        throw new Error("Administrator authorization is required or has expired.");
+    }
+}
 
 const {
 
@@ -97,7 +107,7 @@ const {
 
 const {
 
-    getSettings,
+    getRendererSettings,
 
     saveSettings
 
@@ -459,11 +469,21 @@ ipcMain.handle(
     }
 );
 
+ipcMain.handle("security:get-status", () => administratorSecurity.getStatus());
+ipcMain.handle("security:authorize-pin", (event, pin, purpose) =>
+    administratorSecurity.authorizePin(pin, purpose));
+ipcMain.handle("security:change-pin", (event, data) =>
+    administratorSecurity.changePin(data.currentPin, data.newPin, data.confirmPin));
+ipcMain.handle("security:recover", (event, data) =>
+    administratorSecurity.recoverPin(data));
+
 ipcMain.handle(
     'import-products',
-    async (event, filePath) => {
+    async (event, filePath, grant) => {
 
         try {
+
+            requireSecurityGrant(grant, "PRODUCT_IMPORT");
 
             const result = await importProducts(filePath);
 
@@ -653,9 +673,11 @@ ipcMain.handle(
 
 ipcMain.handle(
     "reset-inventory",
-    async () => {
+    async (event, grant) => {
 
         try{
+
+            requireSecurityGrant(grant, "INVENTORY_RESET");
 
             return await resetInventory();
 
@@ -683,6 +705,29 @@ ipcMain.handle(
     async (event, billData) => {
 
         try {
+
+            const authorizationRequirements = [];
+            if ((billData.items || []).some(item =>
+                item.ff_discount !== null && item.ff_discount !== undefined
+            )) {
+                authorizationRequirements.push({
+                    token: billData.authorization && billData.authorization.ff,
+                    purpose: "FF"
+                });
+            }
+            if (Number(billData.gift_voucher_amount || 0) > 0) {
+                authorizationRequirements.push({
+                    token: billData.authorization && billData.authorization.giftVoucher,
+                    purpose: "GIFT_VOUCHER"
+                });
+            }
+            if (
+                authorizationRequirements.length &&
+                !administratorSecurity.consumeGrants(authorizationRequirements)
+            ) {
+                throw new Error("Administrator PIN authorization is required or has expired.");
+            }
+            delete billData.authorization;
 
             const closed =
                 await isBusinessDayClosed();
@@ -887,9 +932,11 @@ ipcMain.handle(
 
 ipcMain.handle(
     "update-payment-allocation",
-    async (event, data) => {
+    async (event, data, grant) => {
 
         try {
+
+            requireSecurityGrant(grant, "PAYMENT_CORRECTION");
 
             await updatePaymentAllocation(data);
 
@@ -1184,7 +1231,7 @@ ipcMain.handle(
 
     async () => {
 
-        return await getSettings();
+        return await getRendererSettings();
 
     }
 
@@ -1194,7 +1241,17 @@ ipcMain.handle(
 
     "save-settings",
 
-    async (event, settings) => {
+    async (event, settings, grant) => {
+
+        if (Object.prototype.hasOwnProperty.call(settings, "receipt_message")) {
+            requireSecurityGrant(grant, "RECEIPT_SETTINGS");
+        }
+        else if (Object.prototype.hasOwnProperty.call(settings, "backup_location")) {
+            requireSecurityGrant(grant, "BACKUP_LOCATION");
+        }
+        else if (Object.prototype.hasOwnProperty.call(settings, "auto_backup_time")) {
+            requireSecurityGrant(grant, "AUTO_BACKUP_SETTINGS");
+        }
 
         await saveSettings(settings);
 
@@ -1328,9 +1385,13 @@ ipcMain.handle(
 
     "export-report",
 
-    async (event, request) => {
+    async (event, request, grant) => {
 
         try {
+
+            if (request.reportType === "customer") {
+                requireSecurityGrant(grant, "CUSTOMER_REPORT_EXPORT");
+            }
 
             const today = new Date();
 
@@ -1684,9 +1745,12 @@ ipcMain.handle(
 
         event,
 
-        zipPath
+        zipPath,
+        grant
 
     ) => {
+
+        requireSecurityGrant(grant, "RESTORE");
 
         return await restoreBackup(
             zipPath
@@ -1929,11 +1993,14 @@ ipcMain.handle(
 
         installerPath,
 
-        expectedHash
+        expectedHash,
+        grant
 
     ) => {
 
         try {
+
+            requireSecurityGrant(grant, "INSTALL_UPDATE");
 
             console.log("Installer Path:", installerPath);
 
@@ -2319,9 +2386,11 @@ ipcMain.handle(
 
 ipcMain.handle(
     "reopen-business-day",
-    async () => {
+    async (event, grant) => {
 
         try {
+
+            requireSecurityGrant(grant, "DAY_REOPEN");
 
             const result =
                 await reopenBusinessDay();

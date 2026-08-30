@@ -71,7 +71,7 @@ async function showUpdatesPage() {
         <h2>Install Update</h2>
 
         <p>
-            Administrator Password Required
+            Administrator PIN Required
         </p>
 
     </div>
@@ -307,10 +307,20 @@ console.log(info);
 console.log("SHA256 =", info.sha256);
 console.log("Download Result =", downloadResult);
 
+const installGrant =
+    await requestAdminAuthorization("INSTALL_UPDATE");
+
+if (!installGrant) {
+    setAppState(APP_STATES.NORMAL);
+    unlockApplication();
+    return;
+}
+
 const installResult =
     await window.electronAPI.launchInstaller(
         downloadResult.filePath,
-        info.sha256
+        info.sha256,
+        installGrant
     );
 
 console.log("INSTALL RESULT =", installResult);

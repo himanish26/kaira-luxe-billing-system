@@ -55,7 +55,7 @@ function showExportDataPage() {
         <h2>Security</h2>
 
         <p>
-            Administrator Password Required
+            Administrator PIN Required
         </p>
 
     </div>

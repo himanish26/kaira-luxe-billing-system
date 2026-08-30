@@ -203,7 +203,7 @@ function renderInventoryProducts(products) {
    IMPORT PRODUCT MASTER
 =========================================== */
 
-async function importProductMaster(){
+async function importProductMaster(grant){
 
     console.log("Import Product Master");
 
@@ -233,7 +233,7 @@ async function importProductMaster(){
 }
     
     const result =
-        await window.electronAPI.importProducts(filePath);
+        await window.electronAPI.importProducts(filePath, grant);
 
     console.log(result);
 
@@ -342,14 +342,14 @@ async function exportInventory(){
    RESET INVENTORY
 =========================================== */
 
-async function startInventoryReset(){
+async function startInventoryReset(grant){
 
     showProcessingDialog("Resetting Inventory");
 
     updateProgress(20,"Preparing...");
 
     const result =
-        await window.electronAPI.resetInventory();
+        await window.electronAPI.resetInventory(grant);
 
     if(result.success){
 
@@ -735,9 +735,9 @@ function initializeInventoryEvents() {
 
     importBtn.onclick = () => {
 
-        requireAdminAuthorization(() => {
+        requireAdminAuthorization("PRODUCT_IMPORT", grant => {
 
-            importProductMaster();
+            importProductMaster(grant);
 
         });
 
@@ -796,9 +796,9 @@ function initializeInventoryEvents() {
 
         resetBtn.onclick = () => {
 
-            requireAdminAuthorization(() => {
+            requireAdminAuthorization("INVENTORY_RESET", grant => {
 
-                startInventoryReset();
+                startInventoryReset(grant);
                 
             });
 

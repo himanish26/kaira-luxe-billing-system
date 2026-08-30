@@ -304,7 +304,7 @@
 
                 <p>
                     Unlock Settings<br>
-                    Change Password
+                    Change PIN
                 </p>
 
             </div>
@@ -497,13 +497,15 @@ class="admin-error">
 
 </div>
 
-<div class="password-box">
+<div class="pin-box">
 
 <input
 type="password"
-id="adminPassword"
-placeholder=" Enter Administrator Password"
-maxlength="11">
+id="adminPin"
+placeholder=" Enter 4-digit Administrator PIN"
+inputmode="numeric"
+pattern="[0-9]{4}"
+maxlength="4">
 
 </div>
 
@@ -868,9 +870,12 @@ maxlength="11">
         <option value="RETURN">RETURN</option>
     </select>
 
-    <button id="familyFriendsBtn" class="action-btn-secondary">
-        Family & Friends
-    </button>
+<button
+    id="familyFriendsBtn"
+    class="action-btn-secondary ff-action-btn"
+>
+    👨‍👩‍👧‍👦 Family & Friends
+</button>
 
             <button id="paymentBtn" class="payment-btn">
                 PROCEED TO PAYMENT →
@@ -1019,16 +1024,26 @@ maxlength="11">
 
             <div class="credit-voucher-payment-section">
 
-   <!-- STORE CREDIT -->
-<div
-    id="storeCreditPaymentCard"
-    class="credit-voucher-row store-credit-payment-card"
->
+    <!-- STORE CREDIT -->
 
-    <div class="credit-voucher-details">
+    <div
+        id="storeCreditPaymentCard"
+        class="payment-special-row store-credit-payment-card"
+    >
 
-        <div class="credit-voucher-label">
-            Store Credit
+        <div class="payment-special-header">
+
+            <div class="payment-special-title">
+                💳 Store Credit
+            </div>
+
+            <div
+                id="storeCreditAppliedAmount"
+                class="payment-special-amount"
+            >
+                ₹0.00
+            </div>
+
         </div>
 
         <div
@@ -1044,37 +1059,34 @@ maxlength="11">
         >
         </div>
 
-    </div>
-
-    <div class="credit-voucher-action">
-
-        <div
-            id="storeCreditAppliedAmount"
-            class="credit-voucher-amount"
-        >
-            ₹0.00
-        </div>
-
         <button
             type="button"
             id="storeCreditBtn"
             class="credit-voucher-btn"
         >
-            STORE CREDIT
+            💳 STORE CREDIT
         </button>
 
     </div>
 
-</div>
 
     <!-- GIFT VOUCHER -->
-    <div class="credit-voucher-row">
 
-        <div
-            id="giftVoucherAppliedAmount"
-            class="credit-voucher-amount"
-        >
-            ₹0.00
+    <div class="payment-special-row">
+
+        <div class="payment-special-header">
+
+            <div class="payment-special-title">
+                🎁 Gift Voucher
+            </div>
+
+            <div
+                id="giftVoucherAppliedAmount"
+                class="payment-special-amount"
+            >
+                ₹0.00
+            </div>
+
         </div>
 
         <button
@@ -1082,7 +1094,7 @@ maxlength="11">
             id="giftVoucherBtn"
             class="credit-voucher-btn"
         >
-            Gift Voucher
+            🎁 GIFT VOUCHER
         </button>
 
     </div>

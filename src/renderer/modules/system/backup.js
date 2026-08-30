@@ -2,6 +2,8 @@
    BACKUP
 ===================================== */
 
+let autoBackupAuthorizationGrant = null;
+
 async function showBackupPage() {
 
     const settings =
@@ -180,7 +182,7 @@ async function showBackupPage() {
 
         .getElementById("backupLocationCard")
         .addEventListener("click", () => {
-            requireAdminAuthorization(async () => {
+            requireAdminAuthorization("BACKUP_LOCATION", async grant => {
 
             console.log("===== Backup Location Clicked =====");
 
@@ -195,15 +197,9 @@ async function showBackupPage() {
 
             }
 
-            const settings =
-                await window.electronAPI.getSettings();
-
-            settings.backup_location =
-                selectedFolder;
-
             const now = new Date();
 
-settings.last_updated =
+const lastUpdated =
     `${now.toLocaleDateString("en-GB", {
         day: "2-digit",
         month: "short",
@@ -214,10 +210,11 @@ settings.last_updated =
         hour12: true
     }).toUpperCase()}`;
 
-            console.log("Saving Settings...", settings);
-
             const saved =
-                await window.electronAPI.saveSettings(settings);
+                await window.electronAPI.saveSettings({
+                    backup_location: selectedFolder,
+                    last_updated: lastUpdated
+                }, grant);
 
             console.log("Save Result:", saved);
 
@@ -312,7 +309,9 @@ alert(
 .getElementById("autoBackupCard")
 .addEventListener("click", () => {
 
-    requireAdminAuthorization(() => {
+    requireAdminAuthorization("AUTO_BACKUP_SETTINGS", grant => {
+
+        autoBackupAuthorizationGrant = grant;
 
         showAutomaticBackupPage();
 
@@ -553,7 +552,12 @@ settings.auto_backup_time =
 
                 const saved =
 
-                    await window.electronAPI.saveSettings(settings);
+                    await window.electronAPI.saveSettings({
+                        auto_backup_time: settings.auto_backup_time,
+                        last_updated: settings.last_updated
+                    }, autoBackupAuthorizationGrant);
+
+                autoBackupAuthorizationGrant = null;
 
                 if (saved) {
 

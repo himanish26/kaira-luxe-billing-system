@@ -575,7 +575,9 @@ CREATE TABLE settings (
 
                 ff_discount_percent REAL DEFAULT 20,
 
-                ff_pin TEXT,
+    ff_pin TEXT,
+    admin_pin_hash TEXT,
+    admin_security_initialized INTEGER NOT NULL DEFAULT 0 CHECK (admin_security_initialized IN (0, 1)),
 
                 last_updated TEXT
 

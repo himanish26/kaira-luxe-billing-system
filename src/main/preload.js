@@ -35,10 +35,11 @@ contextBridge.exposeInMainWorld(
         selectExcelFile: () =>
             ipcRenderer.invoke("select-excel-file"),
 
-        importProducts: (filePath) =>
+        importProducts: (filePath, grant) =>
             ipcRenderer.invoke(
                 "import-products",
-                filePath
+                filePath,
+                grant
             ),
             
         getProduct: (barcode) =>
@@ -141,11 +142,12 @@ closeBusinessDay: () =>
 
     ),
 
-    reopenBusinessDay: () =>
+    reopenBusinessDay: (grant) =>
 
     ipcRenderer.invoke(
 
-        "reopen-business-day"
+        "reopen-business-day",
+        grant
 
     ),
 
@@ -161,10 +163,11 @@ closeBusinessDay: () =>
         billNo
     ),
 
-            updatePaymentAllocation: (data) =>
+            updatePaymentAllocation: (data, grant) =>
                 ipcRenderer.invoke(
                     "update-payment-allocation",
-                    data
+                    data,
+                    grant
     ),
 
    
@@ -250,10 +253,11 @@ reprintStoreCredit: (storeCreditNo) =>
         "get-settings"
     ),
 
-saveSettings: (settings) =>
+saveSettings: (settings, grant) =>
     ipcRenderer.invoke(
         "save-settings",
-        settings
+        settings,
+        grant
     ),
 
 emailTest: () =>
@@ -314,15 +318,17 @@ validateBackup: (zipPath) =>
         zipPath
     ),
 
-resetInventory: () =>
+resetInventory: (grant) =>
     ipcRenderer.invoke(
-        "reset-inventory"
+        "reset-inventory",
+        grant
     ),
 
-exportReport: (request) =>
+exportReport: (request, grant) =>
     ipcRenderer.invoke(
         "export-report",
-        request
+        request,
+        grant
     ),
 
 getSystemStatus: () =>
@@ -343,13 +349,15 @@ selectRestoreFile: () =>
 
 restoreBackup: (
 
-    zipPath
+    zipPath,
+    grant
 
 ) => ipcRenderer.invoke(
 
     "backup:restore",
 
-    zipPath
+    zipPath,
+    grant
 
 ),
 
@@ -415,7 +423,8 @@ onDownloadProgress: (
 
     installerPath,
 
-    expectedHash
+    expectedHash,
+    grant
 
 ) =>
 
@@ -425,7 +434,8 @@ onDownloadProgress: (
 
         installerPath,
 
-        expectedHash
+        expectedHash,
+        grant
 
     ),
 
@@ -436,6 +446,13 @@ connectGoogleDrive: () =>
         "google:connect"
 
     ),
+
+administratorSecurity: {
+    getStatus: () => ipcRenderer.invoke("security:get-status"),
+    authorizePin: (pin, purpose) => ipcRenderer.invoke("security:authorize-pin", pin, purpose),
+    changePin: data => ipcRenderer.invoke("security:change-pin", data),
+    recover: data => ipcRenderer.invoke("security:recover", data)
+},
 
 }
 

@@ -49,9 +49,16 @@ function showSystemPage() {
 
         subtitle: "Manage backups, diagnostics and system maintenance.",
 
-        backText: "← Settings",
+backText: "← Settings",
 
-        backAction: null,
+backAction: () => {
+
+    settingsPage.style.display = "none";
+    settingsScreen.style.display = "block";
+
+    resetScrollPosition();
+
+},
 
         content: `
 
