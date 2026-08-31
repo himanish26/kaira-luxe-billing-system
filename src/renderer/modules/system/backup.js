@@ -222,7 +222,10 @@ const lastUpdated =
 
                 alert(
                     "Backup location updated successfully.\n\n" +
-                    selectedFolder
+                    selectedFolder +
+                    (saved.activityWarning
+                        ? `\n\nWarning: ${saved.activityWarning}`
+                        : "")
                 );
 
             }
@@ -563,7 +566,10 @@ settings.auto_backup_time =
 
                     alert(
 
-                        "Automatic backup time updated successfully."
+                        "Automatic backup time updated successfully." +
+                        (saved.activityWarning
+                            ? `\n\nWarning: ${saved.activityWarning}`
+                            : "")
 
                     );
 

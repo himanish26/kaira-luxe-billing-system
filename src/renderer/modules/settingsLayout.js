@@ -470,7 +470,7 @@ document
 
             try {
 
-                await window.electronAPI.saveSettings({
+                const saveResult = await window.electronAPI.saveSettings({
 
                     default_printer:
                         printerSelect.value
@@ -480,7 +480,10 @@ document
                 await refreshPrinterStatus();
 
                 alert(
-                    "✅ Printer settings saved successfully."
+                    "✅ Printer settings saved successfully." +
+                    (saveResult?.activityWarning
+                        ? `\n\nWarning: ${saveResult.activityWarning}`
+                        : "")
                 );
 
             }
@@ -726,4 +729,3 @@ scannerOutput.addEventListener(
 );
     
 }
-

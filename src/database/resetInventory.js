@@ -50,11 +50,31 @@ function resetInventory() {
 
                                     }
 
-                                    await logInventoryReset();
+                                    let activityWarning = null;
+
+                                    try {
+
+                                        await logInventoryReset();
+
+                                    }
+
+                                    catch (logError) {
+
+                                        activityWarning =
+                                            "Activity Log could not be recorded.";
+
+                                        console.error(
+                                            "Inventory reset activity logging failed:",
+                                            logError.message
+                                        );
+
+                                    }
 
                                     resolve({
 
-                                        success:true
+                                        success:true,
+
+                                        activityWarning
 
                                     });
 

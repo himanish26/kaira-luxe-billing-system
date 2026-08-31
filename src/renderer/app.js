@@ -404,6 +404,24 @@ async function showAdministratorSecurityPage() {
                 <div id="securityChangeMessage" class="security-message"></div>
                 <button id="securityChangePinBtn" class="dashboard-btn security-action-btn">Change PIN</button>
             </section>
+            <section class="security-card">
+                <h2>MANAGER PIN</h2>
+                <p>Manager authorization is limited to Family & Friends Discount, Gift Voucher, and Day Re-open.</p>
+                <div class="security-status-card"><span>Status</span><strong>${status.managerPinConfigured ? "Configured" : "Not Configured"}</strong></div>
+                <button id="securityOpenManagerPinBtn" class="dashboard-btn security-action-btn">${status.managerPinConfigured ? "Change Manager PIN" : "Set Manager PIN"}</button>
+                <div id="securityManagerPinPanel" class="security-recovery-panel" hidden>
+                    <div class="security-form-grid">
+                        <label>New Manager PIN
+                            <input id="securityManagerPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
+                        </label>
+                        <label>Confirm Manager PIN
+                            <input id="securityManagerConfirmPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
+                        </label>
+                    </div>
+                    <div id="securityManagerMessage" class="security-message"></div>
+                    <button id="securitySaveManagerPinBtn" class="dashboard-btn security-action-btn">Save Manager PIN</button>
+                </div>
+            </section>
             <section class="security-recovery-card">
                 <h3>FORGOT ADMINISTRATOR PIN?</h3>
                 <p>Use the Master PIN only to reset the Administrator PIN.</p>
@@ -447,7 +465,7 @@ async function showAdministratorSecurityPage() {
 renderSettingsPage({
     title: "ADMINISTRATOR SECURITY",
     icon: "🔒",
-    subtitle: "Manage the store Administrator PIN and emergency Master PIN recovery.",
+    subtitle: "Manage separate Manager and Administrator credentials, with Master recovery for Administrator Security.",
 
     backText: "← Settings",
 
@@ -508,6 +526,42 @@ if (result.success) {
         document.getElementById("securityRecoveryPanel").hidden = false;
         openRecoveryButton.hidden = true;
         document.getElementById("securityMasterPin").focus();
+    };
+
+    let managerManagementGrant = null;
+    const openManagerButton = document.getElementById("securityOpenManagerPinBtn");
+    if (openManagerButton) openManagerButton.onclick = async () => {
+        managerManagementGrant = await requestAdminAuthorization("MANAGER_PIN_MANAGEMENT");
+        if (!managerManagementGrant) return;
+        document.getElementById("securityManagerPinPanel").hidden = false;
+        openManagerButton.hidden = true;
+        document.getElementById("securityManagerPin").focus();
+    };
+
+    const saveManagerButton = document.getElementById("securitySaveManagerPinBtn");
+    if (saveManagerButton) saveManagerButton.onclick = async () => {
+        const pinInput = document.getElementById("securityManagerPin");
+        const confirmInput = document.getElementById("securityManagerConfirmPin");
+        const message = document.getElementById("securityManagerMessage");
+        try {
+            const result = await window.electronAPI.administratorSecurity.configureManagerPin({
+                newPin: pinInput.value,
+                confirmPin: confirmInput.value
+            }, managerManagementGrant);
+            managerManagementGrant = null;
+            pinInput.value = "";
+            confirmInput.value = "";
+            message.textContent = result.success ? "Manager PIN saved successfully." : result.error;
+            message.classList.toggle("success", result.success);
+            if (result.success) setTimeout(showAdministratorSecurityPage, 600);
+        }
+        catch (error) {
+            managerManagementGrant = null;
+            pinInput.value = "";
+            confirmInput.value = "";
+            message.textContent = error.message || "Manager PIN could not be saved.";
+            message.classList.remove("success");
+        }
     };
 
     const recoveryButton = document.getElementById("securityRecoverBtn");
@@ -686,7 +740,7 @@ style="display:none;">
 
         <button
             id="saveReceiptBtn"
-            class="dashboard-btn">
+            class="dashboard-btn klbs-primary-btn">
 
             💾 Save
 
@@ -694,7 +748,7 @@ style="display:none;">
 
         <button
             id="cancelReceiptBtn"
-            class="dashboard-btn secondary">
+            class="dashboard-btn secondary klbs-cancel-btn">
 
             ✖ Cancel
 
@@ -882,7 +936,7 @@ if (saveReceiptBtn){
         const lastUpdated =
             `${formattedDate} • ${formattedTime}`;
 
-await window.electronAPI.saveSettings({
+const saveResult = await window.electronAPI.saveSettings({
 
     receipt_message: msg,
 
@@ -902,7 +956,12 @@ await window.electronAPI.saveSettings({
 
         editReceiptBtn.style.display = "inline-block";
 
-        alert("✅ Receipt Footer Message updated successfully.");
+        alert(
+            "✅ Receipt Footer Message updated successfully." +
+            (saveResult?.activityWarning
+                ? `\n\nWarning: ${saveResult.activityWarning}`
+                : "")
+        );
 
     }
 
@@ -996,6 +1055,19 @@ const insufficientStockOkBtn =
     let adminCancelCallback = null;
     let receiptSettingsGrant = null;
     let adminAuthorizationPurpose = null;
+
+function showAuthorizationGranted({ button, modal, input, resetText, onComplete }) {
+    button.innerText = "✔ Access Granted";
+    button.classList.add("success");
+
+    setTimeout(() => {
+        modal.style.display = "none";
+        input.value = "";
+        button.innerText = resetText;
+        button.classList.remove("success");
+        onComplete();
+    }, 500);
+}
     
     if (settingsPageBackBtn){
 
@@ -1020,6 +1092,13 @@ function requireAdminAuthorization(purpose, callback){
 
     adminSuccessCallback = callback;
     adminAuthorizationPurpose = purpose;
+
+    const managerPurpose = ["FF", "GIFT_VOUCHER", "DAY_REOPEN"].includes(purpose);
+    const title = document.getElementById("authorizationDialogTitle");
+    if (title) title.textContent = managerPurpose ? "Manager Access" : "Administrator Access";
+    adminPin.placeholder = managerPurpose
+        ? " Enter 4-digit Manager PIN"
+        : " Enter 4-digit Administrator PIN";
 
     adminPin.value = "";
 
@@ -1226,35 +1305,20 @@ if (adminUnlockBtn){
 
     document.getElementById("adminError").innerText = "";
 
-    adminUnlockBtn.innerText =
-
-        "✔ Access Granted";
-
-    adminUnlockBtn.classList.add("success");
-
-    setTimeout(() => {
-
-    adminDialog.style.display = "none";
-
-    adminPin.value = "";
-
-    adminUnlockBtn.innerText =
-        "Unlock";
-
-    adminUnlockBtn.classList.remove("success");
-
-    isEditMode = true;
-
-if (adminSuccessCallback){
-
-    adminSuccessCallback(authorization.grant);
-
-    adminSuccessCallback = null;
-    adminCancelCallback = null;
-
-}
-
-}, 500);
+    showAuthorizationGranted({
+        button: adminUnlockBtn,
+        modal: adminDialog,
+        input: adminPin,
+        resetText: "Unlock",
+        onComplete: () => {
+            isEditMode = true;
+            if (adminSuccessCallback) {
+                adminSuccessCallback(authorization.grant);
+                adminSuccessCallback = null;
+                adminCancelCallback = null;
+            }
+        }
+    });
 
 }
         else{
@@ -1353,6 +1417,61 @@ if (reportsBtn) {
 
 }
 
+async function guardNewBillBusinessDay() {
+
+    try {
+
+        const status =
+            await window.electronAPI.getBusinessDayStatus();
+
+        if (status?.closing) {
+
+            await window.electronAPI.showMessageBox({
+                type: "warning",
+                title: "Business Day Closing",
+                message: "Business Day closing is in progress.",
+                detail: "Please wait until Day Closing is completed before creating a new bill."
+            });
+
+            return false;
+
+        }
+
+        if (status?.closed) {
+
+            await window.electronAPI.showMessageBox({
+                type: "warning",
+                title: "Business Day Closed",
+                message: "The business day is closed.",
+                detail: "Re-open the business day before creating a new bill."
+            });
+
+            return false;
+
+        }
+
+        return true;
+
+    }
+    catch (error) {
+
+        console.error(
+            "New Bill Business Day Check Error:",
+            error
+        );
+
+        await window.electronAPI.showMessageBox({
+            type: "error",
+            title: "Business Day Status Unavailable",
+            message: "Unable to verify the current business day status.",
+            detail: "New billing has been blocked for safety. Please retry."
+        });
+
+        return false;
+
+    }
+
+}
 
 /* =====================================
    NEW BILL BUTTON
@@ -1363,7 +1482,7 @@ const newBillBtn =
 
 if (newBillBtn) {
 
-    newBillBtn.addEventListener("click", async () => {
+newBillBtn.addEventListener("click", async () => {
 
     if (!(await guardBusyOperation())) {
 
@@ -1371,7 +1490,13 @@ if (newBillBtn) {
 
     }
 
-        hideAllScreens();
+    if (!(await guardNewBillBusinessDay())) {
+
+        return;
+
+    }
+
+    hideAllScreens();
 
         clearCurrentBill();
 
@@ -3078,6 +3203,7 @@ let giftVoucherAppliedAmount = 0;
 
 let pinAuthorizationAction = null;
 let ffAuthorizationGrant = null;
+let managerAuthorizationPending = false;
 let giftVoucherAuthorizationGrant = null;
 
 let productNotFoundOpen = false;
@@ -3656,11 +3782,14 @@ async function verifyFamilyFriendsPin() {
     if (!/^\d{4}$/.test(enteredPin)) {
 
         ffPinError.innerText =
-            "Please enter a valid 4-digit PIN.";
+            "Please enter a valid 4-digit Manager PIN.";
 
         return;
 
     }
+
+    if (managerAuthorizationPending) return;
+    managerAuthorizationPending = true;
 
 
     try {
@@ -3679,6 +3808,8 @@ async function verifyFamilyFriendsPin() {
             ffPinInput.value = "";
 
             ffPinInput.focus();
+
+            managerAuthorizationPending = false;
 
             return;
 
@@ -3699,45 +3830,27 @@ else {
     giftVoucherAuthorizationGrant = authorization.grant;
 }
 
-ffPinInput.value = "";
-
 ffPinError.innerText = "";
 
-ffPinDialog.style.display = "none";
-
-
-/*
- * Route to the authorized action.
- */
-if (authorizedAction === "FF") {
-
-    ffPinVerified = true;
-
-    pinAuthorizationAction = null;
-
-    openFamilyFriendsDiscountDialog();
-
-    return;
-
-}
-
-
-if (authorizedAction === "GV") {
-
-    pinAuthorizationAction = null;
-
-    openGiftVoucherDialog();
-
-    return;
-
-}
-
-
-/*
- * No valid authorization action.
- */
-ffPinError.innerText =
-    "Unable to determine authorization action.";
+showAuthorizationGranted({
+    button: ffPinVerifyBtn,
+    modal: ffPinDialog,
+    input: ffPinInput,
+    resetText: "Verify",
+    onComplete: () => {
+        managerAuthorizationPending = false;
+        if (authorizedAction === "FF") {
+            ffPinVerified = true;
+            pinAuthorizationAction = null;
+            openFamilyFriendsDiscountDialog();
+            return;
+        }
+        if (authorizedAction === "GV") {
+            pinAuthorizationAction = null;
+            openGiftVoucherDialog();
+        }
+    }
+});
 
     }
 
@@ -3750,6 +3863,8 @@ ffPinError.innerText =
 
         ffPinError.innerText =
             "Unable to verify PIN.";
+
+        managerAuthorizationPending = false;
 
     }
 
@@ -6952,7 +7067,8 @@ if (
 await loadBills();
 
 alert(
-    "Payment allocation updated successfully."
+    "Payment allocation updated successfully." +
+    (result.activityWarning ? `\n\nWarning: ${result.activityWarning}` : "")
 );
 
 }

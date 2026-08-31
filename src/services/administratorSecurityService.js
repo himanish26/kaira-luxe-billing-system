@@ -1,13 +1,67 @@
 const crypto = require("crypto");
 const { hashCredential, verifyCredential, isCredentialRecord } = require("./credentialCrypto");
 
-const ADMIN_PIN_PURPOSES = new Set([
-    "FF", "GIFT_VOUCHER", "RECEIPT_SETTINGS", "PAYMENT_CORRECTION",
-    "PRODUCT_IMPORT", "INVENTORY_RESET", "CUSTOMER_REPORT_EXPORT",
-    "BILL_SUMMARY_REPORT_EXPORT",
-    "BACKUP_LOCATION", "AUTO_BACKUP_SETTINGS", "RESTORE", "DAY_REOPEN",
-    "INSTALL_UPDATE"
-]);
+const AUTHORIZATION_LEVELS = Object.freeze({
+    MANAGER: "MANAGER",
+    ADMINISTRATOR: "ADMINISTRATOR"
+});
+
+const AUTHORIZATION_POLICY = Object.freeze({
+    "FF": AUTHORIZATION_LEVELS.MANAGER,
+    "GIFT_VOUCHER": AUTHORIZATION_LEVELS.MANAGER,
+    "DAY_REOPEN": AUTHORIZATION_LEVELS.MANAGER,
+    "PAYMENT_CORRECTION": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "CUSTOMER_REPORT_EXPORT": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "BILL_SUMMARY_REPORT_EXPORT": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "RECEIPT_SETTINGS": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "PRODUCT_IMPORT": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "INVENTORY_RESET": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "BACKUP_LOCATION": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "AUTO_BACKUP_SETTINGS": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "RESTORE": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "INSTALL_UPDATE": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "ACTIVITY_EXPORT": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "ACTIVITY_ARCHIVE": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "DSR_SYNC_RETRY": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "MANAGER_PIN_MANAGEMENT": AUTHORIZATION_LEVELS.ADMINISTRATOR
+});
+
+const AUTHORIZATION_PURPOSES = new Set(Object.keys(AUTHORIZATION_POLICY));
+
+const ADMIN_PIN_AUDIT_POLICY = Object.freeze({
+    FF: { classification: "BUSINESS_OPERATION", action: "FAMILY_FRIENDS_DISCOUNT_APPLIED" },
+    GIFT_VOUCHER: { classification: "BUSINESS_OPERATION", action: "GIFT_VOUCHER_APPLIED" },
+    RECEIPT_SETTINGS: { classification: "BUSINESS_OPERATION", action: "RECEIPT_FOOTER_UPDATED" },
+    PAYMENT_CORRECTION: { classification: "BUSINESS_OPERATION", action: "PAYMENT_CORRECTED" },
+    PRODUCT_IMPORT: { classification: "BUSINESS_OPERATION", action: "PRODUCT_IMPORT_COMPLETED" },
+    INVENTORY_RESET: { classification: "BUSINESS_OPERATION", action: "INVENTORY_RESET" },
+    CUSTOMER_REPORT_EXPORT: {
+        classification: "RESOURCE_ACCESS",
+        resource: "CUSTOMER_PURCHASE_REPORT",
+        label: "Customer Purchase Report"
+    },
+    BILL_SUMMARY_REPORT_EXPORT: {
+        classification: "RESOURCE_ACCESS",
+        resource: "BILL_SUMMARY_REPORT",
+        label: "Bill Summary Report"
+    },
+    BACKUP_LOCATION: { classification: "BUSINESS_OPERATION", action: "BACKUP_LOCATION_UPDATED" },
+    AUTO_BACKUP_SETTINGS: { classification: "BUSINESS_OPERATION", action: "AUTO_BACKUP_TIME_UPDATED" },
+    RESTORE: { classification: "BUSINESS_OPERATION", action: "RESTORE_COMPLETED" },
+    DAY_REOPEN: { classification: "BUSINESS_OPERATION", action: "BUSINESS_DAY_REOPENED" },
+    INSTALL_UPDATE: { classification: "BUSINESS_OPERATION", action: "APPLICATION_UPDATED" },
+    ACTIVITY_EXPORT: { classification: "BUSINESS_OPERATION", action: "ACTIVITY_LOG_EXPORTED" },
+    ACTIVITY_ARCHIVE: { classification: "BUSINESS_OPERATION", action: "ACTIVITY_LOG_ARCHIVED" },
+    DSR_SYNC_RETRY: { classification: "BUSINESS_OPERATION", action: "DSR_SYNC_RETRY" },
+    MANAGER_PIN_MANAGEMENT: { classification: "BUSINESS_OPERATION", action: "MANAGER_PIN_CHANGED" }
+});
+
+if (
+    Object.keys(ADMIN_PIN_AUDIT_POLICY).length !== AUTHORIZATION_PURPOSES.size ||
+    [...AUTHORIZATION_PURPOSES].some(purpose => !ADMIN_PIN_AUDIT_POLICY[purpose])
+) {
+    throw new Error("Every protected authorization purpose must have an audit classification.");
+}
 
 function createAdministratorSecurityService(database, options = {}) {
     const masterVerifier = options.masterVerifier || null;
@@ -23,28 +77,48 @@ function createAdministratorSecurityService(database, options = {}) {
         database.run(sql, params, function(error) { error ? reject(error) : resolve(this); });
     });
 
-    async function safeLog(action, status = "SUCCESS") {
+    async function safeLog(event) {
         try {
             if (options.logEvent) {
-                await options.logEvent({ action, status });
-                return;
+                await options.logEvent(event);
+                return null;
             }
             const { logActivity } = require("../database/activityService");
             await logActivity({
-                category: "SECURITY", action,
-                details: "Administrator security event",
-                user_name: "Administrator", status
+                category: "SECURITY",
+                user_name: event.user_name || "ADMINISTRATOR",
+                ...event
             });
+            return null;
         }
         catch (error) {
             console.error("Administrator security activity logging failed:", error.message);
+            return "Administrator authorization completed, but its Activity Log event could not be recorded.";
         }
+    }
+
+    function deniedEvent(purpose, level) {
+        const policy = ADMIN_PIN_AUDIT_POLICY[purpose];
+        const reference = policy.resource || purpose;
+        const label = policy.label || purpose.replace(/_/g, " ").toLowerCase();
+        return {
+            action: "PROTECTED_ACTION_DENIED",
+            details: `${level === AUTHORIZATION_LEVELS.MANAGER ? "Manager" : "Administrator"} authorization failed for ${label}`,
+            user_name: level,
+            status: "FAILED",
+            entity_type: "ADMIN_AUTHORIZATION",
+            reference_no: reference
+        };
+    }
+
+    async function denied(purpose, level, error) {
+        await safeLog(deniedEvent(purpose, level));
+        return { success: false, error };
     }
 
     function getSecurityRow() {
         return get(`
-            SELECT admin_pin_hash, admin_security_initialized
-            FROM settings WHERE id = 1
+            SELECT * FROM settings WHERE id = 1
         `);
     }
 
@@ -57,13 +131,17 @@ function createAdministratorSecurityService(database, options = {}) {
         return {
             initialized,
             pinConfigured: initialized,
+            managerPinConfigured: Boolean(
+                row && row.manager_security_initialized === 1 &&
+                isCredentialRecord(row.manager_pin_hash)
+            ),
             masterRecoveryProvisioned: isCredentialRecord(masterVerifier)
         };
     }
 
-    function issueGrant(purpose) {
+    function issueGrant(purpose, level) {
         const token = crypto.randomBytes(32).toString("hex");
-        grants.set(token, { purpose, expiresAt: now() + grantTtlMs });
+        grants.set(token, { purpose, level, expiresAt: now() + grantTtlMs });
         return token;
     }
 
@@ -72,7 +150,9 @@ function createAdministratorSecurityService(database, options = {}) {
         const grant = grants.get(normalizedToken);
         if (!grant) return false;
         grants.delete(normalizedToken);
-        return grant.purpose === purpose && grant.expiresAt >= now();
+        const expectedLevel = AUTHORIZATION_POLICY[purpose];
+        return Boolean(expectedLevel) && grant.purpose === purpose &&
+            grant.level === expectedLevel && grant.expiresAt >= now();
     }
 
     function consumeGrants(requirements) {
@@ -82,7 +162,9 @@ function createAdministratorSecurityService(database, options = {}) {
             grant: grants.get(String(requirement.token || ""))
         }));
         const valid = resolved.every(item =>
-            item.grant && item.grant.purpose === item.purpose &&
+            AUTHORIZATION_POLICY[item.purpose] && item.grant &&
+            item.grant.purpose === item.purpose &&
+            item.grant.level === AUTHORIZATION_POLICY[item.purpose] &&
             item.grant.expiresAt >= now()
         );
         resolved.forEach(item => grants.delete(item.token));
@@ -90,21 +172,74 @@ function createAdministratorSecurityService(database, options = {}) {
     }
 
     async function authorizePin(pin, purpose) {
-        if (!ADMIN_PIN_PURPOSES.has(purpose)) {
+        if (!AUTHORIZATION_PURPOSES.has(purpose)) {
             return { success: false, error: "Unsupported authorization purpose." };
         }
+        const level = AUTHORIZATION_POLICY[purpose];
+        const label = level === AUTHORIZATION_LEVELS.MANAGER ? "Manager" : "Administrator";
         if (!/^\d{4}$/.test(String(pin || ""))) {
-            return { success: false, error: "Please enter a valid 4-digit Administrator PIN." };
+            return denied(purpose, level, `Please enter a valid 4-digit ${label} PIN.`);
         }
         const row = await getSecurityRow();
-        if (!row || row.admin_security_initialized !== 1 ||
-            !isCredentialRecord(row.admin_pin_hash)) {
-            return { success: false, error: "Administrator Security is not configured." };
+        const initializedField = level === AUTHORIZATION_LEVELS.MANAGER
+            ? "manager_security_initialized" : "admin_security_initialized";
+        const hashField = level === AUTHORIZATION_LEVELS.MANAGER
+            ? "manager_pin_hash" : "admin_pin_hash";
+        if (!row || row[initializedField] !== 1 || !isCredentialRecord(row[hashField])) {
+            return denied(purpose, level, `${label} PIN is not configured.`);
         }
-        if (!await verifyCredential(pin, row.admin_pin_hash)) {
-            return { success: false, error: "Incorrect Administrator PIN." };
+        if (!await verifyCredential(pin, row[hashField])) {
+            return denied(purpose, level, `Incorrect ${label} PIN.`);
         }
-        return { success: true, grant: issueGrant(purpose) };
+        const result = { success: true, grant: issueGrant(purpose, level) };
+        const policy = ADMIN_PIN_AUDIT_POLICY[purpose];
+        if (policy.classification === "RESOURCE_ACCESS") {
+            const activityWarning = await safeLog({
+                action: "PROTECTED_RESOURCE_ACCESSED",
+                details: `${policy.label} accessed`,
+                status: "SUCCESS",
+                entity_type: "PROTECTED_RESOURCE",
+                reference_no: policy.resource,
+                user_name: level
+            });
+            if (activityWarning) result.activityWarning = activityWarning;
+        }
+        return result;
+    }
+
+    async function configureManagerPin(newPin, confirmPin, authorizedLevel) {
+        if (authorizedLevel !== AUTHORIZATION_LEVELS.ADMINISTRATOR) {
+            return { success: false, error: "Administrator authorization is required to manage the Manager PIN." };
+        }
+        if (!/^\d{4}$/.test(String(newPin || "")) || newPin !== confirmPin) {
+            return { success: false, error: "Manager PIN must be 4 digits and match its confirmation." };
+        }
+        const row = await getSecurityRow();
+        const wasConfigured = Boolean(row && row.manager_security_initialized === 1 &&
+            isCredentialRecord(row.manager_pin_hash));
+        const pinHash = await hashCredential(newPin);
+        await run("BEGIN IMMEDIATE TRANSACTION");
+        try {
+            await run(`
+                UPDATE settings
+                SET manager_pin_hash = ?, manager_security_initialized = 1
+                WHERE id = 1
+            `, [pinHash]);
+            await run("COMMIT");
+        }
+        catch (error) {
+            await run("ROLLBACK").catch(() => {});
+            throw error;
+        }
+        grants.clear();
+        const action = wasConfigured ? "MANAGER_PIN_CHANGED" : "MANAGER_PIN_CONFIGURED";
+        const activityWarning = await safeLog({
+            action,
+            details: wasConfigured ? "Manager PIN changed" : "Manager PIN configured",
+            user_name: AUTHORIZATION_LEVELS.ADMINISTRATOR,
+            status: "SUCCESS", entity_type: "MANAGER_SECURITY", reference_no: "MANAGER_PIN"
+        });
+        return { success: true, activityWarning };
     }
 
     async function changePin(currentPin, newPin, confirmPin) {
@@ -131,7 +266,10 @@ function createAdministratorSecurityService(database, options = {}) {
             throw error;
         }
         grants.clear();
-        await safeLog("ADMIN_PIN_CHANGED");
+        await safeLog({
+            action: "ADMIN_PIN_CHANGED", details: "Administrator PIN changed",
+            status: "SUCCESS", entity_type: "ADMIN_SECURITY", reference_no: "ADMIN_PIN"
+        });
         return { success: true };
     }
 
@@ -156,7 +294,10 @@ function createAdministratorSecurityService(database, options = {}) {
             return { success: false, error: "Administrator PIN confirmation does not match." };
         }
         if (!await verifyCredential(data.masterPin, masterVerifier)) {
-            await safeLog("MASTER_RECOVERY_FAILED", "FAILED");
+            await safeLog({
+                action: "MASTER_RECOVERY_FAILED", details: "Master recovery authorization failed",
+                status: "FAILED", entity_type: "ADMIN_SECURITY", reference_no: "MASTER_RECOVERY"
+            });
             await delayMasterFailure();
             return { success: false, error: "Master PIN is incorrect." };
         }
@@ -177,16 +318,29 @@ function createAdministratorSecurityService(database, options = {}) {
         }
         failedMasterAttempts = 0;
         grants.clear();
-        await safeLog(wasInitialized ? "ADMIN_PIN_RECOVERED" : "ADMIN_SECURITY_INITIALIZED");
-        await safeLog("MASTER_RECOVERY_SUCCESS");
+        await safeLog({
+            action: wasInitialized ? "ADMIN_PIN_RECOVERED" : "ADMIN_SECURITY_INITIALIZED",
+            details: wasInitialized ? "Administrator PIN recovered" : "Administrator Security initialized",
+            status: "SUCCESS", entity_type: "ADMIN_SECURITY", reference_no: "ADMIN_PIN"
+        });
+        await safeLog({
+            action: "MASTER_RECOVERY_SUCCESS", details: "Master recovery completed",
+            status: "SUCCESS", entity_type: "ADMIN_SECURITY", reference_no: "MASTER_RECOVERY"
+        });
         return { success: true };
     }
 
     return {
-        getStatus, authorizePin, changePin, recoverPin,
+        getStatus, authorizePin, changePin, recoverPin, configureManagerPin,
         consumeGrant, consumeGrants,
         clearGrants: () => grants.clear()
     };
 }
 
-module.exports = { createAdministratorSecurityService, ADMIN_PIN_PURPOSES };
+module.exports = {
+    createAdministratorSecurityService,
+    AUTHORIZATION_LEVELS,
+    AUTHORIZATION_POLICY,
+    AUTHORIZATION_PURPOSES,
+    ADMIN_PIN_AUDIT_POLICY
+};

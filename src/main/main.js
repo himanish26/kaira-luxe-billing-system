@@ -60,7 +60,7 @@ const administratorSecurity = createAdministratorSecurityService(database, {
 
 function requireSecurityGrant(grant, purpose) {
     if (!administratorSecurity.consumeGrant(grant, purpose)) {
-        throw new Error("Administrator authorization is required or has expired.");
+        throw new Error("Required authorization is missing, invalid, or has expired.");
     }
 }
 
@@ -183,7 +183,6 @@ const {
 
 const {
 
-    logActivity,
     getActivities,
     searchActivities,
     archiveActivities
@@ -202,7 +201,17 @@ const {
 
     logApplicationClosed,
 
-    logRestoreCompleted
+    logRestoreCompleted,
+
+    logActivityArchived,
+
+    logDataExported,
+
+    logAdministratorAction,
+    logBusinessDayClosed,
+    logBusinessDayReopened,
+    logDsrSyncSucceeded,
+    logDsrSyncFailed
 
 } = require("../database/logService");
 
@@ -230,14 +239,23 @@ const {
 
 
 const {
-
+    createDayClosingService
+} = require("../database/dayClosingService");
+const {
     getDayClosingSummary,
     getDayClosingSnapshot,
     getBusinessDayState,
     closeBusinessDay,
-    reopenBusinessDay
-
-} = require("../database/dayClosingService");
+    reopenBusinessDay,
+    retryDsrSync
+} = createDayClosingService({
+    database,
+    klbsVersion: app.getVersion(),
+    logBusinessDayClosed,
+    logBusinessDayReopened,
+    logDsrSyncSucceeded,
+    logDsrSyncFailed
+});
 
 let mainWindow;
 let splashWindow = null;
@@ -646,6 +664,15 @@ ipcMain.handle("security:change-pin", (event, data) =>
     administratorSecurity.changePin(data.currentPin, data.newPin, data.confirmPin));
 ipcMain.handle("security:recover", (event, data) =>
     administratorSecurity.recoverPin(data));
+ipcMain.handle("security:configure-manager-pin", (event, data, grant) => {
+    requireSecurityGrant(grant, "MANAGER_PIN_MANAGEMENT");
+    const managerPinData = data || {};
+    return administratorSecurity.configureManagerPin(
+        managerPinData.newPin,
+        managerPinData.confirmPin,
+        "ADMINISTRATOR"
+    );
+});
 
 ipcMain.handle(
     'import-products',
@@ -878,16 +905,18 @@ ipcMain.handle(
 
             validateBillSettlement(billData);
 
-            const authorizationRequirements = [];
-            if ((billData.items || []).some(item =>
+            const usedFamilyFriendsAuthorization = (billData.items || []).some(item =>
                 item.ff_discount !== null && item.ff_discount !== undefined
-            )) {
+            );
+            const usedGiftVoucherAuthorization = Number(billData.gift_voucher_amount || 0) > 0;
+            const authorizationRequirements = [];
+            if (usedFamilyFriendsAuthorization) {
                 authorizationRequirements.push({
                     token: billData.authorization && billData.authorization.ff,
                     purpose: "FF"
                 });
             }
-            if (Number(billData.gift_voucher_amount || 0) > 0) {
+            if (usedGiftVoucherAuthorization) {
                 authorizationRequirements.push({
                     token: billData.authorization && billData.authorization.giftVoucher,
                     purpose: "GIFT_VOUCHER"
@@ -897,7 +926,7 @@ ipcMain.handle(
                 authorizationRequirements.length &&
                 !administratorSecurity.consumeGrants(authorizationRequirements)
             ) {
-                throw new Error("Administrator PIN authorization is required or has expired.");
+                throw new Error("Required authorization is missing, invalid, or has expired.");
             }
             delete billData.authorization;
 
@@ -928,9 +957,38 @@ ipcMain.handle(
 
             await saveBill(billData);
 
+            const activityWarnings = [];
+            if (usedFamilyFriendsAuthorization) {
+                try {
+                    await logAdministratorAction(
+                        "BILLING", "FAMILY_FRIENDS_DISCOUNT_APPLIED", billData.bill_no,
+                        `Family & Friends Discount applied to bill ${billData.bill_no}`,
+                        "SUCCESS", "MANAGER"
+                    );
+                }
+                catch (logError) {
+                    activityWarnings.push("Family & Friends authorization audit could not be recorded.");
+                    console.error("Family & Friends authorization activity logging failed:", logError.message);
+                }
+            }
+            if (usedGiftVoucherAuthorization) {
+                try {
+                    await logAdministratorAction(
+                        "GIFT VOUCHER", "GIFT_VOUCHER_APPLIED", billData.bill_no,
+                        `Gift Voucher applied to bill ${billData.bill_no}`,
+                        "SUCCESS", "MANAGER"
+                    );
+                }
+                catch (logError) {
+                    activityWarnings.push("Gift Voucher authorization audit could not be recorded.");
+                    console.error("Gift Voucher authorization activity logging failed:", logError.message);
+                }
+            }
+
             return {
 
-                success: true
+                success: true,
+                activityWarning: activityWarnings.length ? activityWarnings.join(" ") : null
 
             };
 
@@ -1189,13 +1247,7 @@ ipcMain.handle(
 
             requireSecurityGrant(grant, "PAYMENT_CORRECTION");
 
-            await updatePaymentAllocation(data);
-
-            return {
-
-                success: true
-
-            };
+            return await updatePaymentAllocation(data);
 
         }
 
@@ -1510,9 +1562,7 @@ ipcMain.handle(
             requireSecurityGrant(grant, "AUTO_BACKUP_SETTINGS");
         }
 
-        await saveSettings(settings);
-
-        return true;
+        return await saveSettings(settings);
 
     }
 
@@ -1548,9 +1598,22 @@ ipcMain.handle(
                 result.filePath
             );
 
+            let activityWarning = null;
+            try {
+                await logDataExported(
+                    "INVENTORY_EXPORTED", "INVENTORY",
+                    "Inventory exported", "OPERATOR"
+                );
+            }
+            catch (logError) {
+                activityWarning = "Inventory exported, but its Activity Log event could not be recorded.";
+                console.error("Inventory export activity logging failed:", logError.message);
+            }
+
             return{
 
-                success:true
+                success:true,
+                activityWarning
 
             };
 
@@ -1738,13 +1801,30 @@ if (result.canceled) {
 
 }
 
-return await exportReport(
+const exportResult = await exportReport(
 
     request,
 
     result.filePath
 
 );
+
+const auditByReportType = {
+    business: ["BUSINESS_REPORT_EXPORTED", "BUSINESS_REPORT", "Business Report exported", "OPERATOR"],
+    gst: ["GST_REPORT_EXPORTED", "GST_REPORT", "GST Report exported", "OPERATOR"],
+    product: ["PRODUCT_SALES_REPORT_EXPORTED", "PRODUCT_SALES_REPORT", "Product Sales Report exported", "OPERATOR"],
+    customer: ["CUSTOMER_PURCHASE_REPORT_EXPORTED", "CUSTOMER_PURCHASE_REPORT", "Customer Purchase Report exported", "ADMINISTRATOR"],
+    billSummary: ["BILL_SUMMARY_REPORT_EXPORTED", "BILL_SUMMARY_REPORT", "Bill Summary Report exported", "ADMINISTRATOR"]
+};
+let activityWarning = null;
+try {
+    await logDataExported(...auditByReportType[request.reportType]);
+}
+catch (logError) {
+    activityWarning = "Report exported, but its Activity Log event could not be recorded.";
+    console.error("Report export activity logging failed:", logError.message);
+}
+return { ...(exportResult || {}), success: true, activityWarning };
 
         }
 
@@ -2325,6 +2405,16 @@ if (!checksumValid) {
 
                 );
 
+                try {
+                    await logAdministratorAction(
+                        "SYSTEM", "APPLICATION_UPDATED", packageInfo.version,
+                        "Software update installer launched"
+                    );
+                }
+                catch (logError) {
+                    console.error("Software update activity logging failed:", logError.message);
+                }
+
                 await new Promise(
 
                     resolve =>
@@ -2399,40 +2489,6 @@ ipcMain.handle(
 
 );
 
-/* ===========================================
-   ACTIVITY LOG
-=========================================== */
-
-ipcMain.handle(
-
-    "activity:log",
-
-    async (event, activity) => {
-
-        try {
-
-            return await logActivity(activity);
-
-        }
-
-        catch (error) {
-
-            console.error(error);
-
-            return {
-
-                success: false,
-
-                message: error.message
-
-            };
-
-        }
-
-    }
-
-);
-
 ipcMain.handle(
 
     "activity:get",
@@ -2465,11 +2521,27 @@ ipcMain.handle(
 
     "activity:export",
 
-    async () => {
+    async (event, grant) => {
 
         try {
 
-            return await exportActivityLog();
+            requireSecurityGrant(grant, "ACTIVITY_EXPORT");
+
+            const result = await exportActivityLog();
+            if (!result.success) return result;
+
+            let activityWarning = null;
+            try {
+                await logDataExported(
+                    "ACTIVITY_LOG_EXPORTED", "ACTIVITY_LOG",
+                    "Activity Log exported", "ADMINISTRATOR"
+                );
+            }
+            catch (logError) {
+                activityWarning = "Activity Log exported, but its export event could not be recorded.";
+                console.error("Activity Log export activity logging failed:", logError.message);
+            }
+            return { ...result, activityWarning };
 
         }
 
@@ -2499,9 +2571,11 @@ ipcMain.handle(
 
     "activity:archive",
 
-    async () => {
+    async (event, grant) => {
 
         try {
+
+            requireSecurityGrant(grant, "ACTIVITY_ARCHIVE");
 
             // 1. Export Excel
             const exportResult =
@@ -2516,30 +2590,46 @@ ipcMain.handle(
             }
 
             // 2. Delete activities
-            await archiveActivities();
+            const archiveResult =
+                await archiveActivities(
+                    exportResult.rowCount
+                );
 
             // 3. Create archive log
-            await logActivity({
+            let activityWarning = null;
 
-                category: "SYSTEM",
+            try {
 
-                action: "Activity Log Archived",
-
-                details:
+                await logActivityArchived(
                     exportResult.fileName,
+                    archiveResult.deleted
+                );
 
-                user_name: "Administrator",
+            }
 
-                status: "SUCCESS"
+            catch (logError) {
 
-            });
+                activityWarning =
+                    "Activity Log archive completed, but its marker could not be recorded.";
+
+                console.error(
+                    "Activity archive marker failed:",
+                    logError.message
+                );
+
+            }
 
             return {
 
                 success: true,
 
                 fileName:
-                    exportResult.fileName
+                    exportResult.fileName,
+
+                removedCount:
+                    archiveResult.deleted,
+
+                activityWarning
 
             };
 
@@ -2676,3 +2766,23 @@ ipcMain.handle(
 
     }
 );
+
+ipcMain.handle("day-closing:retry-dsr-sync", async (event, grant, snapshotId) => {
+    try {
+        requireSecurityGrant(grant, "DSR_SYNC_RETRY");
+        const id = Number(snapshotId);
+        if (!Number.isSafeInteger(id) || id <= 0) {
+            throw new Error("A valid Day Closing snapshot is required.");
+        }
+        const result = await retryDsrSync(id);
+        return {
+            success: result.status === "SYNCED",
+            dsrSyncStatus: result.status,
+            dsrSyncWarning: result.warning || null,
+            action: result.action || null
+        };
+    }
+    catch (error) {
+        return { success: false, error: error.message };
+    }
+});

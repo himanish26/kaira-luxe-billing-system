@@ -655,14 +655,6 @@ transform:rotate(360deg);
 .verify-credit-btn {
     min-width: 90px;
 
-    border: none;
-    border-radius: 8px;
-
-    background: #9b003b;
-    color: #ffffff;
-
-    font-weight: 700;
-
     cursor: pointer;
 }
 
@@ -703,29 +695,10 @@ transform:rotate(360deg);
     min-width: 150px;
     height: 44px;
 
-    border-radius: 8px;
-
-    font-weight: 700;
-
     cursor: pointer;
 }
 
-.modal-cancel-btn {
-    background: #ffffff;
-
-    border: 1px solid #cccccc;
-}
-
-.modal-apply-btn {
-    border: none;
-
-    background: #9b003b;
-    color: #ffffff;
-}
-
 .modal-apply-btn:disabled {
-    opacity: 0.5;
-
     cursor: not-allowed;
 }
 
@@ -1117,54 +1090,68 @@ transform:rotate(360deg);
 
     margin:0 !important;
 
-    border-radius:12px;
-
     font-size:18px;
-    font-weight:800;
 
     cursor:pointer;
 }
 
 
-/* ===========================================
-   CANCEL
-=========================================== */
-
-#ffPinCancelBtn{
-    background:#eeeeee !important;
-
-    color:#333333 !important;
-
-    border:
-        1px solid
-        #d0d0d0 !important;
-
-    box-shadow:none !important;
-}
-
-#ffPinCancelBtn:hover{
-    background:#e2e2e2 !important;
-
-    color:#222222 !important;
-
-    border-color:#bdbdbd !important;
-}
-
 
 /* ===========================================
-   VERIFY
+   SHARED KLBS MODAL ACTION BUTTONS
 =========================================== */
 
-#ffPinVerifyBtn{
-    background:#8b004b !important;
-
-    color:#ffffff !important;
-
-    border:none !important;
-
-    box-shadow:none;
+.klbs-primary-btn,
+.klbs-cancel-btn {
+    min-height: 44px;
+    padding: 0 22px;
+    border: 2px solid #8B004B;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: none;
+    transform: none;
+    transition: background-color .18s ease, color .18s ease, border-color .18s ease;
 }
 
-#ffPinVerifyBtn:hover{
-    background:#a00056 !important;
+.klbs-primary-btn {
+    background: #8B004B;
+    color: #FFFFFF;
+}
+
+.klbs-primary-btn:hover:not(:disabled) {
+    background: #72003E;
+    border-color: #72003E;
+    color: #FFFFFF;
+    box-shadow: none;
+    transform: none;
+}
+
+.klbs-cancel-btn {
+    background: #FFFFFF;
+    color: #8B004B;
+}
+
+.klbs-cancel-btn:hover:not(:disabled) {
+    background: #F7E8EE;
+    color: #8B004B;
+    border-color: #8B004B;
+    box-shadow: none;
+    transform: none;
+}
+
+.klbs-primary-btn:focus-visible,
+.klbs-cancel-btn:focus-visible {
+    outline: 3px solid rgba(139, 0, 75, .28);
+    outline-offset: 3px;
+}
+
+.klbs-primary-btn:disabled {
+    background: #D1D5DB;
+    color: #6B7280;
+    border-color: #D1D5DB;
+    cursor: not-allowed;
+    opacity: 1;
+    box-shadow: none;
+    transform: none;
 }

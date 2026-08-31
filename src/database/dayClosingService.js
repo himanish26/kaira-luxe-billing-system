@@ -1,13 +1,5 @@
-const db = require("./database");
-const { sendEmail } = require("../services/emailService");
-const {
-    createBackup,
-    validateBackup
-} = require("../services/backupService");
-const {
-    logBusinessDayClosed,
-    logBusinessDayReopened
-} = require("./logService");
+const { readClosedDsrPayload } = require("./dayClosingDsrService");
+const { createDsrSyncService } = require("../services/dsrSyncService");
 const { getBusinessDate } = require("./businessDate");
 const { SNAPSHOT_VERSION } = require("./dayClosingMigration");
 
@@ -38,14 +30,25 @@ function formatBusinessDateDisplay(value) {
 }
 
 function createDayClosingService(options = {}) {
-    const database = options.database || db;
+    if (!options.database) {
+        throw new Error("Day Closing database dependency is required.");
+    }
+    const database = options.database;
     const now = options.now || (() => new Date());
     const getBusinessDateFn = options.getBusinessDate || getBusinessDate;
-    const createBackupFn = options.createBackup || createBackup;
-    const validateBackupFn = options.validateBackup || validateBackup;
-    const sendEmailFn = options.sendEmail || sendEmail;
-    const logClosedFn = options.logBusinessDayClosed || logBusinessDayClosed;
-    const logReopenedFn = options.logBusinessDayReopened || logBusinessDayReopened;
+    const backupService = options.createBackup && options.validateBackup
+        ? null : require("../services/backupService");
+    const createBackupFn = options.createBackup || backupService.createBackup;
+    const validateBackupFn = options.validateBackup || backupService.validateBackup;
+    const sendEmailFn = options.sendEmail || require("../services/emailService").sendEmail;
+    const noActivityLog = async () => {};
+    const logClosedFn = options.logBusinessDayClosed || noActivityLog;
+    const logReopenedFn = options.logBusinessDayReopened || noActivityLog;
+    const logDsrSuccessFn = options.logDsrSyncSucceeded || noActivityLog;
+    const logDsrFailedFn = options.logDsrSyncFailed || noActivityLog;
+    const dsrSyncService = options.dsrSyncService || createDsrSyncService();
+    const readDsrPayloadFn = options.readClosedDsrPayload || readClosedDsrPayload;
+    const klbsVersion = String(options.klbsVersion || "").trim();
     const closingEmail = options.closingEmail === undefined
         ? process.env.DAY_CLOSING_EMAIL
         : options.closingEmail;
@@ -260,6 +263,10 @@ function createDayClosingService(options = {}) {
             backupStatus: row.backup_status,
             backupReference: row.backup_reference,
             emailStatus: row.email_status,
+            dsrSyncStatus: row.dsr_sync_status,
+            dsrSyncedAt: row.dsr_synced_at,
+            dsrSyncError: row.dsr_sync_error,
+            dsrSyncAttempts: row.dsr_sync_attempts,
             remarks: row.remarks,
             reopenedAt: row.reopened_at,
             reopenedBy: row.reopened_by,
@@ -481,6 +488,73 @@ function createDayClosingService(options = {}) {
         `, [backupStatus, message, now().toISOString(), snapshotId]);
     }
 
+    function sanitizeDsrError(value) {
+        return String(value || "DSR sync failed.")
+            .replace(/https?:\/\/\S+/gi, "[ENDPOINT]")
+            .slice(0, 500);
+    }
+
+    async function attemptDsrSync(snapshotId) {
+        let payload;
+        try {
+            payload = await readDsrPayloadFn(database, snapshotId, klbsVersion);
+        }
+        catch (error) {
+            return { status: "FAILED", warning: sanitizeDsrError(error.message) };
+        }
+
+        let persistenceWarning = null;
+        try {
+            await run(`
+                UPDATE day_closing_snapshots
+                SET dsr_sync_attempts = dsr_sync_attempts + 1, updated_at = ?
+                WHERE id = ? AND close_status = 'CLOSED' AND snapshot_version = 1
+            `, [now().toISOString(), snapshotId]);
+        }
+        catch (error) {
+            persistenceWarning = "DSR attempt status could not be persisted.";
+            console.error("DSR attempt persistence failed:", error.message);
+        }
+
+        const result = await dsrSyncService.sync(payload);
+        const status = result.success ? "SYNCED" : "FAILED";
+        const warning = result.success ? persistenceWarning : sanitizeDsrError(result.error);
+        try {
+            await run(`
+                UPDATE day_closing_snapshots
+                SET dsr_sync_status = ?, dsr_synced_at = ?, dsr_sync_error = ?, updated_at = ?
+                WHERE id = ? AND close_status = 'CLOSED' AND snapshot_version = 1
+            `, [
+                status,
+                result.success ? result.syncedAt : null,
+                result.success ? null : warning,
+                now().toISOString(),
+                snapshotId
+            ]);
+        }
+        catch (error) {
+            persistenceWarning = "DSR outcome could not be persisted.";
+            console.error("DSR outcome persistence failed:", error.message);
+        }
+
+        try {
+            if (result.success) {
+                await logDsrSuccessFn(payload.businessDate, payload.closeSequence, result.action);
+            }
+            else {
+                await logDsrFailedFn(payload.businessDate, payload.closeSequence, warning);
+            }
+        }
+        catch (error) {
+            console.error("DSR Activity Log failed:", error.message);
+        }
+        return {
+            status,
+            warning: result.success ? persistenceWarning : warning,
+            action: result.success ? result.action : null
+        };
+    }
+
     async function executeClose() {
         const reservation = await reserveClose();
         if (reservation.active) {
@@ -585,6 +659,8 @@ function createDayClosingService(options = {}) {
         }
 
         summary = await getDayClosingSnapshot(reservation.snapshotId);
+        const dsrResult = await attemptDsrSync(reservation.snapshotId);
+        summary = await getDayClosingSnapshot(reservation.snapshotId);
         return {
             success: true,
             snapshotId: reservation.snapshotId,
@@ -592,7 +668,10 @@ function createDayClosingService(options = {}) {
             backupStatus: "SUCCESS",
             emailStatus,
             emailWarning,
-            activityWarning
+            activityWarning,
+            dsrSyncStatus: dsrResult.status,
+            dsrSyncWarning: dsrResult.warning,
+            dsrSyncAction: dsrResult.action
         };
     }
 
@@ -649,7 +728,7 @@ function createDayClosingService(options = {}) {
                 UPDATE day_closing_snapshots
                 SET close_status = 'REOPENED',
                     reopened_at = ?,
-                    reopened_by = 'Administrator',
+                    reopened_by = 'Manager',
                     reopen_reason = ?,
                     updated_at = ?
                 WHERE id = ? AND close_status = 'CLOSED'
@@ -692,14 +771,12 @@ function createDayClosingService(options = {}) {
         getBusinessDayState,
         isBusinessDayClosed,
         closeBusinessDay,
-        reopenBusinessDay
+        reopenBusinessDay,
+        retryDsrSync: attemptDsrSync
     };
 }
 
-const service = createDayClosingService();
-
 module.exports = {
-    ...service,
     createDayClosingService,
     toPaise,
     formatBusinessDateDisplay

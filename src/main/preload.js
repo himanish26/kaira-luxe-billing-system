@@ -160,6 +160,9 @@ closeBusinessDay: () =>
 
     ),
 
+    retryDayClosingDsrSync: (grant, snapshotId) =>
+        ipcRenderer.invoke("day-closing:retry-dsr-sync", grant, snapshotId),
+
     reopenBusinessDay: (grant, reason) =>
 
     ipcRenderer.invoke(
@@ -305,25 +308,21 @@ getBackupHistory: () =>
         "backup:getHistory"
     ),
 
-logActivity: (activity) =>
-    ipcRenderer.invoke(
-        "activity:log",
-        activity
-    ),
-
     getActivities: () =>
     ipcRenderer.invoke(
         "activity:get"
     ),
 
-    exportActivityLog: () =>
+    exportActivityLog: (grant) =>
     ipcRenderer.invoke(
-        "activity:export"
+        "activity:export",
+        grant
     ),
 
-    archiveActivities: () =>
+    archiveActivities: (grant) =>
     ipcRenderer.invoke(
-        "activity:archive"
+        "activity:archive",
+        grant
     ),
 
 selectBackupFolder: () =>
@@ -476,7 +475,9 @@ administratorSecurity: {
     getStatus: () => ipcRenderer.invoke("security:get-status"),
     authorizePin: (pin, purpose) => ipcRenderer.invoke("security:authorize-pin", pin, purpose),
     changePin: data => ipcRenderer.invoke("security:change-pin", data),
-    recover: data => ipcRenderer.invoke("security:recover", data)
+    recover: data => ipcRenderer.invoke("security:recover", data),
+    configureManagerPin: (data, grant) =>
+        ipcRenderer.invoke("security:configure-manager-pin", data, grant)
 },
 
 }

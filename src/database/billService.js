@@ -8,7 +8,9 @@ const {
 
     logInvoiceGenerated,
 
-    logPaymentCorrected
+    logPaymentCorrected,
+
+    logStoreCreditRedeemed
 
 } = require("./logService");
 
@@ -752,6 +754,26 @@ function redeemStoreCreditAndCommit(){
                         );
                     }
 
+                    if (
+    billData.store_credit &&
+    billData.store_credit.store_credit_no
+) {
+    try {
+        await logStoreCreditRedeemed(
+            billData.store_credit.store_credit_no,
+            billData.bill_no,
+            Number(billData.store_credit.amount),
+            "OPERATOR"
+        );
+    }
+    catch (logError) {
+        console.error(
+            "Store Credit redemption activity logging failed:",
+            logError.message
+        );
+    }
+}
+
                     resolve(true);
 
                 }
@@ -1226,13 +1248,37 @@ function updatePaymentAllocation(data) {
 
         else {
 
-            await logPaymentCorrected(
+            let activityWarning = null;
 
-                data.bill_no
+            try {
 
-            );
+                await logPaymentCorrected(
 
-            resolve(true);
+                    data.bill_no
+
+                );
+
+            }
+
+            catch (logError) {
+
+                activityWarning =
+                    "Activity Log could not be recorded.";
+
+                console.error(
+                    "Payment correction activity logging failed:",
+                    logError.message
+                );
+
+            }
+
+            resolve({
+
+                success: true,
+
+                activityWarning
+
+            });
 
         }
 

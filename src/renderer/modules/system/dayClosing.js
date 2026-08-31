@@ -572,6 +572,9 @@ async function startDayClosing() {
         if (result.activityWarning) {
             warnings.push(`Activity Log failed: ${result.activityWarning}`);
         }
+        if (result.dsrSyncStatus === "FAILED" || result.dsrSyncWarning) {
+            warnings.push(`DSR sync pending: ${result.dsrSyncWarning || "Retry is required."}`);
+        }
 
         await window.electronAPI.showMessageBox({
             type: warnings.length ? "warning" : "info",
@@ -650,7 +653,7 @@ function requestDayReopenReason() {
 
                     <button
                         id="cancelDayReopenReasonBtn"
-                        class="day-reopen-modal-btn secondary">
+                        class="day-reopen-modal-btn secondary klbs-cancel-btn">
 
                         CANCEL
 
@@ -658,7 +661,7 @@ function requestDayReopenReason() {
 
                     <button
                         id="continueDayReopenReasonBtn"
-                        class="day-reopen-modal-btn primary">
+                        class="day-reopen-modal-btn primary klbs-primary-btn">
 
                         CONTINUE
 

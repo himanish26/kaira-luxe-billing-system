@@ -20,7 +20,7 @@ function showComingSoon(featureName) {
 
             <button
                 id="comingSoonOkBtn"
-                class="klbs-modal-ok">
+                class="klbs-modal-ok klbs-primary-btn">
 
                 OK
 

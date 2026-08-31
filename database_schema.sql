@@ -106,6 +106,10 @@ CREATE TABLE day_closing_snapshots (
     backup_reference TEXT,
     email_status TEXT NOT NULL DEFAULT 'PENDING'
         CHECK (email_status IN ('PENDING', 'SUCCESS', 'FAILED', 'UNKNOWN')),
+    dsr_sync_status TEXT NOT NULL DEFAULT 'NOT_ATTEMPTED',
+    dsr_synced_at TEXT,
+    dsr_sync_error TEXT,
+    dsr_sync_attempts INTEGER NOT NULL DEFAULT 0,
     remarks TEXT,
     reopened_at TEXT,
     reopened_by TEXT,
@@ -787,6 +791,8 @@ CREATE TABLE settings (
     ff_pin TEXT,
     admin_pin_hash TEXT,
     admin_security_initialized INTEGER NOT NULL DEFAULT 0 CHECK (admin_security_initialized IN (0, 1)),
+    manager_pin_hash TEXT,
+    manager_security_initialized INTEGER NOT NULL DEFAULT 0 CHECK (manager_security_initialized IN (0, 1)),
 
                 last_updated TEXT
 
@@ -818,6 +824,17 @@ CREATE TABLE activities (
 
                 user_name TEXT,
 
-                status TEXT
+                status TEXT,
+
+                entity_type TEXT,
+
+                reference_no TEXT,
+
+                change_data TEXT,
+
+                created_at TEXT
 
             );
+
+CREATE INDEX idx_activities_category_reference
+ON activities (category, reference_no);

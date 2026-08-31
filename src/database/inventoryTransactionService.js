@@ -1,4 +1,8 @@
 const db = require("./database");
+const {
+    logStockInward,
+    logStockOutward
+} = require("./logService");
 
 
 /* ============================================================
@@ -245,7 +249,7 @@ async function stockInward(data) {
                         );
 
 
-                    resolve({
+                    const result = {
 
                         success: true,
 
@@ -255,9 +259,31 @@ async function stockInward(data) {
 
                         quantity: inwardQty,
 
-                        currentStock: newStock
+                        currentStock: newStock,
 
-                    });
+                        activityWarning: null
+
+                    };
+
+                    try {
+
+                        await logStockInward(result, data);
+
+                    }
+
+                    catch (logError) {
+
+                        result.activityWarning =
+                            "Activity Log could not be recorded.";
+
+                        console.error(
+                            "Stock inward activity logging failed:",
+                            logError.message
+                        );
+
+                    }
+
+                    resolve(result);
 
                 }
 
@@ -416,7 +442,7 @@ async function stockOutward(data) {
                         );
 
 
-                    resolve({
+                    const result = {
 
                         success: true,
 
@@ -428,9 +454,31 @@ async function stockOutward(data) {
 
                         transactionType,
 
-                        currentStock: newStock
+                        currentStock: newStock,
 
-                    });
+                        activityWarning: null
+
+                    };
+
+                    try {
+
+                        await logStockOutward(result, data);
+
+                    }
+
+                    catch (logError) {
+
+                        result.activityWarning =
+                            "Activity Log could not be recorded.";
+
+                        console.error(
+                            "Stock outward activity logging failed:",
+                            logError.message
+                        );
+
+                    }
+
+                    resolve(result);
 
                 }
 

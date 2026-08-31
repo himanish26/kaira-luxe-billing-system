@@ -35,6 +35,10 @@ const CREATE_DAY_CLOSING_SNAPSHOTS_SQL = `
         backup_reference TEXT,
         email_status TEXT NOT NULL DEFAULT 'PENDING'
             CHECK (email_status IN ('PENDING', 'SUCCESS', 'FAILED', 'UNKNOWN')),
+        dsr_sync_status TEXT NOT NULL DEFAULT 'NOT_ATTEMPTED',
+        dsr_synced_at TEXT,
+        dsr_sync_error TEXT,
+        dsr_sync_attempts INTEGER NOT NULL DEFAULT 0,
         remarks TEXT,
         reopened_at TEXT,
         reopened_by TEXT,
@@ -81,6 +85,23 @@ async function migrateDayClosingSnapshots(db) {
         await run(db, "BEGIN IMMEDIATE TRANSACTION");
         transactionStarted = true;
         await run(db, CREATE_DAY_CLOSING_SNAPSHOTS_SQL);
+        const columns = await new Promise((resolve, reject) => {
+            db.all("PRAGMA table_info(day_closing_snapshots)", [], (error, rows) => {
+                if (error) reject(error);
+                else resolve(rows || []);
+            });
+        });
+        const existing = new Set(columns.map(column => column.name));
+        for (const [name, definition] of [
+            ["dsr_sync_status", "TEXT NOT NULL DEFAULT 'NOT_ATTEMPTED'"],
+            ["dsr_synced_at", "TEXT"],
+            ["dsr_sync_error", "TEXT"],
+            ["dsr_sync_attempts", "INTEGER NOT NULL DEFAULT 0"]
+        ]) {
+            if (!existing.has(name)) {
+                await run(db, `ALTER TABLE day_closing_snapshots ADD COLUMN ${name} ${definition}`);
+            }
+        }
         await run(db, CREATE_ACTIVE_INDEX_SQL);
         await run(db, CREATE_DATE_INDEX_SQL);
 
@@ -170,11 +191,19 @@ async function migrateDayClosingSnapshots(db) {
             FROM pragma_index_list('day_closing_snapshots')
             WHERE name = 'idx_day_closing_one_active'
         `);
+        const dsrColumns = await new Promise((resolve, reject) => {
+            db.all("PRAGMA table_info(day_closing_snapshots)", [], (error, rows) => {
+                if (error) reject(error);
+                else resolve(new Set((rows || []).map(column => column.name)));
+            });
+        });
         if (
             !table ||
             !activeIndex ||
             Number(activeIndex.is_unique) !== 1 ||
-            Number(activeIndex.partial) !== 1
+            Number(activeIndex.partial) !== 1 ||
+            !["dsr_sync_status", "dsr_synced_at", "dsr_sync_error", "dsr_sync_attempts"]
+                .every(name => dsrColumns.has(name))
         ) {
             throw new Error("Day Closing snapshot migration verification failed.");
         }

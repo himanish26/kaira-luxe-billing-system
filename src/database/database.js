@@ -8,6 +8,10 @@ const {
 const {
     migrateDayClosingSnapshots
 } = require("./dayClosingMigration");
+const {
+    migrateActivityLogSchema
+} = require("./activityMigration");
+const { migrateManagerSecurity } = require("./managerSecurityMigration");
 
 // Development database path
 // Keeps Electron and DB Browser pointed at the same billing.db
@@ -236,7 +240,15 @@ function createTables() {
 
                 user_name TEXT,
 
-                status TEXT
+                status TEXT,
+
+                entity_type TEXT,
+
+                reference_no TEXT,
+
+                change_data TEXT,
+
+                created_at TEXT
 
             )
         `);
@@ -284,6 +296,11 @@ function createTables() {
 
                 admin_security_initialized INTEGER NOT NULL DEFAULT 0
                     CHECK (admin_security_initialized IN (0, 1)),
+
+                manager_pin_hash TEXT,
+
+                manager_security_initialized INTEGER NOT NULL DEFAULT 0
+                    CHECK (manager_security_initialized IN (0, 1)),
 
                 last_updated TEXT
 
@@ -2830,7 +2847,13 @@ try {
 
         await runDatabaseMigrations();
 
+        await migrateActivityLogSchema(db);
+
+        console.log("✓ Activity Log schema ready.");
+
         await migrateAdministratorSecurity();
+
+        await migrateManagerSecurity(db);
 
         await migrateProductDiscountColumn();
 

@@ -1,153 +1,417 @@
-/* ==========================================
-   ACTIVITY TABLE
-========================================== */
+/* =========================================================
+   KAIRA LUXE BILLING SYSTEM
+   ACTIVITY LOG
+   POLISHED AUDIT TABLE
+========================================================= */
 
-#activityTable{
 
-    width:100%;
+/* =========================================================
+   SEARCH BAR
+========================================================= */
 
-    border-collapse:collapse;
+#activitySearch {
+    width: 550px;
+    max-width: 100%;
+    height: 62px;
 
+    padding: 0 20px;
+    margin-bottom: 26px;
+
+    box-sizing: border-box;
+
+    font-size: 22px;
+    font-weight: 600;
+
+    color: #2b2b2b;
+    background: #ffffff;
+
+    border: 2px solid #8B004B;
+    border-radius: 12px;
+
+    outline: none;
+
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
 }
 
-#activityTable th{
-
-    padding:18px;
-
-    font-size:20px;
-
-    font-weight:700;
-
+#activitySearch::placeholder {
+    color: #707070;
+    opacity: 1;
 }
 
-#activityTable td{
+#activitySearch:focus {
+    border-color: #9d0055;
 
-    padding:18px;
-
-    font-size:18px;
-
-    text-align:center;
-
-    border-bottom:1px solid #eee;
-
+    box-shadow:
+        0 0 0 4px rgba(139, 0, 75, 0.08);
 }
 
-#activityTable td:nth-child(3),
 
-#activityTable td:nth-child(4){
+/* =========================================================
+   TABLE CONTAINER
+========================================================= */
 
-    text-align:left;
+.activity-table-container {
+    width: 100%;
+    max-height: 520px;
 
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    position: relative;
+
+    background: #ffffff;
+
+    border: 1px solid #e5e5e5;
+    border-radius: 16px;
+
+    box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.07);
 }
 
-#activityTable tbody tr:nth-child(even){
 
-    background:#f8f8f8;
+/* =========================================================
+   TABLE BASE
+========================================================= */
 
+#activityTable {
+    width: 100%;
+
+    table-layout: fixed;
+
+    border-collapse: separate;
+    border-spacing: 0;
+
+    background: #ffffff;
 }
 
-#activityTable tbody tr:hover{
 
-    background:#e8f2ff;
+/* =========================================================
+   HEADER
+   FROZEN WHILE BODY SCROLLS
+========================================================= */
 
+#activityTable thead {
+    position: static;
 }
 
-#activitySearch{
+#activityTable thead th {
+    position: sticky;
+    top: 0;
 
-    width:550px;
+    z-index: 100;
 
-    height:65px;
+    padding: 15px 12px;
 
-    padding:0 20px;
+    background: #8B004B;
+    color: #ffffff;
 
-    margin-bottom:25px;
+    font-size: 14px;
+    font-weight: 700;
 
-    font-size:24px;
+    line-height: 1.25;
 
-    font-weight:600;
+    text-align: left;
+    vertical-align: middle;
 
-    border:2px solid #8b0035;
+    white-space: normal;
 
-    border-radius:12px;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: normal;
 
-    outline:none;
+    border: none;
 
+    background-clip: padding-box;
+
+    box-shadow:
+        inset 0 -1px 0 rgba(255, 255, 255, 0.12),
+        0 2px 5px rgba(0, 0, 0, 0.08);
 }
 
-#activitySearch:focus{
-
-    box-shadow:0 0 10px rgba(122,0,44,.25);
-
+#activityTable thead th:first-child {
+    border-top-left-radius: 15px;
 }
 
-.activity-actions{
-
-    display:flex;
-
-    justify-content:center;
-
-    margin-top:30px;
-
+#activityTable thead th:last-child {
+    border-top-right-radius: 15px;
 }
 
-#exportActivityBtn{
 
-    width:260px;
+/* =========================================================
+   BODY ROWS
+========================================================= */
 
+#activityTable tbody tr {
+    background: #ffffff;
+
+    transition: background 0.15s ease;
 }
 
-.activity-table-container{
-
-    width:100%;
-
-    max-height:430px;
-
-    overflow-y:auto;
-
-    overflow-x:auto;
-
-    background:#fff;
-
-    border-radius:16px;
-
-    box-shadow:0 8px 20px rgba(0,0,0,.08);
-
+#activityTable tbody tr:nth-child(even) {
+    background: #fafafa;
 }
 
-.activity-table-container table{
-
-    width:100%;
-
-    border-collapse:separate;
-
-    border-spacing:0;
-
+#activityTable tbody tr:hover {
+    background: #f7edf2;
 }
 
-.activity-table-container thead th{
-
-    position:sticky;
-
-    top:0;
-
-    z-index:30;
-
-    background:#8B004B;
-
-    color:#fff;
-
-    background-clip:padding-box;
-
+#activityTable tbody tr:last-child td {
+    border-bottom: none;
 }
 
-.activity-table-container tbody tr:nth-child(even){
 
-    background:#f8f8f8;
+/* =========================================================
+   BODY CELLS
+   EXCEL-STYLE WRAP TEXT
+========================================================= */
 
+#activityTable tbody td {
+    padding: 16px 12px;
+
+    font-size: 14px;
+    font-weight: 400;
+
+    line-height: 1.4;
+
+    color: #252525;
+
+    text-align: left;
+    vertical-align: middle;
+
+    border-bottom: 1px solid #e9e9e9;
+
+    background: transparent;
+
+    /*
+       Wrap Text for every cell
+    */
+    white-space: normal !important;
+
+    overflow: visible !important;
+
+    text-overflow: clip !important;
+
+    overflow-wrap: anywhere !important;
+
+    word-wrap: break-word !important;
+
+    word-break: normal !important;
+
+    height: auto;
 }
 
-.activity-table-container tbody tr:hover{
 
-    background:#e8f2ff;
+/* =========================================================
+   COLUMN WIDTHS
+   TOTAL = 100%
+========================================================= */
 
+/* Date & Time */
+#activityTable th:nth-child(1),
+#activityTable td:nth-child(1) {
+    width: 12%;
+}
+
+/* Category */
+#activityTable th:nth-child(2),
+#activityTable td:nth-child(2) {
+    width: 10%;
+}
+
+/* Action */
+#activityTable th:nth-child(3),
+#activityTable td:nth-child(3) {
+    width: 25%;
+}
+
+/* Reference */
+#activityTable th:nth-child(4),
+#activityTable td:nth-child(4) {
+    width: 20%;
+}
+
+/* Details */
+#activityTable th:nth-child(5),
+#activityTable td:nth-child(5) {
+    width: 25%;
+}
+
+/* Status */
+#activityTable th:nth-child(6),
+#activityTable td:nth-child(6) {
+    width: 8%;
+}
+
+
+/* =========================================================
+   DATE & TIME
+========================================================= */
+
+#activityTable td:nth-child(1) {
+    font-variant-numeric: tabular-nums;
+
+    font-weight: 500;
+
+    color: #323232;
+
+    line-height: 1.35;
+}
+
+
+/* =========================================================
+   CATEGORY
+========================================================= */
+
+#activityTable td:nth-child(2) {
+    font-weight: 700;
+
+    color: #4a4a4a;
+}
+
+
+/* =========================================================
+   ACTION
+========================================================= */
+
+#activityTable td:nth-child(3) {
+    font-weight: 600;
+
+    color: #242424;
+
+    overflow-wrap: anywhere !important;
+}
+
+
+/* =========================================================
+   REFERENCE
+========================================================= */
+
+#activityTable td:nth-child(4) {
+    font-weight: 500;
+
+    color: #3a3a3a;
+
+    overflow-wrap: anywhere !important;
+}
+
+
+/* =========================================================
+   DETAILS
+========================================================= */
+
+#activityTable td:nth-child(5) {
+    color: #3f3f3f;
+
+    line-height: 1.5;
+
+    overflow-wrap: anywhere !important;
+}
+
+
+/* =========================================================
+   STATUS
+========================================================= */
+
+#activityTable th:nth-child(6),
+#activityTable td:nth-child(6) {
+    text-align: center;
+}
+
+#activityTable td:nth-child(6) {
+    font-size: 13px;
+    font-weight: 700;
+
+    letter-spacing: 0.2px;
+
+    color: #333333;
+}
+
+
+/* =========================================================
+   EXISTING ACTIVITY CELL CLASSES
+========================================================= */
+
+.activity-date-time,
+.activity-details {
+    white-space: normal !important;
+
+    overflow: visible !important;
+
+    overflow-wrap: anywhere !important;
+
+    word-wrap: break-word !important;
+
+    word-break: normal !important;
+}
+
+
+/* =========================================================
+   EXPORT AREA
+========================================================= */
+
+.activity-actions {
+    display: flex;
+
+    justify-content: center;
+    align-items: center;
+
+    margin-top: 28px;
+}
+
+#exportActivityBtn {
+    width: 260px;
+}
+
+
+/* =========================================================
+   SCROLLBAR
+========================================================= */
+
+.activity-table-container::-webkit-scrollbar {
+    width: 9px;
+}
+
+.activity-table-container::-webkit-scrollbar-track {
+    background: #f2f2f2;
+}
+
+.activity-table-container::-webkit-scrollbar-thumb {
+    background: #c3c3c3;
+
+    border-radius: 10px;
+
+    border: 2px solid #f2f2f2;
+}
+
+.activity-table-container::-webkit-scrollbar-thumb:hover {
+    background: #a7a7a7;
+}
+
+
+/* =========================================================
+   MEDIUM WINDOWS
+========================================================= */
+
+@media (max-width: 1250px) {
+
+    #activityTable thead th {
+        padding: 13px 9px;
+
+        font-size: 13px;
+    }
+
+    #activityTable tbody td {
+        padding: 14px 9px;
+
+        font-size: 12.5px;
+    }
+
+    #activitySearch {
+        width: 500px;
+        height: 58px;
+
+        font-size: 20px;
+    }
 }

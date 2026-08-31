@@ -216,7 +216,7 @@ document.getElementById("confirmReopenBtn").addEventListener("click", async () =
     const pin = document.getElementById("reopenPin").value;
     const error = document.getElementById("reopenError");
     if (!reason || !/^\d{4}$/.test(pin)) {
-        error.textContent = "Enter a reason and valid 4-digit Administrator PIN.";
+        error.textContent = "Enter a reason and valid 4-digit Manager PIN.";
         return;
     }
     const result = await window.startupAPI.reopenClosedDay({ reason, pin });

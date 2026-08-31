@@ -5,6 +5,13 @@ const {
     addBusinessCalendarDays
 } = require("./businessDate");
 
+const {
+    logReturnCompleted,
+    logCreditNoteGenerated,
+    logStoreCreditIssued,
+    logStoreCreditUpdated
+} = require("./logService");
+
 function normalizeOriginalBillNo(value) {
 
     return String(value || "")
@@ -588,18 +595,19 @@ function applyStoreCreditForReturn(
                                 creditAmount,
                                 createdBy
                             )
-                                .then(() => resolve({
-                                    store_credit_no:
-                                        activeCredit.store_credit_no,
-                                    issue_date:
-                                        activeCredit.issue_date,
-                                    valid_until:
-                                        activeCredit.valid_until,
-                                    available_balance:
-                                        Number(
-                                            activeCredit.remaining_balance
-                                        ) + creditAmount
-                                }))
+                            .then(() => resolve({
+                                store_credit_no:
+                                    activeCredit.store_credit_no,
+                                issue_date:
+                                    activeCredit.issue_date,
+                                valid_until:
+                                    activeCredit.valid_until,
+                                available_balance:
+                                    Number(
+                                        activeCredit.remaining_balance
+                                    ) + creditAmount,
+                                store_credit_action: "UPDATED"
+                            }))
                                 .catch(reject);
 
                         }
@@ -666,16 +674,17 @@ function applyStoreCreditForReturn(
                                     creditAmount,
                                     createdBy
                                 )
-                                    .then(() => resolve({
-                                        store_credit_no:
-                                            storeCreditNo,
-                                        issue_date:
-                                            businessDate,
-                                        valid_until:
-                                            validUntil,
-                                        available_balance:
-                                            creditAmount
-                                    }))
+                                .then(() => resolve({
+                                    store_credit_no:
+                                        storeCreditNo,
+                                    issue_date:
+                                        businessDate,
+                                    valid_until:
+                                        validUntil,
+                                    available_balance:
+                                        creditAmount,
+                                    store_credit_action: "ISSUED"
+                                }))
                                     .catch(reject);
 
                             }
@@ -1285,10 +1294,67 @@ async function saveReturn(returnData) {
             );
         }
 
-        await run("COMMIT");
-        transactionStarted = false;
+await run("COMMIT");
+transactionStarted = false;
 
-        return {
+try {
+    await logReturnCompleted(
+        returnNo,
+        authoritativeBillNo,
+        fromPaise(totals.net),
+        createdBy
+    );
+}
+catch (logError) {
+    console.error(
+        "Return activity logging failed:",
+        logError.message
+    );
+}
+
+try {
+    await logCreditNoteGenerated(
+        creditNoteNo,
+        returnNo,
+        authoritativeBillNo,
+        fromPaise(totals.net),
+        createdBy
+    );
+}
+catch (logError) {
+    console.error(
+        "Credit Note activity logging failed:",
+        logError.message
+    );
+}
+
+try {
+    if (storeCredit.store_credit_action === "UPDATED") {
+        await logStoreCreditUpdated(
+            storeCredit.store_credit_no,
+            returnNo,
+            fromPaise(totals.net),
+            storeCredit.available_balance,
+            createdBy
+        );
+    }
+    else {
+        await logStoreCreditIssued(
+            storeCredit.store_credit_no,
+            returnNo,
+            fromPaise(totals.net),
+            createdBy
+        );
+    }
+}
+catch (logError) {
+    console.error(
+        "Store Credit activity logging failed:",
+        logError.message
+    );
+}
+
+return {
             success: true,
             return_id: returnId,
             return_no: returnNo,

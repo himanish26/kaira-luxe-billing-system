@@ -192,6 +192,9 @@ const exportReportBtn =
         "exportReportBtn"
     );
 
+let activeProtectedReportAuthorization = null;
+let lastAuthorizedReportType = null;
+
 function initializeReports() {
 
     console.log("Reports Module Loaded");
@@ -209,6 +212,8 @@ function initializeReports() {
             'input[name="reportType"]:checked'
         );
 
+    lastAuthorizedReportType = defaultReport.value;
+
     updateReportDescription(
         defaultReport.value
     );
@@ -221,7 +226,30 @@ function setupReportSelection(){
 
     reportTypeRadios.forEach(radio => {
 
-    radio.addEventListener("change", () => {
+    radio.addEventListener("change", async () => {
+
+        const previousType = lastAuthorizedReportType ||
+            Array.from(reportTypeRadios).find(option => option !== radio && option.checked)?.value ||
+            "business";
+        const report = reports[radio.value];
+
+        if (report && report.adminOnly) {
+            const grant = await requestAdminAuthorization(report.authorizationPurpose);
+            if (!grant) {
+                const previousRadio = Array.from(reportTypeRadios)
+                    .find(option => option.value === previousType);
+                if (previousRadio) previousRadio.checked = true;
+                updateSelectedReportCard();
+                updateReportDescription(previousType);
+                return;
+            }
+            activeProtectedReportAuthorization = { reportType: radio.value, grant };
+        }
+        else {
+            activeProtectedReportAuthorization = null;
+        }
+
+        lastAuthorizedReportType = radio.value;
 
         updateSelectedReportCard();
 
@@ -393,19 +421,18 @@ async function startReportExport() {
     };
 
     if (report.adminOnly) {
-
-        requireAdminAuthorization(
-            report.authorizationPurpose,
-            exportAction
-        );
-
+        let grant = activeProtectedReportAuthorization &&
+            activeProtectedReportAuthorization.reportType === request.reportType
+            ? activeProtectedReportAuthorization.grant
+            : null;
+        if (!grant) grant = await requestAdminAuthorization(report.authorizationPurpose);
+        if (!grant) return;
+        activeProtectedReportAuthorization = null;
+        await exportAction(grant);
+        return;
     }
 
-    else {
-
-        exportAction();
-
-    }
+    await exportAction();
 
 }
 

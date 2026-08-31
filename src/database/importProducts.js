@@ -346,8 +346,13 @@ function importProducts(filePath) {
                                                                     filePath
                                                                 ),
 
-                                                                imported +
-                                                                updated
+                                                                {
+                                                                    imported,
+                                                                    updated,
+                                                                    skipped,
+                                                                    total:
+                                                                        products.length
+                                                                }
                                                             );
 
                                                         }

@@ -443,7 +443,7 @@ window.productMasterTemplate = `
 
             <button
                 id="cancelStockTransactionBtn"
-                class="dashboard-btn"
+                class="dashboard-btn klbs-cancel-btn"
                 type="button">
 
                 Cancel
@@ -453,7 +453,7 @@ window.productMasterTemplate = `
 
             <button
                 id="confirmStockTransactionBtn"
-                class="dashboard-btn"
+                class="dashboard-btn klbs-primary-btn"
                 type="button"
                 disabled>
 

@@ -429,7 +429,7 @@ style="display:none;">
 
             <button
                 id="productNotFoundOkBtn"
-                class="klbs-modal-ok">
+                class="klbs-modal-ok klbs-primary-btn">
                 OK
             </button>
 
@@ -467,7 +467,7 @@ style="display:none;">
 
             <button
                 id="insufficientStockOkBtn"
-                class="klbs-modal-ok">
+                class="klbs-modal-ok klbs-primary-btn">
                 OK
             </button>
 
@@ -494,7 +494,7 @@ style="display:none;">
 
 </div>
 
-<h2>
+<h2 id="authorizationDialogTitle">
 
     Administrator Access
 
@@ -521,14 +521,16 @@ maxlength="4">
         <div class="modal-buttons">
 
             <button
-            id="adminCancelBtn">
+            id="adminCancelBtn"
+            class="klbs-cancel-btn">
 
                 Cancel
 
             </button>
 
             <button
-            id="adminUnlockBtn">
+            id="adminUnlockBtn"
+            class="klbs-primary-btn">
 
                 Unlock
 
@@ -682,14 +684,16 @@ maxlength="4">
         <div class="payment-buttons">
 
             <button
-                id="cancelPaymentCorrectionBtn">
+                id="cancelPaymentCorrectionBtn"
+                class="klbs-cancel-btn">
 
                 Cancel
 
             </button>
 
             <button
-                id="savePaymentCorrectionBtn">
+                id="savePaymentCorrectionBtn"
+                class="klbs-primary-btn">
 
                 Save Changes
 
@@ -2201,11 +2205,11 @@ style="display:none;">
     <div class="modal-content">
 
         <h2>
-            Family & Friends Discount
+            Manager Authorization
         </h2>
 
         <p>
-            Enter 4-digit authorization PIN
+            Enter 4-digit Manager PIN
         </p>
 
         <input
@@ -2213,7 +2217,7 @@ style="display:none;">
             id="ffPinInput"
             maxlength="4"
             inputmode="numeric"
-            placeholder="Enter PIN">
+            placeholder="Enter Manager PIN">
 
         <div
             id="ffPinError"
@@ -2224,7 +2228,7 @@ style="display:none;">
 
             <button
                 id="ffPinCancelBtn"
-                class="dashboard-btn secondary">
+                class="dashboard-btn secondary klbs-cancel-btn">
 
                 Cancel
 
@@ -2232,7 +2236,7 @@ style="display:none;">
 
             <button
                 id="ffPinVerifyBtn"
-                class="dashboard-btn">
+                class="dashboard-btn klbs-primary-btn">
 
                 Verify
 
@@ -2319,6 +2323,7 @@ style="display:none;">
             <button
                 type="button"
                 id="ffDiscountCancelBtn"
+                class="klbs-cancel-btn"
             >
                 Cancel
             </button>
@@ -2327,6 +2332,7 @@ style="display:none;">
             <button
                 type="button"
                 id="ffDiscountApplyBtn"
+                class="klbs-primary-btn"
             >
                 Apply Discount
             </button>
@@ -2406,6 +2412,7 @@ style="display:none;">
             <button
                 type="button"
                 id="giftVoucherCancelBtn"
+                class="klbs-cancel-btn"
             >
                 Cancel
             </button>
@@ -2413,6 +2420,7 @@ style="display:none;">
             <button
                 type="button"
                 id="giftVoucherApplyBtn"
+                class="klbs-primary-btn"
             >
                 Apply Gift Voucher
             </button>
@@ -2459,7 +2467,7 @@ style="display:none;">
             <button
                 type="button"
                 id="verifyStoreCreditBtn"
-                class="verify-credit-btn"
+                class="verify-credit-btn klbs-primary-btn"
             >
                 VERIFY
             </button>
@@ -2524,7 +2532,7 @@ style="display:none;">
             <button
                 type="button"
                 id="cancelStoreCreditBtn"
-                class="modal-cancel-btn"
+                class="modal-cancel-btn klbs-cancel-btn"
             >
                 CANCEL
             </button>
@@ -2532,7 +2540,7 @@ style="display:none;">
             <button
                 type="button"
                 id="applyStoreCreditBtn"
-                class="modal-apply-btn"
+                class="modal-apply-btn klbs-primary-btn"
                 disabled
             >
                 APPLY STORE CREDIT

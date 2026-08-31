@@ -1026,49 +1026,11 @@
 
     height:58px;
 
-    border-radius:14px;
-
     font-size:21px;
-
-    font-weight:800;
 
     cursor:pointer;
 
     transition:.2s ease;
-
-}
-
-#cancelPaymentCorrectionBtn{
-
-    background:#efefef;
-
-    color:#222222;
-
-    border:2px solid #cfcfcf;
-
-}
-
-#savePaymentCorrectionBtn{
-
-    background:#6d0033;
-
-    color:#ffffff;
-
-    border:2px solid #6d0033;
-
-}
-
-#savePaymentCorrectionBtn:hover{
-
-    transform:translateY(-2px);
-
-    box-shadow:0 8px 20px rgba(122,0,60,.25);
-
-}
-
-#cancelPaymentCorrectionBtn:hover{
-
-    background:#e4e4e4;
 
 }
 
@@ -1614,53 +1576,12 @@
 
     padding: 0 24px;
 
-    border-radius: 8px;
-
     font-size: 17px;
-
-    font-weight: 800;
 
     cursor: pointer;
 
 }
 
-
-#ffDiscountCancelBtn {
-
-    background: #ffffff;
-
-    color: #7A002C;
-
-    border: 2px solid #7A002C;
-
-}
-
-
-#ffDiscountCancelBtn:hover {
-
-    background: #f7e8ee;
-
-}
-
-
-#ffDiscountApplyBtn {
-
-    background: #7A002C;
-
-    color: #ffffff;
-
-    border: 2px solid #7A002C;
-
-}
-
-
-#ffDiscountApplyBtn:hover {
-
-    background: #5f0022;
-
-    border-color: #5f0022;
-
-}
 
 /* =====================================
    F&F POPUP HEIGHT FIX
@@ -2047,41 +1968,7 @@
 
     padding: 0 22px;
 
-    border-radius: 8px;
-
     font-size: 16px;
 
-    font-weight: 800;
-
     cursor: pointer;
-}
-
-#giftVoucherCancelBtn {
-
-    background: #ffffff;
-
-    color: #7A002C;
-
-    border: 2px solid #7A002C;
-}
-
-#giftVoucherCancelBtn:hover {
-
-    background: #f7e8ee;
-}
-
-#giftVoucherApplyBtn {
-
-    background: #7A002C;
-
-    color: #ffffff;
-
-    border: 2px solid #7A002C;
-}
-
-#giftVoucherApplyBtn:hover {
-
-    background: #5f0022;
-
-    border-color: #5f0022;
 }

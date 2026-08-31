@@ -512,29 +512,9 @@ flex:1;
 
 height:50px;
 
-border:none;
-
-border-radius:10px;
-
 font-size:18px;
 
-font-weight:700;
-
 cursor:pointer;
-
-}
-
-#adminCancelBtn{
-
-background:#ddd;
-
-}
-
-#adminUnlockBtn{
-
-background:#7a003c;
-
-color:white;
 
 }
 .admin-lock{
@@ -560,8 +540,6 @@ font-size:15px;
 }
 
 .modal-buttons button{
-
-border-radius:16px;
 
 transition:.2s;
 
@@ -1710,29 +1688,13 @@ body{
 
 .klbs-modal-ok{
 
-    background:#8B0040;
-
-    color:#fff;
-
-    border:none;
-
     font-size:20px;
-
-    font-weight:700;
 
     min-width:180px;
 
     height:55px;
 
-    border-radius:10px;
-
     cursor:pointer;
-
-}
-
-.klbs-modal-ok:hover{
-
-    background:#A0004A;
 
 }
 
@@ -1947,29 +1909,7 @@ body{
 
     padding:0 18px;
 
-    border:none;
-    border-radius:8px;
-
     cursor:pointer;
 
     font-size:13px;
-    font-weight:800;
-}
-
-.day-reopen-modal-btn.primary{
-    color:#ffffff;
-    background:#8B0040;
-}
-
-.day-reopen-modal-btn.primary:hover{
-    background:#a0004a;
-}
-
-.day-reopen-modal-btn.secondary{
-    color:#374151;
-    background:#e5e7eb;
-}
-
-.day-reopen-modal-btn.secondary:hover{
-    background:#d1d5db;
 }

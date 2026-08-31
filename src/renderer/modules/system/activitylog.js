@@ -2,199 +2,93 @@
    ACTIVITY LOG
 ===================================== */
 
-async function showActivityLogPage() {
+function appendActivityCell(row, value, className = "") {
+    const cell = document.createElement("td");
+    if (className) cell.className = className;
+    cell.textContent = value === null || value === undefined ? "" : String(value);
+    row.appendChild(cell);
+}
 
-    const activities =
-        await window.electronAPI.getActivities();
-
-    let rows = "";
-
+function renderActivityRows(activities) {
+    const body = document.getElementById("activityTableBody");
+    body.replaceChildren();
     activities.forEach(activity => {
-
-rows += `
-
-<tr>
-
-    <td>
-
-    ${activity.activity_date}<br>
-
-    ${activity.activity_time.toUpperCase()}
-
-    </td>
-
-    <td>${activity.category}</td>
-
-    <td>${activity.action}</td>
-
-    <td>${activity.details || ""}</td>
-
-    <td>${activity.status}</td>
-
-</tr>
-
-`;
-
+        const row = document.createElement("tr");
+        const dateTime = [activity.activity_date, activity.activity_time]
+            .filter(Boolean).join("\n");
+        appendActivityCell(row, dateTime, "activity-date-time");
+        appendActivityCell(row, activity.category);
+        appendActivityCell(row, activity.action);
+        appendActivityCell(row, activity.reference_no);
+        appendActivityCell(row, activity.details, "activity-details");
+        appendActivityCell(row, activity.status);
+        body.appendChild(row);
     });
+}
+
+async function showActivityLogPage() {
+    const activities = await window.electronAPI.getActivities();
 
     renderSettingsPage({
-
         title: "ACTIVITY LOG",
-
         icon: "📜",
-
         subtitle: "System activity history",
-
         backText: "← System",
-
         backAction: showSystemPage,
-
         content: `
-
-    <div class="activity-toolbar">
-
-    <div class="activity-search">
-
-        <input
-            id="activitySearch"
-            type="text"
-            placeholder="🔍 Search by Date or Category..." />
-
-    </div>
-
-    
-
-</div>
-
-<div class="activity-table-container">
-
-    <table id="historyTable">
-
-    <thead>
-
-        <tr>
-
-            <th>Date & Time</th>
-
-            <th>Category</th>
-
-            <th>Action</th>
-
-            <th>Details</th>
-
-            <th>Status</th>
-
-        </tr>
-
-    </thead>
-
-    <tbody id="activityTableBody">
-
-        ${rows}
-
-    </tbody>
-
-</table>
-
-</div>
-
-<div class="activity-actions">
-
-        <button
-            id="exportActivityBtn"
-            class="export-report-btn">
-
-            📤 Export to Excel
-
-        </button>
-
-    </div>
-
-`
-
+            <div class="activity-toolbar">
+                <div class="activity-search">
+                    <input id="activitySearch" type="text"
+                        placeholder="🔍 Search Activity Log..." />
+                </div>
+            </div>
+            <div class="activity-table-container">
+                <table id="activityTable">
+                    <thead><tr>
+                        <th>Date &amp; Time</th>
+                        <th>Category</th>
+                        <th>Action</th>
+                        <th>Reference</th>
+                        <th>Details</th>
+                        <th>Status</th>
+                    </tr></thead>
+                    <tbody id="activityTableBody"></tbody>
+                </table>
+            </div>
+            <div class="activity-actions">
+                <button id="exportActivityBtn" class="export-report-btn">
+                    📤 Export to Excel
+                </button>
+            </div>
+        `
     });
 
-    document
-    .getElementById(
-        "exportActivityBtn"
-    )
-    .addEventListener(
+    renderActivityRows(activities);
 
-        "click",
-
-        async () => {
-
-            const result =
-                await window
-                .electronAPI
-                .exportActivityLog();
-
-            if (
-                result.success
-            ) {
-
-                await window
-                .electronAPI
-                .showMessageBox({
-
-                    type: "info",
-
-                    title: "Export Complete",
-
-                    message:
-                        "Activity Log exported successfully."
-
-                });
-
-            }
-
+    document.getElementById("exportActivityBtn").addEventListener("click", async () => {
+        const grant = await requestAdminAuthorization("ACTIVITY_EXPORT");
+        if (!grant) return;
+        const result = await window.electronAPI.exportActivityLog(grant);
+        if (result.success) {
+            await window.electronAPI.showMessageBox({
+                type: "info",
+                title: "Export Complete",
+                message: "Activity Log exported successfully."
+            });
         }
-
-        
-
-    );
-
-    const searchBox =
-    document.getElementById("activitySearch");
-
-searchBox.addEventListener("input", () => {
-
-    const keyword =
-        searchBox.value.trim().toLowerCase();
-
-    const rows =
-        document.querySelectorAll(
-            "#activityTableBody tr"
-        );
-
-    rows.forEach(row => {
-
-        const date =
-            row.cells[0].innerText.toLowerCase();
-
-        const category =
-            row.cells[1].innerText.toLowerCase();
-
-        if (
-
-            date.includes(keyword) ||
-
-            category.includes(keyword)
-
-        ) {
-
-            row.style.display = "";
-
+        else if (!result.cancelled) {
+            await window.electronAPI.showMessageBox({
+                type: "error",
+                title: "Export Failed",
+                message: result.message || result.error || "Activity Log export failed."
+            });
         }
-
-        else {
-
-            row.style.display = "none";
-
-        }
-
     });
 
-});
-
+    document.getElementById("activitySearch").addEventListener("input", event => {
+        const keyword = event.target.value.trim().toLowerCase();
+        document.querySelectorAll("#activityTableBody tr").forEach(row => {
+            row.style.display = row.textContent.toLowerCase().includes(keyword) ? "" : "none";
+        });
+    });
 }

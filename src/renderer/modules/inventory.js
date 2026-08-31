@@ -367,6 +367,7 @@ async function startInventoryReset(grant){
 The Product Master has been reset successfully.
 
 Please import a Product Master Excel file before creating new bills.`
+    + (result.activityWarning ? `\n\nWarning: ${result.activityWarning}` : "")
 );
 
         }, 500);
@@ -1053,48 +1054,6 @@ if (!result) {
 }
 
 /* ===========================================
-   ACTIVITY LOG
-=========================================== */
-
-const invoiceNo =
-    document.getElementById(
-        "stockInvoiceNo"
-    ).value.trim();
-
-const inwardRemarks =
-    document.getElementById(
-        "stockInwardRemarks"
-    ).value.trim();
-
-const outwardRemarks =
-    document.getElementById(
-        "stockOutwardRemarks"
-    ).value.trim();
-
-
-const activityDetails =
-    currentStockTransactionType === "INWARD"
-        ? `Stock Inward | Product: ${currentStockProduct.product_name} | Barcode: ${currentStockProduct.barcode} | Quantity: ${transactionQty}${invoiceNo ? ` | Invoice: ${invoiceNo}` : ""}${inwardRemarks ? ` | Remarks: ${inwardRemarks}` : ""}`
-        : `Stock Outward | Product: ${currentStockProduct.product_name} | Barcode: ${currentStockProduct.barcode} | Quantity: ${transactionQty} | Reason: ${stockOutwardReason.value}${outwardRemarks ? ` | Remarks: ${outwardRemarks}` : ""}`;
-
-await window.electronAPI.logActivity({
-
-    category: "Inventory",
-
-    action:
-        currentStockTransactionType === "INWARD"
-            ? "Stock Inward"
-            : "Stock Outward",
-
-    details: activityDetails,
-
-    user_name: "Administrator",
-
-    status: "Success"
-
-});
-
-/* ===========================================
    TRANSACTION SAVED SUCCESSFULLY
 =========================================== */
 
@@ -1126,7 +1085,10 @@ try {
 
 /* Show success only after transaction is safely saved */
 
-alert(successMessage);
+alert(
+    successMessage +
+    (result.activityWarning ? `\n\nWarning: ${result.activityWarning}` : "")
+);
 
 
     }
