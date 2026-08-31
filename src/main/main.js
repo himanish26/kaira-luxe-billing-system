@@ -67,6 +67,8 @@ const {
 
     saveBill,
 
+    validateBillSettlement,
+
     getNextBillNumber,
 
     getBills,
@@ -229,7 +231,8 @@ const {
 const {
 
     getDayClosingSummary,
-    isBusinessDayClosed,
+    getDayClosingSnapshot,
+    getBusinessDayState,
     closeBusinessDay,
     reopenBusinessDay
 
@@ -709,6 +712,8 @@ ipcMain.handle(
 
         try {
 
+            validateBillSettlement(billData);
+
             const authorizationRequirements = [];
             if ((billData.items || []).some(item =>
                 item.ff_discount !== null && item.ff_discount !== undefined
@@ -732,19 +737,25 @@ ipcMain.handle(
             }
             delete billData.authorization;
 
-            const closed =
-                await isBusinessDayClosed();
+            const dayState =
+                await getBusinessDayState();
 
-            if (closed) {
+            if (dayState.closed || dayState.closing) {
 
                 return {
 
                     success: false,
 
-                    businessDayClosed: true,
+                    businessDayClosed:
+                        dayState.closed,
+
+                    businessDayClosing:
+                        dayState.closing,
 
                     error:
-                        "Business Day is already closed. No further billing is allowed today."
+                        dayState.closing
+                            ? "Business Day closing is in progress. Please retry after it completes."
+                            : "Business Day is already closed. No further billing is allowed today."
 
                 };
 
@@ -762,6 +773,22 @@ ipcMain.handle(
         }
 
         catch (error) {
+
+            if (error.message === "KLBS_BUSINESS_DAY_CLOSING") {
+                return {
+                    success: false,
+                    businessDayClosing: true,
+                    error: "Business Day closing is in progress. Please retry after it completes."
+                };
+            }
+
+            if (error.message === "KLBS_BUSINESS_DAY_CLOSED") {
+                return {
+                    success: false,
+                    businessDayClosed: true,
+                    error: "Business Day is already closed. No further billing is allowed today."
+                };
+            }
 
             console.error(error);
 
@@ -1151,17 +1178,23 @@ ipcMain.handle(
 
         event,
 
-        dayClosingData
+        snapshotId
 
     ) => {
 
         try {
 
-            await printDayClosingReceipt(
+            const dayClosingData =
+                await getDayClosingSnapshot(snapshotId);
 
-                dayClosingData
+            if (
+                !dayClosingData ||
+                dayClosingData.closeStatus !== "CLOSED"
+            ) {
+                throw new Error("A valid closed Day Closing snapshot is required for printing.");
+            }
 
-            );
+            await printDayClosingReceipt(dayClosingData);
 
             return {
 
@@ -1452,6 +1485,9 @@ ipcMain.handle(
             if (request.reportType === "customer") {
                 requireSecurityGrant(grant, "CUSTOMER_REPORT_EXPORT");
             }
+            else if (request.reportType === "billSummary") {
+                requireSecurityGrant(grant, "BILL_SUMMARY_REPORT_EXPORT");
+            }
 
             const today = new Date();
 
@@ -1490,6 +1526,13 @@ switch (request.reportType) {
 
         fileName =
             `KL_Customer_Purchase_Report_${formattedDate}.xlsx`;
+
+        break;
+
+    case "billSummary":
+
+        fileName =
+            `KL_Bill_Summary_Report_${formattedDate}.xlsx`;
 
         break;
 
@@ -2378,17 +2421,7 @@ ipcMain.handle(
 
         try {
 
-            const closed =
-                await isBusinessDayClosed();
-
-            return {
-
-                closed: !!closed,
-
-                closing:
-                    closed || null
-
-            };
+            return await getBusinessDayState();
 
         }
 
@@ -2446,14 +2479,14 @@ ipcMain.handle(
 
 ipcMain.handle(
     "reopen-business-day",
-    async (event, grant) => {
+    async (event, grant, reason) => {
 
         try {
 
             requireSecurityGrant(grant, "DAY_REOPEN");
 
             const result =
-                await reopenBusinessDay();
+                await reopenBusinessDay(reason);
 
             return result;
 

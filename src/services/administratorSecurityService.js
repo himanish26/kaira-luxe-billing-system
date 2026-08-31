@@ -4,6 +4,7 @@ const { hashCredential, verifyCredential, isCredentialRecord } = require("./cred
 const ADMIN_PIN_PURPOSES = new Set([
     "FF", "GIFT_VOUCHER", "RECEIPT_SETTINGS", "PAYMENT_CORRECTION",
     "PRODUCT_IMPORT", "INVENTORY_RESET", "CUSTOMER_REPORT_EXPORT",
+    "BILL_SUMMARY_REPORT_EXPORT",
     "BACKUP_LOCATION", "AUTO_BACKUP_SETTINGS", "RESTORE", "DAY_REOPEN",
     "INSTALL_UPDATE"
 ]);

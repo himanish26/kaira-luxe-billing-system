@@ -1171,15 +1171,541 @@ body{
 
 }
 
-/* Day Closing card: no hover animation or hand cursor */
-.day-closing-card{
-    cursor:default;
-    transition:none;
+/* =========================================================
+   DAY CLOSING
+   Compact accounting dashboard
+   ========================================================= */
+
+.day-closing-container{
+    width:100%;
+    max-width:1100px;
+    margin:0 auto;
 }
 
-.day-closing-card:hover{
+
+/* ---------------------------------------------------------
+   LIVE / SNAPSHOT NOTICE
+   --------------------------------------------------------- */
+
+.dc-preview-note{
+    text-align:center;
+    margin-bottom:14px;
+    padding:8px 12px;
+
+    font-size:13px;
+    font-weight:600;
+    color:#6b7280;
+
+    background:#f8f9fb;
+    border:1px solid #e5e7eb;
+    border-radius:8px;
+}
+
+
+/* ---------------------------------------------------------
+   BUSINESS DATE
+   --------------------------------------------------------- */
+
+.dc-business-date{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+
+    margin-bottom:16px;
+    padding:14px 18px;
+
+    background:#fff6f9;
+    border:1px solid #ead2dc;
+    border-left:5px solid #8B0040;
+    border-radius:10px;
+}
+
+.dc-business-date-info{
+    display:flex;
+    flex-direction:column;
+}
+
+.dc-date-label{
+    font-size:14px;
+    font-weight:800;
+    letter-spacing:.4px;
+    color:#8B0040;
+}
+
+.dc-date-subtitle{
+    margin-top:3px;
+
+    font-size:11px;
+    font-weight:500;
+    color:#6b7280;
+}
+
+.dc-date-value{
+    font-size:21px;
+    font-weight:800;
+    color:#1f2937;
+}
+
+
+/* ---------------------------------------------------------
+   ACCOUNTING GRID
+   --------------------------------------------------------- */
+
+.dc-grid{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:14px;
+}
+
+
+/* ---------------------------------------------------------
+   ACCOUNTING CARDS
+   --------------------------------------------------------- */
+
+.dc-section{
+    margin:0;
+    padding:0;
+
+    overflow:hidden;
+
+    background:#ffffff;
+    border:1px solid #e5e7eb;
+    border-radius:10px;
+
+    box-shadow:0 2px 8px rgba(0,0,0,.04);
+}
+
+.dc-section-title{
+    display:flex;
+    align-items:center;
+    gap:8px;
+
+    min-height:42px;
+    padding:0 14px;
+
+    font-size:13px;
+    font-weight:800;
+    letter-spacing:.35px;
+}
+
+.dc-section-icon{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+
+    min-width:20px;
+
+    font-size:15px;
+}
+
+.dc-section-body{
+    width:100%;
+}
+
+
+/* ---------------------------------------------------------
+   OPERATIONS
+   --------------------------------------------------------- */
+
+.dc-card-operations .dc-section-title{
+    color:#235d9f;
+    background:#edf5ff;
+    border-bottom:1px solid #d7e7fb;
+}
+
+
+/* ---------------------------------------------------------
+   BILLING
+   --------------------------------------------------------- */
+
+.dc-card-billing .dc-section-title{
+    color:#8B0040;
+    background:#fff0f5;
+    border-bottom:1px solid #f0d2dd;
+}
+
+
+/* ---------------------------------------------------------
+   RETURNS / CREDIT NOTES
+   --------------------------------------------------------- */
+
+.dc-card-returns .dc-section-title{
+    color:#a45c00;
+    background:#fff5e8;
+    border-bottom:1px solid #f3dec0;
+}
+
+
+/* ---------------------------------------------------------
+   SETTLEMENT
+   --------------------------------------------------------- */
+
+.dc-card-settlement .dc-section-title{
+    color:#6940a5;
+    background:#f5efff;
+    border-bottom:1px solid #e1d4f3;
+}
+
+
+/* ---------------------------------------------------------
+   COLLECTION
+   --------------------------------------------------------- */
+
+.dc-card-collection .dc-section-title{
+    color:#277447;
+    background:#edf9f1;
+    border-bottom:1px solid #d1ecd9;
+}
+
+
+/* ---------------------------------------------------------
+   CUSTOMER CREDIT
+   --------------------------------------------------------- */
+
+.dc-card-credit .dc-section-title{
+    color:#8b6a00;
+    background:#fff8df;
+    border-bottom:1px solid #eee0aa;
+}
+
+
+/* ---------------------------------------------------------
+   ROWS
+   --------------------------------------------------------- */
+
+.dc-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+
+    min-height:38px;
+    padding:6px 14px;
+
+    border-bottom:1px solid #f0f1f3;
+
+    font-size:13px;
+}
+
+.dc-row:last-child{
+    border-bottom:none;
+}
+
+.dc-row span{
+    color:#4b5563;
+    font-size:14px;
+    line-height:1.35;
+    font-weight:500;
+}
+
+.dc-row strong{
+    margin-left:15px;
+
+    color:#1f2937;
+
+    font-size:15px;
+    line-height:1.35;
+    font-weight:700;
+
+    text-align:right;
+    white-space:nowrap;
+}
+
+
+/* ---------------------------------------------------------
+   IMPORTANT TOTAL ROWS
+   --------------------------------------------------------- */
+
+.dc-total-row{
+    min-height:42px;
+
+    background:#fafafa;
+    border-top:1px solid #ececec;
+}
+
+.dc-total-row span{
+    color:#262626;
+    font-size:15px;
+    font-weight:700;
+}
+
+.dc-total-row strong{
+    font-size:15px;
+    font-weight:800;
+}
+
+.dc-card-billing .dc-total-row strong{
+    color:#8B0040;
+}
+
+.dc-card-returns .dc-total-row strong{
+    color:#a45c00;
+}
+
+.dc-card-settlement .dc-total-row strong{
+    color:#6940a5;
+}
+
+
+/* ---------------------------------------------------------
+   COLLECTION / CUSTOMER CREDIT HIGHLIGHTS
+   --------------------------------------------------------- */
+
+.dc-highlight-row{
+    min-height:58px;
+}
+
+.dc-highlight-row span{
+    font-size:15px;
+    font-weight:700;
+}
+
+.dc-highlight-row strong{
+    font-size:19px;
+    font-weight:800;
+}
+
+.dc-card-collection .dc-highlight-row strong{
+    color:#277447;
+}
+
+.dc-card-credit .dc-highlight-row strong{
+    color:#8b6a00;
+}
+
+
+/* ---------------------------------------------------------
+   RECONCILIATION
+   --------------------------------------------------------- */
+
+.dc-reconciliation{
+    margin-top:14px;
+
+    overflow:hidden;
+
+    border:1px solid #d1d5db;
+    border-radius:10px;
+
+    transition:
+        background .15s ease,
+        border-color .15s ease;
+}
+
+.dc-reconciliation-title{
+    display:flex;
+    align-items:center;
+    gap:8px;
+
+    min-height:42px;
+    padding:0 14px;
+
+    font-size:13px;
+    font-weight:800;
+    letter-spacing:.4px;
+}
+
+.dc-reconciliation-icon{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+
+    width:20px;
+    height:20px;
+
+    font-size:15px;
+    font-weight:900;
+}
+
+.dc-reconciliation-main{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+
+    padding:12px 14px;
+}
+
+.dc-reconciliation-main span{
+    color:#374151;
+    font-size:14px;
+    font-weight:700;
+}
+
+.dc-reconciliation-main strong{
+    font-size:20px;
+    font-weight:800;
+}
+
+
+/* Neutral / legacy */
+
+.dc-reconciliation-neutral{
+    background:#f9fafb;
+    border-color:#d1d5db;
+}
+
+.dc-reconciliation-neutral .dc-reconciliation-title{
+    color:#4b5563;
+    background:#f3f4f6;
+}
+
+
+/* Balanced */
+
+.dc-reconciliation-ok{
+    background:#f0faf3;
+    border-color:#a9d9b7;
+}
+
+.dc-reconciliation-ok .dc-reconciliation-title{
+    color:#22653a;
+    background:#dff4e5;
+}
+
+.dc-reconciliation-ok .dc-reconciliation-main strong{
+    color:#23753f;
+}
+
+
+/* Difference detected */
+
+.dc-reconciliation-error{
+    background:#fff1f1;
+    border-color:#e4aaaa;
+}
+
+.dc-reconciliation-error .dc-reconciliation-title{
+    color:#9b2424;
+    background:#f8dcdc;
+}
+
+.dc-reconciliation-error .dc-reconciliation-main strong{
+    color:#b32626;
+}
+
+
+/* ---------------------------------------------------------
+   BACKUP / EMAIL STATUS
+   --------------------------------------------------------- */
+
+.dc-status-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+
+    border-top:1px solid rgba(0,0,0,.07);
+}
+
+.dc-status-item{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+
+    min-height:40px;
+    padding:7px 14px;
+}
+
+.dc-status-item:first-child{
+    border-right:1px solid rgba(0,0,0,.07);
+}
+
+.dc-status-item span{
+    color:#6b7280;
+    font-size:12px;
+    font-weight:600;
+}
+
+.dc-status-item strong{
+    font-size:12px;
+    font-weight:800;
+}
+
+
+/* Status colours */
+
+.dc-status-pending{
+    color:#b27600;
+}
+
+.dc-status-success{
+    color:#23753f;
+}
+
+.dc-status-failed{
+    color:#b32626;
+}
+
+
+/* ---------------------------------------------------------
+   ACTION BUTTONS
+   --------------------------------------------------------- */
+
+.dc-actions{
+    width:100%;
+    max-width:1100px;
+
+    margin:22px auto 0;
+
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+
+    text-align:center;
+}
+
+.dc-actions .export-report-btn{
+    width:100%;
+    margin:0;
+}
+
+
+/* ---------------------------------------------------------
+   NO HOVER MOVEMENT
+   --------------------------------------------------------- */
+
+.day-closing-card,
+.dc-section,
+.dc-reconciliation{
+    cursor:default;
     transform:none;
-    box-shadow:0 10px 30px rgba(0,0,0,.08);
+}
+
+.day-closing-card:hover,
+.dc-section:hover,
+.dc-reconciliation:hover{
+    transform:none;
+}
+
+
+/* ---------------------------------------------------------
+   RESPONSIVE FALLBACK
+   --------------------------------------------------------- */
+
+@media (max-width:900px){
+
+    .dc-grid{
+        grid-template-columns:1fr;
+    }
+
+    .dc-business-date{
+        gap:15px;
+    }
+
+}
+
+@media (max-width:600px){
+
+    .dc-business-date{
+        align-items:flex-start;
+        flex-direction:column;
+    }
+
+    .dc-status-grid{
+        grid-template-columns:1fr;
+    }
+
+    .dc-status-item:first-child{
+        border-right:none;
+        border-bottom:1px solid rgba(0,0,0,.07);
+    }
+
 }
 
 .klbs-modal-ok{
@@ -1276,4 +1802,174 @@ body{
 
     color:#666;
 
+}
+
+/* =========================================================
+   DAY RE-OPEN REASON MODAL
+   ========================================================= */
+
+.day-reopen-modal-overlay{
+    position:fixed;
+    inset:0;
+
+    z-index:9999;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    padding:20px;
+
+    background:rgba(17,24,39,.52);
+    backdrop-filter:blur(2px);
+}
+
+
+/* Modal */
+
+.day-reopen-modal{
+    width:100%;
+    max-width:520px;
+
+    overflow:hidden;
+
+    background:#ffffff;
+    border:1px solid #e5e7eb;
+    border-radius:14px;
+
+    box-shadow:
+        0 20px 50px rgba(0,0,0,.20);
+}
+
+
+/* Header */
+
+.day-reopen-modal-header{
+    padding:15px 20px;
+
+    color:#ffffff;
+    background:#8B0040;
+
+    font-size:17px;
+    font-weight:800;
+    letter-spacing:.3px;
+}
+
+
+/* Body */
+
+.day-reopen-modal-body{
+    padding:20px;
+}
+
+.day-reopen-modal-title{
+    margin-bottom:7px;
+
+    color:#1f2937;
+
+    font-size:17px;
+    font-weight:800;
+}
+
+.day-reopen-modal-help{
+    margin-bottom:14px;
+
+    color:#6b7280;
+
+    font-size:13px;
+    line-height:1.5;
+}
+
+
+/* Textarea */
+
+.day-reopen-reason-input{
+    width:100%;
+    min-height:105px;
+
+    box-sizing:border-box;
+
+    padding:12px 13px;
+
+    resize:vertical;
+
+    color:#1f2937;
+    background:#ffffff;
+
+    border:1px solid #d1d5db;
+    border-radius:8px;
+
+    outline:none;
+
+    font-family:inherit;
+    font-size:14px;
+    line-height:1.45;
+}
+
+.day-reopen-reason-input:focus{
+    border-color:#8B0040;
+
+    box-shadow:
+        0 0 0 3px rgba(139,0,64,.10);
+}
+
+
+/* Error */
+
+.day-reopen-reason-error{
+    min-height:18px;
+
+    margin-top:7px;
+
+    color:#b32626;
+
+    font-size:12px;
+    font-weight:600;
+}
+
+
+/* Actions */
+
+.day-reopen-modal-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap:10px;
+
+    padding:14px 20px;
+
+    background:#f8f9fb;
+    border-top:1px solid #e5e7eb;
+}
+
+.day-reopen-modal-btn{
+    min-width:115px;
+    height:42px;
+
+    padding:0 18px;
+
+    border:none;
+    border-radius:8px;
+
+    cursor:pointer;
+
+    font-size:13px;
+    font-weight:800;
+}
+
+.day-reopen-modal-btn.primary{
+    color:#ffffff;
+    background:#8B0040;
+}
+
+.day-reopen-modal-btn.primary:hover{
+    background:#a0004a;
+}
+
+.day-reopen-modal-btn.secondary{
+    color:#374151;
+    background:#e5e7eb;
+}
+
+.day-reopen-modal-btn.secondary:hover{
+    background:#d1d5db;
 }

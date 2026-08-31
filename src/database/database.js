@@ -5,6 +5,9 @@ const {
     hashCredential,
     isCredentialRecord
 } = require("../services/credentialCrypto");
+const {
+    migrateDayClosingSnapshots
+} = require("./dayClosingMigration");
 
 // Development database path
 // Keeps Electron and DB Browser pointed at the same billing.db
@@ -2836,6 +2839,8 @@ try {
         await migrateReturnUniquenessEnforcement();
 
         await migrateCreditNoteAccounting();
+
+        await migrateDayClosingSnapshots(db);
 
         await initializeSmtpSettings();
 

@@ -115,13 +115,46 @@ const reports = {
 
     adminOnly: true,
 
+    authorizationPurpose:
+        "CUSTOMER_REPORT_EXPORT",
+
     exportFunction:
         "exportCustomerPurchaseReport",
 
     serviceFunction:
         "getCustomerPurchaseReport"
 
-}
+},
+
+    billSummary: {
+
+        title: "Bill Summary Report",
+
+        description:
+            "Bill-wise transaction and customer data for business analysis.",
+
+        features: [
+            "Bill Number & Date",
+            "Customer Details",
+            "Quantity & Bill Value",
+            "Payment Breakdown"
+        ],
+
+        baseFileName:
+            "KLBillSummaryReport",
+
+        adminOnly: true,
+
+        authorizationPurpose:
+            "BILL_SUMMARY_REPORT_EXPORT",
+
+        exportFunction:
+            "exportBillSummaryReport",
+
+        serviceFunction:
+            "getBillSummaryReport"
+
+    }
 
 };
 
@@ -361,7 +394,10 @@ async function startReportExport() {
 
     if (report.adminOnly) {
 
-        requireAdminAuthorization("CUSTOMER_REPORT_EXPORT", exportAction);
+        requireAdminAuthorization(
+            report.authorizationPurpose,
+            exportAction
+        );
 
     }
 

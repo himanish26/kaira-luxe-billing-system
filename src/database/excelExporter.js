@@ -854,7 +854,7 @@ async function exportProductSalesReport(
     toDate
 ) {
 
-    const totalColumns = 13;
+    const totalColumns = 17;
 
     const lastColumn =
         String.fromCharCode(64 + totalColumns);
@@ -905,11 +905,15 @@ worksheet.getCell("B9").value =
         { key: "size", width: 10 },
         { key: "category", width: 18 },
         { key: "qty_sold", width: 12 },
+        { key: "qty_returned", width: 14 },
+        { key: "net_qty_sold", width: 14 },
         { key: "gross_sales", width: 15 },
         { key: "discount_amount", width: 15 },
         { key: "taxable_value", width: 18 },
         { key: "gst_amount", width: 15 },
-        { key: "net_sales", width: 15 }
+        { key: "net_sales", width: 15 },
+        { key: "return_cn_value", width: 18 },
+        { key: "net_sales_after_returns", width: 24 }
 
     ];
 
@@ -925,39 +929,56 @@ worksheet.getCell("B9").value =
         "Size",
         "Category",
         "Qty Sold",
+        "Qty Returned",
+        "Net Qty Sold",
         "Gross Sales",
         "Discount",
         "Taxable Value",
         "GST",
-        "Net Sales"
+        "Net Sales",
+        "Return / CN Value",
+        "Net Sales After Returns"
 
     ];
 
     let currentRow = 12;
 
     let totalQtySold = 0;
+    let totalQtyReturned = 0;
+    let totalNetQtySold = 0;
+    let totalNetSalesAfterReturns = 0;
 
     for (const row of data) {
 
         worksheet.getRow(currentRow).values = [
 
             row.barcode,
-            row.brand,
-            row.product_name,
-            row.style_code,
-            row.colour,
-            row.size,
-            row.category,
+            row.brand || null,
+            row.product_name || null,
+            row.style_code || null,
+            row.colour || null,
+            row.size || null,
+            row.category || null,
             row.qty_sold,
+            row.qty_returned,
+            row.net_qty_sold,
             row.gross_sales,
             row.discount_amount,
             row.taxable_value,
             row.gst_amount,
-            row.net_sales
+            row.net_sales,
+            row.return_cn_value,
+            row.net_sales_after_returns
 
         ];
 
         totalQtySold += Number(row.qty_sold || 0);
+        totalQtyReturned += Number(row.qty_returned || 0);
+        totalNetQtySold += Number(row.net_qty_sold || 0);
+        totalNetSalesAfterReturns = addPaise(
+            totalNetSalesAfterReturns,
+            row.net_sales_after_returns
+        );
 
         currentRow++;
 
@@ -967,19 +988,10 @@ worksheet.getCell("B9").value =
 
     "TOTAL",
 
-    "",
-
-    "",
-
-    "",
-
-    "",
-
-    "",
-
-    "",
-
-    totalQtySold
+    null, null, null, null, null, null, totalQtySold,
+    totalQtyReturned, totalNetQtySold,
+    null, null, null, null, null, null,
+    fromPaise(totalNetSalesAfterReturns)
 
 ];
 
@@ -988,6 +1000,11 @@ worksheet.getRow(currentRow).font = {
     bold: true
 
 };
+
+    for (const column of [11, 12, 13, 14, 15, 16, 17]) {
+        worksheet.getColumn(column).numFmt =
+            '"₹"#,##0.00;[Red]("₹"#,##0.00);-';
+    }
 
     await workbook.xlsx.writeFile(filePath);
 
@@ -1109,6 +1126,26 @@ sheet.getCell("B9").value =
         {
             key: "last_purchase",
             width: 16
+        },
+
+        {
+            key: "quantity_returned",
+            width: 18
+        },
+
+        {
+            key: "net_quantity_purchased",
+            width: 22
+        },
+
+        {
+            key: "return_cn_value",
+            width: 18
+        },
+
+        {
+            key: "net_purchase_after_returns",
+            width: 25
         }
 
     ];
@@ -1128,7 +1165,11 @@ sheet.getCell("B9").value =
         "Total Purchase",
         "Average Bill",
         "First Purchase",
-        "Last Purchase"
+        "Last Purchase",
+        "Quantity Returned",
+        "Net Quantity Purchased",
+        "Return / CN Value",
+        "Net Purchase After Returns"
 
     ];
 
@@ -1142,14 +1183,18 @@ sheet.getCell("B9").value =
 
         sheet.getRow(currentRow).values = [
 
-            row.customer_name,
-            row.customer_mobile,
+            row.customer_name || null,
+            row.customer_mobile || null,
             row.total_bills,
             row.quantity_purchased,
             row.total_purchase,
             row.average_bill,
             row.first_purchase,
-            row.last_purchase
+            row.last_purchase,
+            row.quantity_returned,
+            row.net_quantity_purchased,
+            row.return_cn_value,
+            row.net_purchase_after_returns
 
         ];
 
@@ -1173,6 +1218,20 @@ sheet.getCell("B9").value =
 
     ];
 
+    for (const column of [5, 6, 11, 12]) {
+        sheet.getColumn(column).numFmt =
+            '"₹"#,##0.00;[Red]("₹"#,##0.00);-';
+    }
+
+    const unattributable = data.unattributable || {};
+    if (Number(unattributable.item_count || 0) > 0) {
+        sheet.getCell("A10").value = "Unattributable CN Activity";
+        sheet.getCell("B10").value =
+            `${unattributable.item_count} item(s), ` +
+            `${unattributable.quantity_returned} qty, ` +
+            `₹${Number(unattributable.return_cn_value || 0).toFixed(2)}`;
+    }
+
     await workbook.xlsx.writeFile(filePath);
 
     return {
@@ -1185,6 +1244,95 @@ sheet.getCell("B9").value =
 
 }
 
+/* ===========================================
+   BILL SUMMARY REPORT
+=========================================== */
+
+async function exportBillSummaryReport(
+    data,
+    filePath,
+    fromDate,
+    toDate
+) {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Bill Summary Report");
+
+    setReportMetadata(
+        sheet,
+        "Bill Summary Report",
+        fromDate,
+        toDate
+    );
+
+    sheet.columns = [
+        { key: "bill_no", width: 18 },
+        { key: "bill_date", width: 16 },
+        { key: "bill_time", width: 16 },
+        { key: "customer_name", width: 28 },
+        { key: "customer_mobile", width: 18 },
+        { key: "total_qty", width: 12 },
+        { key: "gross_amount", width: 16 },
+        { key: "discount_amount", width: 16 },
+        { key: "net_amount", width: 16 },
+        { key: "cash_amount", width: 16 },
+        { key: "upi_amount", width: 16 },
+        { key: "card_amount", width: 16 },
+        { key: "store_credit_amount", width: 18 },
+        { key: "gift_voucher_amount", width: 18 }
+    ];
+
+    sheet.getRow(11).values = [
+        "Bill No",
+        "Bill Date",
+        "Bill Time",
+        "Customer Name",
+        "Mobile Number",
+        "Total Qty",
+        "Gross Amount",
+        "Discount",
+        "Net Amount",
+        "Cash",
+        "UPI",
+        "Card",
+        "Store Credit",
+        "Gift Voucher"
+    ];
+    styleNewRegister(sheet, 11);
+
+    let rowNumber = 12;
+    for (const row of data) {
+        sheet.getRow(rowNumber).values = [
+            row.bill_no,
+            row.bill_date,
+            row.bill_time,
+            row.customer_name || null,
+            row.customer_mobile || null,
+            row.total_qty,
+            row.gross_amount,
+            row.discount_amount,
+            row.net_amount,
+            row.cash_amount,
+            row.upi_amount,
+            row.card_amount,
+            row.store_credit_amount,
+            row.gift_voucher_amount
+        ];
+        rowNumber++;
+    }
+
+    for (const column of [7, 8, 9, 10, 11, 12, 13, 14]) {
+        sheet.getColumn(column).numFmt =
+            '"₹"#,##0.00;[Red]("₹"#,##0.00);-';
+    }
+    for (const column of [1, 3, 5]) {
+        sheet.getColumn(column).numFmt = "@";
+    }
+    sheet.views = [{ state: "frozen", ySplit: 11 }];
+
+    await workbook.xlsx.writeFile(filePath);
+    return { success: true, filePath };
+}
+
 module.exports = {
 
     exportBusinessReport,
@@ -1193,6 +1341,8 @@ module.exports = {
 
     exportProductSalesReport,
 
-    exportCustomerPurchaseReport
+    exportCustomerPurchaseReport,
+
+    exportBillSummaryReport
 
 };

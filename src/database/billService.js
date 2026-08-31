@@ -12,15 +12,111 @@ const {
 
 } = require("./logService");
 
+function billAmountToPaise(value, fieldName, optional = false) {
+
+    if (optional && (value === null || value === undefined)) {
+        return 0;
+    }
+
+    if (
+        value === null ||
+        value === undefined ||
+        (typeof value === "string" && value.trim() === "")
+    ) {
+        const error = new Error(`Invalid ${fieldName} amount.`);
+        error.code = "KLBS_BILL_SETTLEMENT_INVALID_AMOUNT";
+        throw error;
+    }
+
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount < 0) {
+        const error = new Error(`Invalid ${fieldName} amount.`);
+        error.code = "KLBS_BILL_SETTLEMENT_INVALID_AMOUNT";
+        throw error;
+    }
+
+    const paise = Math.round((amount + Number.EPSILON) * 100);
+    if (!Number.isSafeInteger(paise)) {
+        const error = new Error(`Invalid ${fieldName} amount.`);
+        error.code = "KLBS_BILL_SETTLEMENT_INVALID_AMOUNT";
+        throw error;
+    }
+
+    return paise;
+
+}
+
+function validateBillSettlement(billData) {
+
+    const hasNestedStoreCredit = Boolean(billData.store_credit);
+    const storeCreditValue = hasNestedStoreCredit
+        ? billData.store_credit.amount
+        : billData.store_credit_amount;
+
+    const amounts = {
+        netPaise: billAmountToPaise(billData.net_amount, "Net Amount"),
+        cashPaise: billAmountToPaise(billData.cash_amount, "Cash"),
+        upiPaise: billAmountToPaise(billData.upi_amount, "UPI"),
+        cardPaise: billAmountToPaise(billData.card_amount, "Card"),
+        storeCreditPaise: billAmountToPaise(
+            storeCreditValue,
+            "Store Credit",
+            !hasNestedStoreCredit &&
+                (storeCreditValue === null || storeCreditValue === undefined)
+        ),
+        giftVoucherPaise: billAmountToPaise(
+            billData.gift_voucher_amount,
+            "Gift Voucher",
+            billData.gift_voucher_amount === null ||
+                billData.gift_voucher_amount === undefined
+        )
+    };
+
+    const settlementPaise = [
+        amounts.cashPaise,
+        amounts.upiPaise,
+        amounts.cardPaise,
+        amounts.storeCreditPaise,
+        amounts.giftVoucherPaise
+    ].reduce((total, amount) => {
+        const result = total + amount;
+        if (!Number.isSafeInteger(result)) {
+            const error = new Error("Invalid total payment allocation.");
+            error.code = "KLBS_BILL_SETTLEMENT_INVALID_AMOUNT";
+            throw error;
+        }
+        return result;
+    }, 0);
+
+    const differencePaise = amounts.netPaise - settlementPaise;
+    if (differencePaise !== 0) {
+        const difference = (Math.abs(differencePaise) / 100).toFixed(2);
+        const error = new Error(
+            differencePaise > 0
+                ? `Payment allocation is short by ₹${difference}.`
+                : `Payment allocation exceeds bill amount by ₹${difference}.`
+        );
+        error.code = "KLBS_BILL_SETTLEMENT_MISMATCH";
+        error.differencePaise = differencePaise;
+        throw error;
+    }
+
+    return {
+        ...amounts,
+        settlementPaise,
+        differencePaise
+    };
+
+}
+
 function getNextBillNumber() {
 
     return new Promise((resolve, reject) => {
 
-        const today = new Date();
-
-        const dd = String(today.getDate()).padStart(2, "0");
-        const mm = String(today.getMonth() + 1).padStart(2, "0");
-        const yy = String(today.getFullYear()).slice(-2);
+        const [year, month, day] = getBusinessDate().split("-");
+        const dd = day;
+        const mm = month;
+        const yy = year.slice(-2);
 
         const prefix = `KL${dd}${mm}${yy}`;
 
@@ -74,6 +170,8 @@ function saveBill(billData) {
 
     return new Promise((resolve, reject) => {
 
+        billData.bill_date = getBusinessDate();
+
         db.serialize(() => {
 
             db.run(
@@ -85,10 +183,64 @@ function saveBill(billData) {
                         return;
                     }
 
-                    insertBill();
+                    try {
+                        const settlement = validateBillSettlement(billData);
+                        billData.net_amount = settlement.netPaise / 100;
+                        billData.cash_amount = settlement.cashPaise / 100;
+                        billData.upi_amount = settlement.upiPaise / 100;
+                        billData.card_amount = settlement.cardPaise / 100;
+                        billData.gift_voucher_amount =
+                            settlement.giftVoucherPaise / 100;
+                        if (billData.store_credit) {
+                            billData.store_credit.amount =
+                                settlement.storeCreditPaise / 100;
+                        }
+                    }
+                    catch (error) {
+                        db.run("ROLLBACK", () => reject(error));
+                        return;
+                    }
+
+                    verifyBusinessDayOpen();
 
                 }
             );
+
+            function verifyBusinessDayOpen(){
+
+                db.get(
+                    `
+                    SELECT close_status
+                    FROM day_closing_snapshots
+                    WHERE business_date = ?
+                      AND close_status IN ('PREPARING', 'CLOSED')
+                    LIMIT 1
+                    `,
+                    [getBusinessDate()],
+                    (statusErr, closing) => {
+
+                        if(statusErr){
+                            db.run("ROLLBACK");
+                            reject(statusErr);
+                            return;
+                        }
+
+                        if(closing){
+                            db.run("ROLLBACK");
+                            reject(new Error(
+                                closing.close_status === "PREPARING"
+                                    ? "KLBS_BUSINESS_DAY_CLOSING"
+                                    : "KLBS_BUSINESS_DAY_CLOSED"
+                            ));
+                            return;
+                        }
+
+                        insertBill();
+
+                    }
+                );
+
+            }
 
             function insertBill(){
 
@@ -443,13 +595,11 @@ function redeemStoreCreditAndCommit(){
           AND TRIM(customer_mobile) = TRIM(?)
           AND status = 'ISSUED'
           AND remaining_balance > 0
-          AND ABS(remaining_balance - ?) < 0.01
           AND valid_until >= ?
         `,
         [
             storeCreditNo,
             billData.customer_mobile,
-            storeCreditAmount,
             getBusinessDate()
         ],
         (lookupErr, storeCredit) => {
@@ -472,6 +622,31 @@ function redeemStoreCreditAndCommit(){
 
             const redeemedAmount =
                 Number(storeCredit.remaining_balance);
+
+            let redeemedAmountPaise;
+            let requestedAmountPaise;
+            try {
+                redeemedAmountPaise = billAmountToPaise(
+                    redeemedAmount,
+                    "Store Credit"
+                );
+                requestedAmountPaise = billAmountToPaise(
+                    storeCreditAmount,
+                    "Store Credit"
+                );
+            }
+            catch (error) {
+                db.run("ROLLBACK", () => reject(error));
+                return;
+            }
+
+            if (redeemedAmountPaise !== requestedAmountPaise) {
+                db.run("ROLLBACK");
+                reject(new Error(
+                    "Store Credit redemption failed. Full active balance redemption is required."
+                ));
+                return;
+            }
 
             db.run(
                 `
@@ -1233,7 +1408,27 @@ function getDashboardSummary() {
 
                     WHERE DATE(bill_date)=DATE('now','localtime')
 
-                ) AS cardToday
+                ) AS cardToday,
+
+                (
+
+                    SELECT IFNULL(SUM(store_credit_amount),0)
+
+                    FROM bills
+
+                    WHERE DATE(bill_date)=DATE('now','localtime')
+
+                ) AS storeCreditToday,
+
+                (
+
+                    SELECT IFNULL(SUM(gift_voucher_amount),0)
+
+                    FROM bills
+
+                    WHERE DATE(bill_date)=DATE('now','localtime')
+
+                ) AS giftVoucherToday
 
         `;
 
@@ -1266,6 +1461,7 @@ function getDashboardSummary() {
 module.exports = {
 
     saveBill,
+    validateBillSettlement,
     getNextBillNumber,
     getBills,
     getTransactionHistory,

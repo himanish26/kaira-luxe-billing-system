@@ -160,12 +160,13 @@ closeBusinessDay: () =>
 
     ),
 
-    reopenBusinessDay: (grant) =>
+    reopenBusinessDay: (grant, reason) =>
 
     ipcRenderer.invoke(
 
         "reopen-business-day",
-        grant
+        grant,
+        reason
 
     ),
 
@@ -208,13 +209,13 @@ reprintStoreCredit: (storeCreditNo) =>
         storeCreditNo
     ),
 
-    printDayClosing: (summary) =>
+    printDayClosing: (snapshotId) =>
 
     ipcRenderer.invoke(
 
         "print-day-closing",
 
-        summary
+        snapshotId
 
     ),
     testPrinter: (printerName) => ipcRenderer.invoke("printer:test", printerName),

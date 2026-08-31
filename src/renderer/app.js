@@ -102,6 +102,34 @@ function formatCurrency(value) {
             );
 
         document.getElementById(
+            "dashboardStoreCredit"
+        ).textContent =
+            formatCurrency(
+                data.storeCreditToday || 0
+            );
+
+        document.getElementById(
+            "dashboardGiftVoucher"
+        ).textContent =
+            formatCurrency(
+                data.giftVoucherToday || 0
+            );
+
+        document.getElementById(
+            "dashboardStoreCreditRow"
+        ).style.display =
+            Number(data.storeCreditToday || 0) > 0
+                ? "flex"
+                : "none";
+
+        document.getElementById(
+            "dashboardGiftVoucherRow"
+        ).style.display =
+            Number(data.giftVoucherToday || 0) > 0
+                ? "flex"
+                : "none";
+
+        document.getElementById(
             "dashboardTotal"
         ).textContent =
             formatCurrency(
@@ -110,6 +138,10 @@ function formatCurrency(value) {
                 (data.upiToday || 0)
                 +
                 (data.cardToday || 0)
+                +
+                (data.storeCreditToday || 0)
+                +
+                (data.giftVoucherToday || 0)
             );
 
         document.getElementById(
@@ -2170,11 +2202,29 @@ gst_amount:
 
     billItems = [];
 
-    appliedStoreCredit = null;
-    ffAuthorizationGrant = null;
-    giftVoucherAuthorizationGrant = null;
+appliedStoreCredit = null;
+ffAuthorizationGrant = null;
 
-    availableStoreCredit = null;
+giftVoucherAppliedAmount = 0;
+giftVoucherAuthorizationGrant = null;
+
+const giftVoucherAppliedAmountDisplay =
+    document.getElementById(
+        "giftVoucherAppliedAmount"
+    );
+
+if (giftVoucherAppliedAmountDisplay) {
+    giftVoucherAppliedAmountDisplay.textContent =
+        "₹0.00";
+}
+
+if (giftVoucherBtn) {
+    giftVoucherBtn.classList.remove(
+        "active"
+    );
+}
+
+availableStoreCredit = null;
 
 if (storeCreditAppliedAmount) {
 
@@ -4935,11 +4985,30 @@ onclick="removeItem(${index})">
 
 function clearCurrentBill(){
 
-    billItems = [];
+billItems = [];
 
-        appliedStoreCredit = null;
+appliedStoreCredit = null;
 
-    availableStoreCredit = null;
+giftVoucherAppliedAmount = 0;
+giftVoucherAuthorizationGrant = null;
+
+const giftVoucherAppliedAmountDisplay =
+    document.getElementById(
+        "giftVoucherAppliedAmount"
+    );
+
+if (giftVoucherAppliedAmountDisplay) {
+    giftVoucherAppliedAmountDisplay.textContent =
+        "₹0.00";
+}
+
+if (giftVoucherBtn) {
+    giftVoucherBtn.classList.remove(
+        "active"
+    );
+}
+
+availableStoreCredit = null;
 
     if (storeCreditAppliedAmount) {
 
@@ -5258,22 +5327,32 @@ document.getElementById("paymentQty").innerText =
 }
 
 
+function paymentValueToPaise(value) {
+
+    const amount = Number(value || 0);
+    if (!Number.isFinite(amount) || amount < 0) return null;
+
+    const paise = Math.round((amount + Number.EPSILON) * 100);
+    return Number.isSafeInteger(paise) ? paise : null;
+
+}
+
+function formatPaymentPaise(paise) {
+
+    return `₹${(Math.abs(paise) / 100).toFixed(2)}`;
+
+}
+
 function calculatePayment(){
 
     const cash =
-        parseFloat(
-            document.getElementById("cashAmount").value
-        ) || 0;
+        document.getElementById("cashAmount").value;
 
     const upi =
-        parseFloat(
-            document.getElementById("upiAmount").value
-        ) || 0;
+        document.getElementById("upiAmount").value;
 
     const card =
-        parseFloat(
-            document.getElementById("cardAmount").value
-        ) || 0;
+        document.getElementById("cardAmount").value;
 
     const storeCreditAmount =
         appliedStoreCredit
@@ -5283,50 +5362,51 @@ function calculatePayment(){
     const giftVoucherAmount =
         Number(giftVoucherAppliedAmount) || 0;
 
-    const actualTotal =
-        cash +
-        upi +
-        card +
-        storeCreditAmount +
-        giftVoucherAmount;
-
-    const total =
-        Math.round(actualTotal);
-
     const paymentNetText =
         document
             .getElementById("paymentNet")
             .innerText;
 
-    const payable =
-        Math.round(
-            Number(
-                paymentNetText.replace(
-                    /[^0-9.-]/g,
-                    ""
-                )
-            )
-        );
+    const valuesPaise = [
+        paymentValueToPaise(cash),
+        paymentValueToPaise(upi),
+        paymentValueToPaise(card),
+        paymentValueToPaise(storeCreditAmount),
+        paymentValueToPaise(giftVoucherAmount)
+    ];
+
+    const payablePaise = paymentValueToPaise(
+        paymentNetText.replace(/[^0-9.-]/g, "")
+    );
+
+    const validAmounts =
+        payablePaise !== null &&
+        valuesPaise.every(value => value !== null);
+
+    const settlementPaise = validAmounts
+        ? valuesPaise.reduce((total, value) => total + value, 0)
+        : 0;
 
     const label =
         document.getElementById("balanceLabel");
 
     document.getElementById("totalReceived").innerText =
-        "₹" + total;
+        formatPaymentPaise(settlementPaise);
 
-    const balance =
-        total - payable;
+    const differencePaise = validAmounts
+        ? settlementPaise - payablePaise
+        : 0;
 
     document.getElementById("balanceAmount").innerText =
-        "₹" + Math.abs(balance);
+        formatPaymentPaise(differencePaise);
 
-    if (balance < -0.01) {
+    if (differencePaise < 0) {
 
         label.innerText =
             "Balance Due";
 
     }
-    else if (balance > 0.01) {
+    else if (differencePaise > 0) {
 
         label.innerText =
             "Change";
@@ -5339,11 +5419,8 @@ function calculatePayment(){
 
     }
 
-    const difference =
-        Math.abs(total - payable);
-
     const enable =
-        difference <= 0.01;
+        validAmounts && differencePaise === 0;
 
     document.getElementById("saveBillBtn").disabled =
         !enable;

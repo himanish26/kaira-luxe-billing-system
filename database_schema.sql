@@ -72,6 +72,54 @@ CREATE TABLE day_closing (
                 remarks TEXT
 
             );
+CREATE TABLE day_closing_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_date TEXT NOT NULL,
+    close_sequence INTEGER NOT NULL,
+    snapshot_version INTEGER NOT NULL,
+    close_status TEXT NOT NULL
+        CHECK (close_status IN ('PREPARING', 'CLOSED', 'FAILED', 'REOPENED')),
+    closed_at TEXT,
+    closed_by TEXT NOT NULL DEFAULT 'Administrator',
+    total_bills INTEGER,
+    qty_sold INTEGER,
+    gross_sales_paise INTEGER,
+    total_discount_paise INTEGER,
+    net_billing_paise INTEGER,
+    credit_note_count INTEGER,
+    qty_returned INTEGER,
+    return_cn_value_paise INTEGER,
+    net_sales_after_returns_paise INTEGER,
+    cash_paise INTEGER,
+    upi_paise INTEGER,
+    card_paise INTEGER,
+    store_credit_redeemed_paise INTEGER,
+    gift_voucher_redeemed_paise INTEGER,
+    settlement_total_paise INTEGER,
+    actual_money_collection_paise INTEGER,
+    store_credit_issued_paise INTEGER,
+    settlement_difference_paise INTEGER,
+    store_credit_ledger_redeemed_paise INTEGER,
+    store_credit_ledger_difference_paise INTEGER,
+    backup_status TEXT NOT NULL DEFAULT 'PENDING'
+        CHECK (backup_status IN ('PENDING', 'SUCCESS', 'FAILED', 'UNKNOWN')),
+    backup_reference TEXT,
+    email_status TEXT NOT NULL DEFAULT 'PENDING'
+        CHECK (email_status IN ('PENDING', 'SUCCESS', 'FAILED', 'UNKNOWN')),
+    remarks TEXT,
+    reopened_at TEXT,
+    reopened_by TEXT,
+    reopen_reason TEXT,
+    legacy_source_id INTEGER UNIQUE,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (business_date, close_sequence)
+);
+CREATE UNIQUE INDEX idx_day_closing_one_active
+ON day_closing_snapshots (business_date)
+WHERE close_status IN ('PREPARING', 'CLOSED');
+CREATE INDEX idx_day_closing_date_sequence
+ON day_closing_snapshots (business_date, close_sequence DESC);
 CREATE TABLE payment_corrections (
 
         id INTEGER PRIMARY KEY AUTOINCREMENT,
