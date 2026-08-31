@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>KAIRA LUXE</title>
+    <link rel="stylesheet" href="styles/startup.css">
+</head>
+<body>
+    <main class="splash-shell">
+        <header class="splash-header">
+            <div>
+                <h1>KAIRA LUXE</h1>
+                <p class="subtitle">Billing System</p>
+                <p class="version">Version <span id="startupVersion">—</span></p>
+            </div>
+            <img class="splash-logo" src="assets/icons/icon.png" alt="KAIRA LUXE">
+        </header>
+
+        <section class="diagnostics" aria-labelledby="diagnosticsTitle">
+            <div class="section-heading">
+                <div>
+                    <h2 id="diagnosticsTitle">KLBS CORE SYSTEM</h2>
+                    <p>BUILD: <span id="terminalVersion">—</span> / MODE: RETAIL OPERATIONS</p>
+                </div>
+                <span class="live-indicator">DIAGNOSTIC CHANNEL ACTIVE</span>
+            </div>
+
+            <div class="checks" aria-live="polite">
+                <div class="check" data-check="database" data-state="waiting"><i></i><span>DATABASE</span><strong>WAITING</strong></div>
+                <div class="check" data-check="databaseIntegrity" data-state="waiting"><i></i><span>DATABASE INTEGRITY</span><strong>WAITING</strong></div>
+                <div class="check" data-check="productInventory" data-state="waiting"><i></i><span>PRODUCT &amp; INVENTORY</span><strong>WAITING</strong></div>
+                <div class="check" data-check="administratorSecurity" data-state="waiting"><i></i><span>ADMINISTRATOR SECURITY</span><strong>WAITING</strong></div>
+                <div class="check" data-check="backup" data-state="waiting"><i></i><span>BACKUP SYSTEM</span><strong>WAITING</strong></div>
+                <div class="check" data-check="printer" data-state="waiting"><i></i><span>PRINTER</span><strong>WAITING</strong></div>
+                <div class="check" data-check="internet" data-state="waiting"><i></i><span>INTERNET</span><strong>WAITING</strong></div>
+                <div class="check" data-check="businessDay" data-state="waiting"><i></i><span>BUSINESS DAY</span><strong>WAITING</strong></div>
+            </div>
+
+            <div class="telemetry" aria-hidden="true">
+                <span>VISUAL TELEMETRY / COSMETIC</span>
+                <code id="telemetryLine">SYS  10110110 01100101 · IDX A7F2:91C0</code>
+            </div>
+            <section class="terminal" aria-live="polite">
+                <p id="terminalLine1">&gt; INITIATING SYSTEM DIAGNOSTICS</p>
+                <p id="terminalLine2">&gt; READINESS RESULTS PENDING</p>
+                <p id="terminalLine3">&gt; DASHBOARD HANDSHAKE ON STANDBY<span class="cursor">_</span></p>
+            </section>
+        </section>
+
+        <div id="finalStatus" class="final-status"><i></i><span>INITIALIZING</span></div>
+
+        <div id="actions" class="actions" hidden>
+            <button id="reopenBtn" hidden>RE-OPEN BUSINESS DAY</button>
+            <button id="retryBtn">RETRY CHECKS</button>
+            <button id="exitBtn" class="secondary">EXIT APPLICATION</button>
+        </div>
+
+        <div id="reopenPanel" class="reopen-panel" hidden>
+            <h3>AUTHORIZED DAY RE-OPEN</h3>
+            <label>Reason for Re-opening<textarea id="reopenReason" maxlength="250"></textarea></label>
+            <label>Administrator PIN<input id="reopenPin" type="password" inputmode="numeric" maxlength="4"></label>
+            <div id="reopenError" class="reopen-error"></div>
+            <div class="actions">
+                <button id="confirmReopenBtn">AUTHORIZE &amp; RE-OPEN</button>
+                <button id="cancelReopenBtn" class="secondary">CANCEL</button>
+            </div>
+        </div>
+
+        <footer>
+            <strong>DEVELOPED BY HIMANISH PATNAIK</strong>
+            <span>© 2026 HIMANISH PATNAIK</span>
+        </footer>
+    </main>
+    <script src="startupSplash.js"></script>
+</body>
+</html>

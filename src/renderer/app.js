@@ -3000,6 +3000,7 @@ function updateDateTime() {
             now.toLocaleDateString(
                 "en-IN",
                 {
+                    timeZone: "Asia/Kolkata",
                     weekday: "short",
                     day: "2-digit",
                     month: "short",
@@ -3015,6 +3016,7 @@ function updateDateTime() {
     now.toLocaleTimeString(
         "en-IN",
         {
+            timeZone: "Asia/Kolkata",
             hour: "2-digit",
             minute: "2-digit",
             second: "2-digit",
@@ -3030,6 +3032,7 @@ function updateDateTime() {
             now.toLocaleDateString(
                 "en-IN",
                 {
+                    timeZone: "Asia/Kolkata",
                     day: "2-digit",
                     month: "short",
                     year: "numeric"
@@ -6962,21 +6965,33 @@ else{
 
 }
 
-/* =====================================
-   INITIAL DASHBOARD LOAD
-===================================== */
+let operationalDashboardStarted = false;
+let operationalRefreshTimer = null;
 
-loadDashboardSummary();
-loadSystemStatus();
+async function startOperationalDashboard() {
 
-setInterval(() => {
+    if (operationalDashboardStarted) return;
 
-    loadDashboardSummary();
-    loadSystemStatus();
+    operationalDashboardStarted = true;
 
-}, 10000);
+    dashboardScreen.style.display = "block";
 
-initializeKeyboardShortcuts();
+    await Promise.all([
+        loadDashboardSummary(),
+        loadSystemStatus()
+    ]);
+
+    initializeKeyboardShortcuts();
+
+    operationalRefreshTimer = setInterval(() => {
+        loadDashboardSummary();
+        loadSystemStatus();
+    }, 10000);
+
+    window.electronAPI.notifyDashboardReady();
+}
+
+window.electronAPI.onOperationalReady(startOperationalDashboard);
 
 /* =====================================
    SCREEN NAVIGATION

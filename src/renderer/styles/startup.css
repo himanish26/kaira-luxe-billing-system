@@ -1,0 +1,1003 @@
+:root {
+    color-scheme: light;
+
+    --burgundy: #701f39;
+    --burgundy-dark: #4c1426;
+
+    --ink: #30262a;
+    --muted: #796a70;
+    --line: #ded0d5;
+
+    --ready: #4f9a6d;
+    --ready-bright: #79c592;
+    --warning: #c58a2d;
+    --failed: #c55353;
+
+    --terminal-bg: #121012;
+    --terminal-panel: #181416;
+    --terminal-line: #3a2c31;
+    --terminal-text: #b6c7bb;
+    --terminal-dim: #756a6f;
+    --terminal-accent: #d2a7b5;
+}
+
+/* =========================================================
+   GLOBAL
+========================================================= */
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+}
+
+body {
+    color: var(--ink);
+    background: #ffffff;
+    font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.splash-shell {
+    position: relative;
+
+    display: flex;
+    flex-direction: column;
+
+    height: 100%;
+
+    padding: 24px 32px 16px;
+
+    border: 1px solid #d5c3c9;
+
+    background:
+        linear-gradient(
+            180deg,
+            #ffffff 0%,
+            #fdfafb 100%
+        );
+
+    box-shadow:
+        inset 0 5px 0 var(--burgundy),
+        inset 0 0 35px rgba(112, 31, 57, 0.025);
+}
+
+
+/* =========================================================
+   HEADER
+========================================================= */
+
+.splash-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+
+    min-height: 90px;
+
+    padding-bottom: 13px;
+
+    border-bottom: 1px solid var(--line);
+}
+
+h1 {
+    margin: 0;
+
+    color: var(--burgundy);
+
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 34px;
+    font-weight: 800;
+
+    letter-spacing: 5px;
+
+    line-height: 1;
+}
+
+.subtitle {
+    margin: 7px 0 6px;
+
+    color: #55464b;
+
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+
+    letter-spacing: 0.4px;
+}
+
+.version {
+    margin: 0;
+
+    color: var(--muted);
+
+    font:
+        13px/1.2
+        "SFMono-Regular",
+        Consolas,
+        "Liberation Mono",
+        Menlo,
+        monospace;
+
+    letter-spacing: 0.7px;
+}
+
+.splash-logo {
+    width: 82px;
+    height: 82px;
+
+    object-fit: contain;
+}
+
+
+/* =========================================================
+   MAIN DIAGNOSTIC TERMINAL
+========================================================= */
+
+.diagnostics {
+    position: relative;
+
+    margin-top: 12px;
+
+    padding: 12px 13px 10px;
+
+    overflow: hidden;
+
+    border: 1px solid #49343c;
+
+    background-color: var(--terminal-panel);
+
+    background-image:
+        linear-gradient(
+            rgba(160, 105, 124, 0.05) 1px,
+            transparent 1px
+        ),
+        linear-gradient(
+            90deg,
+            rgba(160, 105, 124, 0.025) 1px,
+            transparent 1px
+        );
+
+    background-size:
+        100% 4px,
+        20px 100%;
+
+    box-shadow:
+        inset 0 0 32px rgba(0, 0, 0, 0.48),
+        0 7px 17px rgba(63, 25, 38, 0.12);
+}
+
+/*
+ * Slow horizontal CRT-style sweep.
+ */
+.diagnostics::after {
+    position: absolute;
+
+    inset: 0;
+
+    pointer-events: none;
+
+    content: "";
+
+    background:
+        linear-gradient(
+            90deg,
+            transparent,
+            rgba(210, 167, 181, 0.065),
+            transparent
+        );
+
+    transform: translateX(-100%);
+
+    animation:
+        terminal-sweep
+        4.8s
+        linear
+        infinite;
+}
+
+
+/* =========================================================
+   TERMINAL HEADING
+========================================================= */
+
+.section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    margin-bottom: 9px;
+
+    padding-bottom: 8px;
+
+    border-bottom: 1px solid #4c383f;
+}
+
+h2 {
+    margin: 0;
+
+    color: #e1bdc8;
+
+    font:
+        800 14px/1.1
+        "SFMono-Regular",
+        Consolas,
+        "Liberation Mono",
+        Menlo,
+        monospace;
+
+    letter-spacing: 2.1px;
+
+    text-shadow:
+        0 0 7px
+        rgba(225, 189, 200, 0.12);
+}
+
+.section-heading p {
+    margin: 4px 0 0;
+
+    color: #9b858d;
+
+    font:
+        10px/1.15
+        "SFMono-Regular",
+        Consolas,
+        "Liberation Mono",
+        Menlo,
+        monospace;
+
+    letter-spacing: 0.8px;
+}
+
+.live-indicator {
+    color: #b18f9b;
+
+    font:
+        11px/1
+        "SFMono-Regular",
+        Consolas,
+        monospace;
+
+    font-weight: 700;
+
+    letter-spacing: 1.4px;
+}
+
+.live-indicator::before {
+    display: inline-block;
+
+    width: 7px;
+    height: 7px;
+
+    margin-right: 7px;
+
+    border-radius: 50%;
+
+    background: #c08699;
+
+    content: "";
+
+    box-shadow:
+        0 0 8px
+        rgba(192, 134, 153, 0.75);
+
+    animation:
+        status-pulse
+        1.2s
+        ease-in-out
+        infinite;
+}
+
+
+/* =========================================================
+   SYSTEM CHECKS
+========================================================= */
+
+.checks {
+    border-top: 1px solid #392b30;
+    border-bottom: 1px solid #392b30;
+}
+
+.check {
+    position: relative;
+
+    display: grid;
+
+    grid-template-columns:
+        24px
+        minmax(0, 1fr)
+        minmax(190px, auto);
+
+    align-items: center;
+
+    min-height: 30px;
+
+    padding: 4px 10px;
+
+    border-bottom: 1px solid #2d2327;
+
+    font:
+        12px/1.2
+        "SFMono-Regular",
+        Consolas,
+        "Liberation Mono",
+        Menlo,
+        monospace;
+
+    transition:
+        background-color 180ms ease,
+        box-shadow 180ms ease,
+        color 180ms ease;
+}
+
+.check:last-child {
+    border-bottom: 0;
+}
+
+
+/* CHECK NAME */
+
+.check span {
+    display: flex;
+    align-items: center;
+
+    color: #938188;
+
+    font-weight: 600;
+
+    letter-spacing: 0.65px;
+}
+
+.check span::after {
+    height: 1px;
+
+    margin: 0 9px;
+
+    flex: 1;
+
+    border-top: 1px dotted #55434a;
+
+    content: "";
+}
+
+
+/* CHECK RESULT */
+
+.check strong {
+    color: #89777e;
+
+    font-size: 11px;
+    font-weight: 700;
+
+    text-align: right;
+
+    letter-spacing: 0.45px;
+}
+
+
+/* CHECK ICON */
+
+.check i {
+    position: relative;
+
+    display: block;
+
+    width: 12px;
+    height: 12px;
+
+    border: 1px solid #716067;
+
+    border-radius: 2px;
+}
+
+
+/* =========================================================
+   ACTIVE CHECK
+========================================================= */
+
+.check.active {
+    background:
+        linear-gradient(
+            90deg,
+            rgba(130, 62, 85, 0.26),
+            rgba(95, 43, 61, 0.08)
+        );
+
+    box-shadow:
+        inset 3px 0 0 #bd8295,
+        inset 0 0 12px rgba(151, 80, 103, 0.06);
+}
+
+.check.active span {
+    color: #e1c3cd;
+
+    text-shadow:
+        0 0 8px
+        rgba(225, 195, 205, 0.22);
+}
+
+
+/* =========================================================
+   CHECKING
+========================================================= */
+
+.check[data-state="checking"] i {
+    border-color: #6c5960;
+    border-top-color: #e1aebf;
+
+    border-radius: 50%;
+
+    animation:
+        spin
+        0.75s
+        linear
+        infinite;
+}
+
+.check[data-state="checking"] strong {
+    color: #e3afbf;
+
+    text-shadow:
+        0 0 7px
+        rgba(227, 175, 191, 0.35);
+}
+
+
+/* =========================================================
+   READY
+========================================================= */
+
+.check[data-state="ready"] i {
+    border-color: #72ad88;
+
+    background: #427356;
+
+    box-shadow:
+        0 0 7px
+        rgba(98, 170, 124, 0.18);
+}
+
+.check[data-state="ready"] i::after {
+    position: absolute;
+
+    top: 1px;
+    left: 3px;
+
+    width: 3px;
+    height: 6px;
+
+    border: solid #ffffff;
+    border-width: 0 1.5px 1.5px 0;
+
+    content: "";
+
+    transform: rotate(45deg);
+}
+
+.check[data-state="ready"] span {
+    color: #a8c4b1;
+}
+
+.check[data-state="ready"] strong {
+    color: #83be98;
+}
+
+
+/* =========================================================
+   WARNING
+========================================================= */
+
+.check[data-state="warning"] i {
+    border: 0;
+    border-radius: 0;
+
+    background: #d19a40;
+
+    clip-path:
+        polygon(
+            50% 0,
+            100% 100%,
+            0 100%
+        );
+
+    box-shadow:
+        0 0 7px
+        rgba(209, 154, 64, 0.22);
+}
+
+.check[data-state="warning"] span,
+.check[data-state="warning"] strong {
+    color: #d5ad67;
+}
+
+
+/* =========================================================
+   FAILED
+========================================================= */
+
+.check[data-state="failed"] i {
+    border-color: #cd6565;
+
+    background: #973e3e;
+}
+
+.check[data-state="failed"] i::before,
+.check[data-state="failed"] i::after {
+    position: absolute;
+
+    top: 4px;
+    left: 2px;
+
+    width: 6px;
+    height: 1px;
+
+    background: #ffffff;
+
+    content: "";
+
+    transform: rotate(45deg);
+}
+
+.check[data-state="failed"] i::after {
+    transform: rotate(-45deg);
+}
+
+.check[data-state="failed"] span,
+.check[data-state="failed"] strong {
+    color: #df7979;
+}
+
+
+/* =========================================================
+   LIVE TELEMETRY
+========================================================= */
+
+.telemetry {
+    display: flex;
+    justify-content: space-between;
+
+    gap: 14px;
+
+    margin-top: 8px;
+
+    padding: 7px 9px;
+
+    border-left: 3px solid #a66077;
+
+    background:
+        linear-gradient(
+            90deg,
+            #211a1d,
+            #181416
+        );
+
+    color: #a28a92;
+
+    font:
+        10px/1.3
+        "SFMono-Regular",
+        Consolas,
+        "Liberation Mono",
+        Menlo,
+        monospace;
+
+    letter-spacing: 0.75px;
+}
+
+.telemetry span {
+    flex: 0 0 auto;
+
+    color: #d19aab;
+
+    font-weight: 800;
+
+    letter-spacing: 1px;
+}
+
+.telemetry code {
+    overflow: hidden;
+
+    color: #a4c5ad;
+
+    font-size: 10.5px;
+    font-weight: 600;
+
+    text-shadow:
+        0 0 6px
+        rgba(130, 190, 148, 0.2);
+
+    white-space: nowrap;
+}
+
+
+/* =========================================================
+   TERMINAL BOOT MESSAGES
+========================================================= */
+
+.terminal {
+    min-height: 61px;
+
+    margin-top: 9px;
+
+    padding: 8px 11px;
+
+    border: 1px solid #3b2d32;
+
+    background:
+        linear-gradient(
+            180deg,
+            #121012,
+            #0e0d0e
+        );
+
+    color: #a6beaD;
+
+    font:
+        10.5px/1.45
+        "SFMono-Regular",
+        Consolas,
+        "Liberation Mono",
+        Menlo,
+        monospace;
+
+    letter-spacing: 0.35px;
+
+    box-shadow:
+        inset 0 0 15px
+        rgba(0, 0, 0, 0.4);
+}
+
+.terminal p {
+    margin: 0 0 3px;
+}
+
+.terminal p:last-child {
+    margin-bottom: 0;
+
+    color: #d4a5b4;
+
+    font-weight: 700;
+
+    text-shadow:
+        0 0 6px
+        rgba(212, 165, 180, 0.18);
+}
+
+.cursor {
+    animation:
+        cursor-blink
+        0.75s
+        steps(1, end)
+        infinite;
+}
+
+
+/* =========================================================
+   FINAL SYSTEM STATUS
+========================================================= */
+
+.final-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 10px;
+
+    align-self: center;
+
+    min-width: 240px;
+    min-height: 36px;
+
+    margin-top: 8px;
+
+    padding: 0 18px;
+
+    border: 1px solid currentColor;
+
+    background: #faf7f8;
+
+    font:
+        800 16px/1
+        "SFMono-Regular",
+        Consolas,
+        "Segoe UI",
+        sans-serif;
+
+    letter-spacing: 2px;
+}
+
+.final-status i {
+    width: 10px;
+    height: 10px;
+
+    border: 1px solid currentColor;
+
+    border-radius: 50%;
+}
+
+.final-status.checking {
+    color: var(--burgundy);
+}
+
+.final-status.checking i {
+    animation:
+        status-pulse
+        1s
+        ease-in-out
+        infinite;
+}
+
+.final-status.ready {
+    color: var(--ready);
+
+    border-color: #6aa480;
+
+    background:
+        linear-gradient(
+            180deg,
+            #fbfffc,
+            #f0f8f3
+        );
+
+    box-shadow:
+        0 0 15px
+        rgba(50, 112, 82, 0.16);
+
+    animation:
+        ready-once
+        750ms
+        ease-out
+        1;
+}
+
+.final-status.ready i {
+    background: var(--ready-bright);
+
+    box-shadow:
+        0 0 8px
+        rgba(79, 154, 109, 0.45);
+}
+
+.final-status.failed {
+    color: var(--failed);
+}
+
+.final-status.failed i {
+    background: var(--failed);
+}
+
+
+/* =========================================================
+   BUTTONS
+========================================================= */
+
+.actions {
+    display: flex;
+    justify-content: center;
+
+    gap: 10px;
+
+    margin-top: 7px;
+}
+
+button {
+    padding: 8px 14px;
+
+    border: 0;
+    border-radius: 4px;
+
+    color: #ffffff;
+    background: var(--burgundy);
+
+    font-size: 11px;
+    font-weight: 700;
+
+    letter-spacing: 0.5px;
+
+    cursor: pointer;
+}
+
+button:hover {
+    background: var(--burgundy-dark);
+}
+
+button.secondary {
+    color: var(--burgundy);
+    background: #eee5e8;
+}
+
+
+/* =========================================================
+   BUSINESS DAY RE-OPEN PANEL
+========================================================= */
+
+.reopen-panel {
+    position: absolute;
+
+    z-index: 2;
+
+    top: 125px;
+    right: 32px;
+    bottom: 63px;
+    left: 32px;
+
+    padding: 20px;
+
+    border: 1px solid #ccb7be;
+
+    background: #ffffff;
+
+    box-shadow:
+        0 12px 28px
+        rgba(74, 24, 39, 0.18);
+}
+
+.reopen-panel h3 {
+    margin: 0 0 15px;
+
+    color: var(--burgundy);
+
+    font-size: 15px;
+
+    letter-spacing: 1.2px;
+}
+
+.reopen-panel label {
+    display: block;
+
+    margin-bottom: 10px;
+
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.reopen-panel textarea,
+.reopen-panel input {
+    width: 100%;
+
+    margin-top: 5px;
+    padding: 8px;
+
+    border: 1px solid #cdbac0;
+    border-radius: 3px;
+
+    font: inherit;
+}
+
+.reopen-panel textarea {
+    height: 55px;
+
+    resize: none;
+}
+
+.reopen-error {
+    min-height: 18px;
+
+    color: var(--failed);
+
+    font-size: 11px;
+
+    text-align: center;
+}
+
+
+/* =========================================================
+   FOOTER
+========================================================= */
+
+footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    gap: 4px;
+
+    margin-top: auto;
+
+    padding-top: 9px;
+
+    border-top: 1px solid #e7d9de;
+
+    color: #67585d;
+
+    line-height: 1.2;
+}
+
+footer strong {
+    color: var(--burgundy);
+
+    font-size: 15px;
+    font-weight: 800;
+
+    letter-spacing: 1.5px;
+
+    text-transform: uppercase;
+}
+
+footer span {
+    color: #594a4f;
+
+    font-size: 11px;
+    font-weight: 700;
+
+    letter-spacing: 0.7px;
+}
+
+
+/* =========================================================
+   UTILITIES
+========================================================= */
+
+[hidden] {
+    display: none !important;
+}
+
+
+/* =========================================================
+   ANIMATION
+========================================================= */
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes status-pulse {
+    50% {
+        opacity: 0.35;
+        transform: scale(0.75);
+    }
+}
+
+@keyframes cursor-blink {
+    50% {
+        opacity: 0;
+    }
+}
+
+@keyframes terminal-sweep {
+    to {
+        transform: translateX(100%);
+    }
+}
+
+@keyframes ready-once {
+    0% {
+        filter: brightness(1);
+        transform: scale(0.98);
+    }
+
+    45% {
+        filter: brightness(1.15);
+        transform: scale(1.025);
+    }
+
+    100% {
+        filter: brightness(1);
+        transform: scale(1);
+    }
+}
+
+
+/* =========================================================
+   REDUCED MOTION
+========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+
+    .check,
+    .check[data-state="checking"] i,
+    .final-status,
+    .final-status.checking i,
+    .live-indicator::before,
+    .cursor,
+    .diagnostics::after {
+        animation: none;
+        transition: none;
+    }
+}

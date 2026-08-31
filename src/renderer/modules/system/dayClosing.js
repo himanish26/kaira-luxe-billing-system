@@ -783,7 +783,7 @@ function requestDayReopenReason() {
 
 }
 
-async function reopenBusinessDay() {
+async function reopenBusinessDay(options = {}) {
 
     const reason =
 
@@ -791,41 +791,53 @@ async function reopenBusinessDay() {
 
     if (!reason) {
 
-        return;
+        return { success: false, cancelled: true };
 
     }
 
-    requireAdminAuthorization("DAY_REOPEN", async grant => {
-        try {
-            const result = await window.electronAPI.reopenBusinessDay(grant, reason);
-            if (!result.success) {
-                await window.electronAPI.showMessageBox({
-                    type: "error",
-                    title: "Day Re-open Failed",
-                    message: result.message || result.error ||
-                        "Business Day could not be re-opened."
-                });
-                return;
-            }
-            await window.electronAPI.showMessageBox({
-                type: result.activityWarning ? "warning" : "info",
-                title: result.activityWarning
-                    ? "Business Day Re-opened With Warning"
-                    : "Business Day Re-opened",
-                message: "Business Day re-opened successfully.",
-                detail: result.activityWarning
-                    ? `The snapshot was preserved, but Activity Log failed: ${result.activityWarning}`
-                    : "The prior snapshot was preserved. Billing is available and the next close will create a new snapshot."
-            });
-            await showDayClosingPage();
-        }
-        catch (error) {
-            console.error("Day Re-open Error:", error);
+    const grant = await requestAdminAuthorization("DAY_REOPEN");
+    if (!grant) {
+        return { success: false, cancelled: true };
+    }
+
+    try {
+        const result = await window.electronAPI.reopenBusinessDay(grant, reason);
+        if (!result.success) {
             await window.electronAPI.showMessageBox({
                 type: "error",
                 title: "Day Re-open Failed",
-                message: error.message
+                message: result.message || result.error ||
+                    "Business Day could not be re-opened."
             });
+            return result;
         }
-    });
+        await window.electronAPI.showMessageBox({
+            type: result.activityWarning ? "warning" : "info",
+            title: result.activityWarning
+                ? "Business Day Re-opened With Warning"
+                : "Business Day Re-opened",
+            message: "Business Day re-opened successfully.",
+            detail: result.activityWarning
+                ? `The snapshot was preserved, but Activity Log failed: ${result.activityWarning}`
+                : "The prior snapshot was preserved. Billing is available and the next close will create a new snapshot."
+        });
+
+        if (typeof options.afterSuccess === "function") {
+            await options.afterSuccess(result);
+        }
+        else {
+            await showDayClosingPage();
+        }
+
+        return result;
+    }
+    catch (error) {
+        console.error("Day Re-open Error:", error);
+        await window.electronAPI.showMessageBox({
+            type: "error",
+            title: "Day Re-open Failed",
+            message: error.message
+        });
+        return { success: false, error: error.message };
+    }
 }

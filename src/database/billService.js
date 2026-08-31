@@ -1314,6 +1314,9 @@ function getDashboardSummary() {
 
     return new Promise((resolve, reject) => {
 
+        const businessDate = getBusinessDate();
+        const businessMonth = businessDate.slice(0, 7);
+
         const sql = `
 
             SELECT
@@ -1336,7 +1339,7 @@ function getDashboardSummary() {
 
                     FROM bills
 
-                    WHERE DATE(bill_date)=DATE('now','localtime')
+                    WHERE bill_date = ?
 
                 ) AS todayBills,
 
@@ -1346,7 +1349,7 @@ function getDashboardSummary() {
 
                     FROM bills
 
-                    WHERE DATE(bill_date)=DATE('now','localtime')
+                    WHERE bill_date = ?
 
                 ) AS todaySales,
                 
@@ -1356,7 +1359,7 @@ function getDashboardSummary() {
 
                     FROM bills
 
-                    WHERE DATE(bill_date)=DATE('now','localtime')
+                    WHERE bill_date = ?
 
                 ) AS todayQtySold,
 
@@ -1366,7 +1369,7 @@ function getDashboardSummary() {
 
                     FROM bills
 
-                    WHERE strftime('%Y-%m',bill_date)=strftime('%Y-%m','now','localtime')
+                    WHERE substr(bill_date, 1, 7) = ?
 
                 ) AS mtdBills,
 
@@ -1376,7 +1379,7 @@ function getDashboardSummary() {
 
                     FROM bills
 
-                    WHERE strftime('%Y-%m',bill_date)=strftime('%Y-%m','now','localtime')
+                    WHERE substr(bill_date, 1, 7) = ?
 
                 ) AS mtdSales,
 
@@ -1386,7 +1389,7 @@ function getDashboardSummary() {
 
                     FROM bills
 
-                    WHERE DATE(bill_date)=DATE('now','localtime')
+                    WHERE bill_date = ?
 
                 ) AS cashToday,
 
@@ -1396,7 +1399,7 @@ function getDashboardSummary() {
 
                     FROM bills
 
-                    WHERE DATE(bill_date)=DATE('now','localtime')
+                    WHERE bill_date = ?
 
                 ) AS upiToday,
 
@@ -1406,7 +1409,7 @@ function getDashboardSummary() {
 
                     FROM bills
 
-                    WHERE DATE(bill_date)=DATE('now','localtime')
+                    WHERE bill_date = ?
 
                 ) AS cardToday,
 
@@ -1416,7 +1419,7 @@ function getDashboardSummary() {
 
                     FROM bills
 
-                    WHERE DATE(bill_date)=DATE('now','localtime')
+                    WHERE bill_date = ?
 
                 ) AS storeCreditToday,
 
@@ -1426,7 +1429,7 @@ function getDashboardSummary() {
 
                     FROM bills
 
-                    WHERE DATE(bill_date)=DATE('now','localtime')
+                    WHERE bill_date = ?
 
                 ) AS giftVoucherToday
 
@@ -1436,7 +1439,18 @@ function getDashboardSummary() {
 
             sql,
 
-            [],
+            [
+                businessDate,
+                businessDate,
+                businessDate,
+                businessMonth,
+                businessMonth,
+                businessDate,
+                businessDate,
+                businessDate,
+                businessDate,
+                businessDate
+            ],
 
             (err,row)=>{
 

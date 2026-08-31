@@ -355,6 +355,12 @@ getSystemStatus: () =>
         "get-system-status"
     ),
 
+onOperationalReady: callback =>
+    ipcRenderer.once("startup:operational-ready", callback),
+
+notifyDashboardReady: () =>
+    ipcRenderer.send("startup:dashboard-ready"),
+
 showMessageBox: (options) =>
     ipcRenderer.invoke(
         "dialog:showMessageBox",

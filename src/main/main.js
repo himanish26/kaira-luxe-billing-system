@@ -46,7 +46,8 @@ const resetInventory =
     require("../database/resetInventory");
 
 const {
-    getSystemStatus
+    getSystemStatus,
+    getStartupCheck
 } = require("./statusService");
 
 const database = require("../database/database");
@@ -239,6 +240,8 @@ const {
 } = require("../database/dayClosingService");
 
 let mainWindow;
+let splashWindow = null;
+let splashShownAt = 0;
 
 let isAppQuitting = false;
 
@@ -276,15 +279,6 @@ function createWindow() {
         )
 
     );
-
-    mainWindow.once("ready-to-show", () => {
-
-    mainWindow.maximize();
-
-    mainWindow.show();
-
-});
-
 
     mainWindow.on(
 
@@ -354,6 +348,29 @@ function createWindow() {
 
 }
 
+function createSplashWindow() {
+    splashWindow = new BrowserWindow({
+        width: 680,
+        height: 590,
+        center: true,
+        frame: false,
+        resizable: false,
+        maximizable: false,
+        minimizable: false,
+        show: false,
+        backgroundColor: "#ffffff",
+        webPreferences: {
+            preload: path.join(__dirname, "startupPreload.js")
+        }
+    });
+    splashWindow.loadFile(path.join(__dirname, "../renderer/startupSplash.html"));
+    splashWindow.once("ready-to-show", () => {
+    splashShownAt = Date.now();
+    splashWindow.show();
+});
+    splashWindow.on("closed", () => { splashWindow = null; });
+}
+
 app.whenReady().then(async () => {
 
     try {
@@ -413,6 +430,7 @@ app.whenReady().then(async () => {
         startBackupScheduler();
 
         createWindow();
+        createSplashWindow();
 
     }
 
@@ -474,6 +492,152 @@ ipcMain.handle(
 
     }
 );
+
+ipcMain.handle("startup:get-metadata", () => ({
+    version: app.getVersion(),
+    developer: "Himanish Patnaik",
+    copyright: "© 2026 Himanish Patnaik"
+}));
+
+ipcMain.handle("startup:run-check", async (event, checkName) =>
+    getStartupCheck(checkName, {
+        getAdministratorSecurityStatus: () => administratorSecurity.getStatus(),
+        getBusinessDayState
+    })
+);
+
+ipcMain.handle("startup:exit", () => {
+    isAppQuitting = true;
+    app.quit();
+    return { success: true };
+});
+
+ipcMain.handle("startup:reopen-closed-day", async (event, data) => {
+    if (!splashWindow || event.sender !== splashWindow.webContents) {
+        return { success: false, error: "Startup recovery request rejected." };
+    }
+    const reason = String(data && data.reason || "").trim();
+    const pin = String(data && data.pin || "");
+    if (!reason) return { success: false, error: "Day Re-open reason is required." };
+    const authorization = await administratorSecurity.authorizePin(pin, "DAY_REOPEN");
+    if (!authorization.success) return authorization;
+    requireSecurityGrant(authorization.grant, "DAY_REOPEN");
+    return reopenBusinessDay(reason);
+});
+
+ipcMain.handle("startup:ready", async event => {
+
+    if (!splashWindow || event.sender !== splashWindow.webContents) {
+        return { success: false };
+    }
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+
+        if (mainWindow.webContents.isLoadingMainFrame()) {
+            await new Promise(resolve => {
+                mainWindow.webContents.once(
+                    "did-finish-load",
+                    resolve
+                );
+            });
+        }
+
+        /*
+         * Keep the splash visible until the hidden
+         * operational Dashboard confirms that its
+         * initial data/status initialization is complete.
+         */
+
+        const dashboardReady = new Promise(resolve => {
+
+            const onDashboardReady = dashboardEvent => {
+
+                if (
+                    !mainWindow ||
+                    mainWindow.isDestroyed() ||
+                    dashboardEvent.sender !== mainWindow.webContents
+                ) {
+                    return;
+                }
+
+                ipcMain.removeListener(
+                    "startup:dashboard-ready",
+                    onDashboardReady
+                );
+
+                resolve();
+            };
+
+            ipcMain.on(
+                "startup:dashboard-ready",
+                onDashboardReady
+            );
+        });
+
+        /*
+         * Tell the hidden renderer to initialize
+         * the operational Dashboard.
+         */
+
+        mainWindow.webContents.send(
+            "startup:operational-ready"
+        );
+
+        /*
+         * Wait until app.js confirms that the Dashboard,
+         * System Status and operational initialization
+         * have completed.
+         */
+
+        await dashboardReady;
+
+/*
+ * Keep the splash visible for a minimum of 3 seconds
+ * from the moment it was actually shown.
+ *
+ * If Dashboard initialization itself takes longer than
+ * 8 seconds, no additional delay is added.
+ */
+
+const minimumSplashDuration = 8000;
+
+const splashElapsed =
+    splashShownAt > 0
+        ? Date.now() - splashShownAt
+        : minimumSplashDuration;
+
+const remainingSplashTime =
+    Math.max(
+        0,
+        minimumSplashDuration - splashElapsed
+    );
+
+if (remainingSplashTime > 0) {
+    await new Promise(resolve =>
+        setTimeout(resolve, remainingSplashTime)
+    );
+}
+
+/*
+ * Only now reveal KLBS.
+ */
+
+mainWindow.maximize();
+mainWindow.show();
+mainWindow.focus();
+    }
+
+    /*
+     * Close the splash LAST, after the operational
+     * application is already ready and visible.
+     */
+
+    if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.close();
+    }
+
+    return { success: true };
+});
 
 ipcMain.handle("security:get-status", () => administratorSecurity.getStatus());
 ipcMain.handle("security:authorize-pin", (event, pin, purpose) =>
