@@ -2,6 +2,7 @@ const { readClosedDsrPayload } = require("./dayClosingDsrService");
 const { createDsrSyncService } = require("../services/dsrSyncService");
 const { getBusinessDate } = require("./businessDate");
 const { SNAPSHOT_VERSION } = require("./dayClosingMigration");
+const technicalLogger = require("../services/technicalLogger");
 
 function toPaise(value) {
     const amount = Number(value || 0);
@@ -517,6 +518,13 @@ function createDayClosingService(options = {}) {
         }
 
         const result = await dsrSyncService.sync(payload);
+        if (!result.success) {
+            technicalLogger.warn("DSR_SYNC", "Day Closing DSR synchronization failed", {
+                closingId: payload.closingId,
+                closeSequence: payload.closeSequence,
+                classification: sanitizeDsrError(result.error)
+            });
+        }
         const status = result.success ? "SYNCED" : "FAILED";
         const warning = result.success ? persistenceWarning : sanitizeDsrError(result.error);
         try {
@@ -576,6 +584,12 @@ function createDayClosingService(options = {}) {
             }
         }
         catch (error) {
+            technicalLogger.error(
+                "DAY_CLOSING",
+                "Mandatory Day Closing backup failed",
+                error,
+                { snapshotId: reservation.snapshotId }
+            );
             await markFailed(reservation.snapshotId, error.message, "FAILED");
             return {
                 success: false,
@@ -604,6 +618,12 @@ function createDayClosingService(options = {}) {
             await run("COMMIT");
         }
         catch (error) {
+            technicalLogger.error(
+                "DAY_CLOSING",
+                "Day Closing finalization failed",
+                error,
+                { snapshotId: reservation.snapshotId }
+            );
             await run("ROLLBACK").catch(() => {});
             await markFailed(
                 reservation.snapshotId,
@@ -633,6 +653,10 @@ function createDayClosingService(options = {}) {
         }
         catch (error) {
             emailWarning = error.message;
+            technicalLogger.warn("DAY_CLOSING", "Day Closing email delivery failed", {
+                snapshotId: reservation.snapshotId,
+                classification: sanitizeDsrError(error.message)
+            });
         }
 
         await run(`
@@ -655,6 +679,9 @@ function createDayClosingService(options = {}) {
         }
         catch (error) {
             activityWarning = error.message;
+            technicalLogger.warn("DAY_CLOSING", "Day Closing Activity Log write failed", {
+                snapshotId: reservation.snapshotId
+            });
             console.error("Day Closing Activity Log Error:", error);
         }
 
@@ -741,6 +768,12 @@ function createDayClosingService(options = {}) {
         }
         catch (error) {
             if (transactionStarted) await run("ROLLBACK").catch(() => {});
+            technicalLogger.error(
+                "DAY_CLOSING",
+                "Business Day Re-open failed",
+                error,
+                { businessDate }
+            );
             throw error;
         }
 
@@ -750,6 +783,9 @@ function createDayClosingService(options = {}) {
         }
         catch (error) {
             activityWarning = error.message;
+            technicalLogger.warn("DAY_CLOSING", "Day Re-open Activity Log write failed", {
+                businessDate
+            });
             console.error("Day Re-open Activity Log Error:", error);
         }
         return {

@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const axios = require("axios");
+const technicalLogger = require("./technicalLogger");
 
 const CONTRACT_VERSION = 1;
 const ACCEPTED_ACTIONS = new Set(["INSERTED", "UPDATED", "UNCHANGED"]);
@@ -78,6 +79,17 @@ function safeFailure(error) {
         .slice(0, 500);
 }
 
+function classifyFailure(error) {
+    if (error && error.code === "ECONNABORTED") return "TIMEOUT";
+    if (error && error.response) {
+        const status = Number(error.response.status);
+        return status >= 500 ? "HTTP_5XX" : status >= 400 ? "HTTP_4XX" : "HTTP_ERROR";
+    }
+    if (/response/i.test(String(error && error.message || ""))) return "INVALID_RESPONSE";
+    if (/configured/i.test(String(error && error.message || ""))) return "NOT_CONFIGURED";
+    return "TRANSPORT_ERROR";
+}
+
 function validateResponse(data, payload) {
     if (!data || typeof data !== "object" || Array.isArray(data) || data.ok !== true) {
         throw new Error("DSR service returned an unsuccessful response.");
@@ -132,9 +144,23 @@ function createDsrSyncService(options = {}) {
                 responseType: "json",
                 validateStatus: status => status >= 200 && status < 300
             });
-            return validateResponse(response.data, payload);
+            const result = validateResponse(response.data, payload);
+            technicalLogger.info("DSR_SYNC", "DSR synchronization accepted", {
+                closingId: payload.closingId,
+                closeSequence: payload.closeSequence,
+                action: result.action
+            });
+            return result;
         }
         catch (error) {
+            technicalLogger.warn("DSR_SYNC", "DSR transport attempt failed", {
+                closingId: Number.isSafeInteger(payload && payload.closingId)
+                    ? payload.closingId : null,
+                closeSequence: Number.isSafeInteger(payload && payload.closeSequence)
+                    ? payload.closeSequence : null,
+                classification: classifyFailure(error),
+                httpStatus: error && error.response ? Number(error.response.status) || null : null
+            });
             return { success: false, error: safeFailure(error) };
         }
     }
@@ -148,5 +174,6 @@ module.exports = {
     validatePayload,
     signPayload,
     validateResponse,
-    createDsrSyncService
+    createDsrSyncService,
+    classifyFailure
 };

@@ -1,10 +1,6 @@
 require("dotenv").config();
 
 const {
-    verifyEmailConnection
-} = require("../services/emailService");
-
-const {
 
     app,
 
@@ -19,6 +15,43 @@ const {
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const technicalLogger = require("../services/technicalLogger");
+
+technicalLogger.initialize({
+    logDirectory: path.join(app.getPath("userData"), "logs"),
+    appVersion: app.getVersion(),
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    sensitivePaths: [
+        { value: app.getPath("userData"), label: "[USER_DATA]" },
+        { value: app.getPath("temp"), label: "[TEMP]" },
+        { value: os.homedir(), label: "[HOME]" }
+    ]
+});
+technicalLogger.info("APPLICATION", "KLBS application session started", {
+    version: app.getVersion(),
+    platform: process.platform,
+    packaged: app.isPackaged
+});
+
+let fatalHandling = false;
+process.on("uncaughtException", error => {
+    if (fatalHandling) return;
+    fatalHandling = true;
+    technicalLogger.fatal("UNCAUGHT_EXCEPTION", "Uncaught main-process exception", error);
+    try { app.exit(1); } catch (_) { process.exitCode = 1; }
+});
+process.on("unhandledRejection", reason => {
+    technicalLogger.error(
+        "UNHANDLED_REJECTION",
+        "Unhandled main-process promise rejection",
+        reason instanceof Error ? reason : new Error(String(reason || "Unknown rejection"))
+    );
+});
+
+const {
+    verifyEmailConnection
+} = require("../services/emailService");
 
 const {
     exportReport
@@ -262,6 +295,29 @@ let splashWindow = null;
 let splashShownAt = 0;
 
 let isAppQuitting = false;
+let orderlyShutdownLogged = false;
+
+function attachWindowDiagnostics(window, component) {
+    window.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
+        if (!isMainFrame) return;
+        technicalLogger.error(component, "Window content failed to load", null, {
+            errorCode,
+            errorDescription
+        });
+    });
+    window.webContents.on("render-process-gone", (event, details) => {
+        technicalLogger.fatal(component, "Renderer process terminated unexpectedly", null, {
+            reason: details && details.reason,
+            exitCode: details && details.exitCode
+        });
+    });
+}
+
+app.on("before-quit", () => {
+    if (orderlyShutdownLogged) return;
+    orderlyShutdownLogged = true;
+    technicalLogger.info("APPLICATION", "KLBS application shutdown requested");
+});
 
 function createWindow() {
 
@@ -297,6 +353,7 @@ function createWindow() {
         )
 
     );
+    attachWindowDiagnostics(mainWindow, "MAIN_WINDOW");
 
     mainWindow.on(
 
@@ -343,6 +400,7 @@ function createWindow() {
             if (result.response === 1) {
 
                 isAppQuitting = true;
+                technicalLogger.info("APPLICATION", "Orderly application exit confirmed");
 
                 try {
 
@@ -382,6 +440,7 @@ function createSplashWindow() {
         }
     });
     splashWindow.loadFile(path.join(__dirname, "../renderer/startupSplash.html"));
+    attachWindowDiagnostics(splashWindow, "STARTUP_SPLASH");
     splashWindow.once("ready-to-show", () => {
     splashShownAt = Date.now();
     splashWindow.show();
@@ -394,6 +453,7 @@ app.whenReady().then(async () => {
     try {
 
         await databaseReady;
+        technicalLogger.info("DATABASE", "Database readiness checkpoint completed");
 
         const restoreIndex =
             process.argv.indexOf(
@@ -453,6 +513,12 @@ app.whenReady().then(async () => {
     }
 
     catch (error) {
+
+        technicalLogger.fatal(
+            "APPLICATION_STARTUP",
+            "KLBS startup failed before operational readiness",
+            error
+        );
 
         console.error(
             "✗ Kaira Luxe Billing System database initialization failed:",

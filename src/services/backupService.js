@@ -9,6 +9,7 @@ const packageJson = require("../../package.json");
 const archiver = require("archiver");
 const AdmZip = require("adm-zip");
 const sqlite3 = require("sqlite3").verbose();
+const technicalLogger = require("./technicalLogger");
 const DEFAULT_BACKUP_FOLDER = path.join(
     os.homedir(),
     "Documents",
@@ -204,7 +205,7 @@ async function getBackupFolder() {
 
 }
 
-async function createBackup() {
+async function createBackupInternal() {
 
     const backupFolder =
         await getBackupFolder();
@@ -290,6 +291,13 @@ async function createBackup() {
     "error",
 
     async (err) => {
+
+        technicalLogger.error(
+            "BACKUP",
+            "Backup archive creation failed",
+            err,
+            { operation: "CREATE_BACKUP" }
+        );
 
         if (fs.existsSync(snapshotPath)) {
             fs.unlinkSync(snapshotPath);
@@ -388,10 +396,10 @@ const logsFolder = path.join(
 
 if (fs.existsSync(logsFolder)) {
 
-    archive.directory(
-        logsFolder,
-        "Logs"
-    );
+    archive.glob("**/*", {
+        cwd: logsFolder,
+        ignore: ["KLBS.log", "KLBS.log.*"]
+    }, { prefix: "Logs" });
 
 }
 
@@ -399,6 +407,21 @@ if (fs.existsSync(logsFolder)) {
 
     });
 
+}
+
+async function createBackup() {
+    try {
+        return await createBackupInternal();
+    }
+    catch (error) {
+        technicalLogger.error(
+            "BACKUP",
+            "Backup creation failed",
+            error,
+            { operation: "CREATE_BACKUP" }
+        );
+        throw error;
+    }
 }
 
 function getBackupHistory() {
@@ -625,6 +648,9 @@ async function restoreBackup(zipPath) {
             await validateBackup(zipPath);
 
         if (!backupValidation.success) {
+            technicalLogger.warn("RESTORE", "Backup restore validation was rejected", {
+                operation: "VALIDATE_RESTORE_BACKUP"
+            });
             return backupValidation;
         }
 
@@ -647,6 +673,10 @@ async function restoreBackup(zipPath) {
             );
 
         if (!databaseEntry) {
+
+            technicalLogger.warn("RESTORE", "Backup restore archive is missing its database entry", {
+                operation: "RESTORE_BACKUP"
+            });
 
             return {
 
@@ -682,32 +712,12 @@ async function restoreBackup(zipPath) {
 
         );
 
-        console.log("Temp Folder:", tempFolder);
-
-console.log(
-    "Temp Folder Contents:",
-    fs.readdirSync(tempFolder)
-);
-
 const extractedDatabase = path.join(
     tempFolder,
     "billing.db"
 );
 
-console.log(
-    "Expected Database:",
-    extractedDatabase
-);
-
-console.log(
-    "Exists:",
-    fs.existsSync(extractedDatabase)
-);
-
-        console.log(
-            "Database extracted:",
-            extractedDatabase
-        );
+        technicalLogger.info("RESTORE", "Backup database extracted for validation");
 
     await validateSQLiteDatabase(
         extractedDatabase
@@ -795,15 +805,17 @@ if (logsExist) {
 
     ensureDirectory(logsFolder);
 
-    zip.extractEntriesTo(
-
-        "Logs/",
-
-        app.getPath("userData"),
-
-        true
-
-    );
+    entries
+        .filter(entry =>
+            entry.entryName.startsWith("Logs/") &&
+            !/^KLBS\.log(?:\.\d+)?$/i.test(path.basename(entry.entryName))
+        )
+        .forEach(entry => zip.extractEntryTo(
+            entry,
+            app.getPath("userData"),
+            true,
+            true
+        ));
 
     console.log(
         "STEP 1A : Logs restored."
@@ -889,7 +901,13 @@ return {
 
     catch (error) {
 
-    console.error(error);
+    console.error("Backup restore failed. See KLBS.log for sanitized diagnostics.");
+    technicalLogger.error(
+        "RESTORE",
+        "Backup restore failed",
+        error,
+        { operation: "RESTORE_BACKUP" }
+    );
 
     if (
         liveDatabase &&
@@ -906,9 +924,15 @@ return {
             );
         }
         catch (restoreOriginalError) {
+            technicalLogger.fatal(
+                "RESTORE",
+                "Original database recovery failed after restore error",
+                restoreOriginalError,
+                { operation: "RECOVER_ORIGINAL_DATABASE" }
+            );
             console.error(
                 "Original database recovery failed:",
-                restoreOriginalError
+                restoreOriginalError && restoreOriginalError.code || "Unknown error"
             );
         }
     }

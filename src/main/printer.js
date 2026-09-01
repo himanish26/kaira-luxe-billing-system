@@ -6,11 +6,9 @@ const path = require("path");
 const fs = require("fs/promises");
 
 const { getSettings } = require("../database/settingsService");
+const technicalLogger = require("../services/technicalLogger");
 
 async function printBill(billData){
-
-    console.log("PRINT FUNCTION CALLED");
-    console.log(billData);
 
     return new Promise((resolve, reject)=>{
 
@@ -95,6 +93,13 @@ async function printBill(billData){
 
                             } else {
 
+                                technicalLogger.error(
+                                    "PRINTER",
+                                    "Bill printing failed",
+                                    new Error(error || "Printer rejected bill output"),
+                                    { documentType: "BILL" }
+                                );
+
                                 reject(error);
 
                             }
@@ -118,12 +123,6 @@ async function printBill(billData){
 ===================================== */
 
 async function printStoreCredit(storeCreditData) {
-
-    console.log(
-        "PRINT STORE CREDIT FUNCTION CALLED"
-    );
-
-    console.log(storeCreditData);
 
     let printWindow = null;
 
@@ -271,6 +270,15 @@ async function printStoreCredit(storeCreditData) {
 
         }
 
+        if (!result.success) {
+            technicalLogger.error(
+                "PRINTER",
+                "Store Credit printing failed",
+                new Error(result.error || "Printer rejected Store Credit output"),
+                { documentType: "STORE_CREDIT" }
+            );
+        }
+
         return result;
 
     }
@@ -280,6 +288,12 @@ async function printStoreCredit(storeCreditData) {
         console.error(
             "STORE CREDIT PRINT ERROR:",
             error
+        );
+        technicalLogger.error(
+            "PRINTER",
+            "Store Credit printing failed",
+            error,
+            { documentType: "STORE_CREDIT" }
         );
 
         if (
@@ -305,8 +319,6 @@ async function printStoreCredit(storeCreditData) {
 
 }
 async function saveBillPdf(billData){
-
-    console.log("SAVE PDF FUNCTION CALLED");
 
     return new Promise((resolve, reject)=>{
 
@@ -381,6 +393,12 @@ await printWindow.webContents.executeJavaScript(
                             }
 
                             else{
+
+                                technicalLogger.warn(
+                                    "PRINTER",
+                                    "Bill PDF generation did not complete",
+                                    { documentType: "BILL_PDF" }
+                                );
 
                                 resolve({
                                     success:false,
@@ -459,6 +477,15 @@ async function printCreditNote(creditNoteData) {
             );
         });
     }
+    catch (error) {
+        technicalLogger.error(
+            "PRINTER",
+            "Credit Note printing failed",
+            error,
+            { documentType: "CREDIT_NOTE" }
+        );
+        throw error;
+    }
     finally {
         if (!printWindow.isDestroyed()) {
             printWindow.close();
@@ -493,6 +520,15 @@ async function saveCreditNotePdf(creditNoteData) {
         });
         await fs.writeFile(selection.filePath, pdf);
         return { success: true, filePath: selection.filePath };
+    }
+    catch (error) {
+        technicalLogger.error(
+            "PRINTER",
+            "Credit Note PDF generation failed",
+            error,
+            { documentType: "CREDIT_NOTE_PDF" }
+        );
+        throw error;
     }
     finally {
         if (!printWindow.isDestroyed()) {
@@ -709,6 +745,13 @@ usePrinterDefaultPageSize: true,
 
                 catch (error) {
 
+                    technicalLogger.error(
+                        "PRINTER",
+                        "Test receipt printing failed",
+                        error,
+                        { documentType: "TEST_RECEIPT" }
+                    );
+
                     printWindow.close();
 
                     reject(error);
@@ -810,6 +853,13 @@ usePrinterDefaultPageSize: true
                             }
 
                             else {
+
+                                technicalLogger.error(
+                                    "PRINTER",
+                                    "Day Closing receipt printing failed",
+                                    new Error(error || "Printer rejected Day Closing output"),
+                                    { documentType: "DAY_CLOSING" }
+                                );
 
                                 reject(error);
 

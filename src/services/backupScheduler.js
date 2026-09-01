@@ -9,6 +9,7 @@ const {
     getSettings
 
 } = require("../database/settingsService");
+const technicalLogger = require("./technicalLogger");
 
 let lastBackupDate = "";
 
@@ -58,12 +59,19 @@ function startBackupScheduler() {
                         "Automatic Backup Completed."
 
                     );
+                    technicalLogger.info("BACKUP_SCHEDULER", "Scheduled backup completed");
 
                 }
 
             }
 
             catch (error) {
+
+                technicalLogger.error(
+                    "BACKUP_SCHEDULER",
+                    "Scheduled backup attempt failed",
+                    error
+                );
 
                 console.error(
 

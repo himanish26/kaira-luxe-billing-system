@@ -12,6 +12,7 @@ const {
     migrateActivityLogSchema
 } = require("./activityMigration");
 const { migrateManagerSecurity } = require("./managerSecurityMigration");
+const technicalLogger = require("../services/technicalLogger");
 
 // Development database path
 // Keeps Electron and DB Browser pointed at the same billing.db
@@ -30,6 +31,9 @@ const databaseReady = new Promise((resolve, reject) => {
 
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
+        technicalLogger.fatal("DATABASE", "SQLite database connection failed", err, {
+            code: err.code || null
+        });
         console.error('Database Connection Error:', err.message);
         databaseReadyReject(err);
     } else {
@@ -2834,6 +2838,13 @@ db.serialize(() => {
 
             if (err) {
 
+                technicalLogger.fatal(
+                    "DATABASE",
+                    "Database readiness probe failed",
+                    err,
+                    { code: err.code || null }
+                );
+
                 console.error(
                     'Database Initialization Failed:',
                     err.message
@@ -2845,33 +2856,48 @@ db.serialize(() => {
 
 try {
 
-        await runDatabaseMigrations();
+        const runNamedMigration = async (name, operation) => {
+            try {
+                return await operation();
+            }
+            catch (migrationError) {
+                technicalLogger.error(
+                    "DATABASE_MIGRATION",
+                    "Database migration failed",
+                    migrationError,
+                    { migration: name, code: migrationError.code || null }
+                );
+                throw migrationError;
+            }
+        };
 
-        await migrateActivityLogSchema(db);
+        await runNamedMigration("settings_columns", () => runDatabaseMigrations());
+
+        await runNamedMigration("activity_log", () => migrateActivityLogSchema(db));
 
         console.log("✓ Activity Log schema ready.");
 
-        await migrateAdministratorSecurity();
+        await runNamedMigration("administrator_security", () => migrateAdministratorSecurity());
 
-        await migrateManagerSecurity(db);
+        await runNamedMigration("manager_security", () => migrateManagerSecurity(db));
 
-        await migrateProductDiscountColumn();
+        await runNamedMigration("product_discount", () => migrateProductDiscountColumn());
 
-        await migrateCustomerCreditCustomerIdNullable();
+        await runNamedMigration("customer_credit_customer", () => migrateCustomerCreditCustomerIdNullable());
 
-        await migrateReturnUniquenessEnforcement();
+        await runNamedMigration("return_uniqueness", () => migrateReturnUniquenessEnforcement());
 
-        await migrateCreditNoteAccounting();
+        await runNamedMigration("credit_note_accounting", () => migrateCreditNoteAccounting());
 
-        await migrateDayClosingSnapshots(db);
+        await runNamedMigration("day_closing_snapshots", () => migrateDayClosingSnapshots(db));
 
-        await initializeSmtpSettings();
+        await runNamedMigration("smtp_settings", () => initializeSmtpSettings());
 
-        await migrateStoreCreditSchema();
+        await runNamedMigration("store_credit", () => migrateStoreCreditSchema());
 
-        await migrateBillPaymentColumns();
+        await runNamedMigration("bill_payment", () => migrateBillPaymentColumns());
 
-        await initializeOpeningStock();
+        await runNamedMigration("opening_stock", () => initializeOpeningStock());
 
     console.log(
         '✓ Database Initialization Complete'
@@ -2881,6 +2907,13 @@ try {
 }
 
 catch (error) {
+
+    technicalLogger.fatal(
+        "DATABASE",
+        "Database initialization readiness failed",
+        error,
+        { code: error.code || null }
+    );
 
     console.error(
         "Database Initialization Failed:",
