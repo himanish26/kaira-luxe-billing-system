@@ -12,6 +12,7 @@ const {
 const technicalLogger = require("./technicalLogger");
 
 let lastBackupDate = "";
+let schedulerCheckInFlight = false;
 
 function startBackupScheduler() {
 
@@ -20,6 +21,9 @@ function startBackupScheduler() {
     setInterval(
 
         async () => {
+
+            if (schedulerCheckInFlight) return;
+            schedulerCheckInFlight = true;
 
             try {
 
@@ -81,6 +85,9 @@ function startBackupScheduler() {
 
                 );
 
+            }
+            finally {
+                schedulerCheckInFlight = false;
             }
 
         },

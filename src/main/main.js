@@ -43,9 +43,14 @@ app.on("second-instance", () => {
     }
 });
 
-require("dotenv").config();
-
 const path = require("path");
+
+if (!app.isPackaged) {
+    require("dotenv").config({
+        path: path.resolve(__dirname, "..", "..", ".env")
+    });
+}
+
 const fs = require("fs");
 const os = require("os");
 const technicalLogger = require("../services/technicalLogger");
@@ -222,38 +227,9 @@ const {
 );
 
 const {
-    checkForUpdates
+    createUpdatePipeline
 } = require("../services/updateService");
-
-const {
-
-    downloadFile
-
-} = require(
-
-    "../services/downloadService"
-
-);
-
-const {
-
-    launchInstaller
-
-} = require(
-
-    "../services/installerService"
-
-);
-
-const {
-
-    verifyChecksum
-
-} = require(
-
-    "../services/checksumService"
-
-);
+const updatePipeline = createUpdatePipeline({ currentVersion: app.getVersion() });
 
 const {
 
@@ -1673,39 +1649,6 @@ ipcMain.handle(
 
 ipcMain.handle(
 
-    "email:test",
-
-    async () => {
-
-        try {
-
-            return await verifyEmailConnection();
-
-        }
-
-        catch (error) {
-
-            console.error(
-                "Email Test Error:",
-                error
-            );
-
-            return {
-
-                success: false,
-
-                error: error.message
-
-            };
-
-        }
-
-    }
-
-);
-
-ipcMain.handle(
-
     "get-settings",
 
     async () => {
@@ -2489,7 +2432,7 @@ ipcMain.handle(
 
     async () => {
 
-        return await checkForUpdates();
+        return await updatePipeline.checkForUpdates();
 
     }
 
@@ -2502,40 +2445,14 @@ ipcMain.handle(
     async (
 
         event,
-
-        url,
-
-        fileName,
-
-        version
+        grant
 
     ) => {
 
         try {
 
-            const downloadedFile =
-
-                await downloadFile(
-
-                    event,
-
-                    url,
-
-                    fileName,
-
-                    version
-
-                );
-
-            return {
-
-                success: true,
-
-                filePath:
-
-                    downloadedFile
-
-            };
+            requireSecurityGrant(grant, "INSTALL_UPDATE");
+            return await updatePipeline.downloadAcceptedUpdate(event);
 
         }
 
@@ -2566,10 +2483,6 @@ ipcMain.handle(
     async (
 
         event,
-
-        installerPath,
-
-        expectedHash,
         grant
 
     ) => {
@@ -2578,61 +2491,11 @@ ipcMain.handle(
 
             requireSecurityGrant(grant, "INSTALL_UPDATE");
 
-const checksumValid =
-
-    await verifyChecksum(
-
-        installerPath,
-
-        expectedHash
-
-    );
-
-if (!checksumValid) {
-
-    try {
-
-        if (fs.existsSync(installerPath)) {
-
-            fs.unlinkSync(installerPath);
-
-        }
-
-    }
-
-    catch (error) {
-
-        console.error(
-
-            "Failed to delete invalid installer:",
-
-            error
-
-        );
-
-    }
-
-    return {
-
-        success: false,
-
-        message:
-
-            "Downloaded installer failed checksum verification."
-
-    };
-
-}
-
-                await launchInstaller(
-
-                    installerPath
-
-                );
+                const installResult = await updatePipeline.installAcceptedUpdate();
 
                 try {
                     await logAdministratorAction(
-                        "SYSTEM", "APPLICATION_UPDATED", packageInfo.version,
+                        "SYSTEM", "APPLICATION_UPDATED", installResult.version,
                         "Software update installer launched"
                     );
                 }

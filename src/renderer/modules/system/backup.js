@@ -124,18 +124,6 @@ async function showBackupPage() {
 
     </div>
 
-        <div
-        class="settings-card"
-        id="emailBackupStatusCard">
-
-        <div class="settings-icon">📧</div>
-
-        <h2>Email Backup</h2>
-
-        <p>Manage in System Health &gt; Integrations &gt; Email &amp; Backup</p>
-
-    </div>
-
 </div>
 
 `

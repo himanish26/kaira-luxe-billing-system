@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld(
                 "get-products"
             ),
 
-            getAppInfo: () => 
+            getAppInfo: () =>
                 ipcRenderer.invoke(
                     "get-app-info"
                 ),
@@ -41,7 +41,7 @@ contextBridge.exposeInMainWorld(
                 filePath,
                 grant
             ),
-            
+
         getProduct: (barcode) =>
             ipcRenderer.invoke(
                 "get-product",
@@ -192,8 +192,6 @@ closeBusinessDay: () =>
                     grant
     ),
 
-   
-
 printBill: (billData) =>
     ipcRenderer.invoke(
         "print-bill",
@@ -281,11 +279,6 @@ saveSettings: (settings, grant) =>
         settings,
         grant
     ),
-
-emailTest: () =>
-    ipcRenderer.invoke(
-        "email:test"
-    ),    
 
 getIntegrationConfig: () => ipcRenderer.invoke("integrations:get-config"),
 getIntegrationDetails: (kind, grant) => ipcRenderer.invoke("integrations:get-details", kind, grant),
@@ -407,25 +400,13 @@ checkForUpdates: () =>
         "updates:check"
     ),
 
-downloadUpdate: (
-
-    url,
-
-    fileName,
-
-    version
-
-) =>
+downloadUpdate: grant =>
 
     ipcRenderer.invoke(
 
         "updates:download",
 
-        url,
-
-        fileName,
-
-        version
+        grant
 
     ),
 
@@ -451,22 +432,12 @@ onDownloadProgress: (
 
     ),
 
-    launchInstaller: (
-
-    installerPath,
-
-    expectedHash,
-    grant
-
-) =>
+launchInstaller: grant =>
 
     ipcRenderer.invoke(
 
         "updates:install",
 
-        installerPath,
-
-        expectedHash,
         grant
 
     ),

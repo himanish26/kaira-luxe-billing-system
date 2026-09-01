@@ -16,6 +16,7 @@
    "build": {
     "appId": "com.kairaluxe.billing",
     "productName": "KAIRA LUXE BILLING SYSTEM",
+    "artifactName": "KairaLuxeBillingSetup-${version}.${ext}",
     "files": [
       "src/**/*"
     ],

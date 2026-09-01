@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const crypto = require("crypto");
 const {
     app
 } = require("electron");
@@ -250,6 +251,75 @@ async function getBackupFolder() {
 
 }
 
+let backupQueueTail = Promise.resolve();
+let backupOperationSequence = 0;
+
+function getBackupOperationId() {
+    backupOperationSequence += 1;
+    return `${process.pid}_${backupOperationSequence}_${crypto.randomBytes(6).toString("hex")}`;
+}
+
+function removeOwnArtifact(filePath) {
+    if (filePath && fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+    }
+}
+
+function writeBackupArchive(snapshotPath, inProgressPath) {
+    return new Promise((resolve, reject) => {
+        const output = fs.createWriteStream(inProgressPath, { flags: "wx" });
+        const archive = archiver("zip", { zlib: { level: 9 } });
+        let settled = false;
+
+        function fail(error) {
+            if (settled) return;
+            settled = true;
+            try { archive.abort(); } catch (_) {}
+            output.destroy();
+            if (output.closed) reject(error);
+            else output.once("close", () => reject(error));
+        }
+
+        output.on("error", fail);
+        archive.on("error", fail);
+        output.on("close", () => {
+            if (settled) return;
+            settled = true;
+            resolve(archive.pointer());
+        });
+
+        archive.pipe(output);
+
+        const backupInfo = {
+            application: packageJson.productName || "KAIRA LUXE Billing System",
+            backupSchema: 1,
+            appVersion: packageJson.version,
+            createdOn: new Date().toISOString(),
+            createdBy: "Administrator",
+            database: "billing.db",
+            includesSettings: true,
+            platform: process.platform,
+            electron: process.versions.electron,
+            node: process.versions.node
+        };
+
+        archive.append(JSON.stringify(backupInfo, null, 4), {
+            name: "backup-info.json"
+        });
+        archive.file(snapshotPath, { name: "Database/billing.db" });
+
+        const logsFolder = path.join(app.getPath("userData"), "logs");
+        if (fs.existsSync(logsFolder)) {
+            archive.glob("**/*", {
+                cwd: logsFolder,
+                ignore: ["KLBS.log", "KLBS.log.*"]
+            }, { prefix: "Logs" });
+        }
+
+        archive.finalize().catch(fail);
+    });
+}
+
 async function createBackupInternal() {
 
     const backupFolder =
@@ -258,9 +328,10 @@ async function createBackupInternal() {
     ensureDirectory(backupFolder);
 
     const timestamp = getTimestamp();
+    const operationId = getBackupOperationId();
 
     const backupFileName =
-        `KL_Backup_${timestamp}.zip`;
+        `KL_Backup_${timestamp}_${operationId}.zip`;
 
     const backupFilePath = path.join(
     backupFolder,
@@ -269,204 +340,74 @@ async function createBackupInternal() {
 
     const snapshotPath = path.join(
         app.getPath("temp"),
-        `klbs_backup_${timestamp}.db`
+        `klbs_backup_${timestamp}_${operationId}.db`
     );
+    const inProgressPath = `${backupFilePath}.partial`;
 
-    await createSQLiteSnapshot(snapshotPath);
-    await validateSQLiteDatabase(snapshotPath);
+    try {
+        await createSQLiteSnapshot(snapshotPath);
+        await validateSQLiteDatabase(snapshotPath);
+        const size = await writeBackupArchive(snapshotPath, inProgressPath);
+        if (!fs.existsSync(inProgressPath) || fs.statSync(inProgressPath).size <= 0) {
+            throw new Error("Backup archive was not written successfully.");
+        }
+        fs.renameSync(inProgressPath, backupFilePath);
 
-    return new Promise((resolve, reject) => {
-
-        const output =
-            fs.createWriteStream(backupFilePath);
-
-        const archive =
-            archiver("zip", {
-
-                zlib: {
-                    level: 9
-                }
-
-            });
-
-        output.on(
-
-    "close",
-
-    async () => {
-
-        if (fs.existsSync(snapshotPath)) {
-            fs.unlinkSync(snapshotPath);
+        const verification = await validateBackup(backupFilePath);
+        if (!verification || verification.success !== true) {
+            throw new Error(
+                verification && verification.message || "Backup verification failed."
+            );
         }
 
         try {
-
-            await logBackupCreated(
-
-                backupFileName
-
-            );
-
+            await logBackupCreated(backupFileName);
         }
-
         catch (error) {
-
             console.error(error);
-
         }
 
-        resolve({
-
+        return {
             success: true,
-
             backupFileName,
-
             backupFilePath,
-
-            size: archive.pointer()
-
-        });
-
+            size
+        };
     }
-
-);
-
-        archive.on(
-
-    "error",
-
-    async (err) => {
-
-        technicalLogger.error(
-            "BACKUP",
-            "Backup archive creation failed",
-            err,
-            { operation: "CREATE_BACKUP" }
-        );
-
-        if (fs.existsSync(snapshotPath)) {
-            fs.unlinkSync(snapshotPath);
-        }
-
-        try {
-
-            await logBackupFailed(
-
-                err.message
-
-            );
-
-        }
-
-        catch (error) {
-
-            console.error(error);
-
-        }
-
-        reject(err);
-
+    catch (error) {
+        removeOwnArtifact(inProgressPath);
+        removeOwnArtifact(backupFilePath);
+        throw error;
     }
-
-);
-
-        archive.pipe(output);
-
-        const backupInfo = {
-
-    application:
-        packageJson.productName ||
-        "KAIRA LUXE Billing System",
-
-    backupSchema: 1,
-
-    appVersion:
-        packageJson.version,
-
-    createdOn:
-        new Date().toISOString(),
-
-    createdBy:
-        "Administrator",
-
-    database:
-        "billing.db",
-
-    includesSettings:
-    true,
-
-    platform:
-        process.platform,
-
-    electron:
-        process.versions.electron,
-
-    node:
-        process.versions.node
-
-};
-
-archive.append(
-
-    JSON.stringify(
-        backupInfo,
-        null,
-        4
-    ),
-
-    {
-
-        name:
-            "backup-info.json"
-
+    finally {
+        removeOwnArtifact(snapshotPath);
     }
-
-);
-
-        archive.file(
-    snapshotPath,
-    {
-        name: "Database/billing.db"
-    }
-    
-    
-
-);
-
-
-const logsFolder = path.join(
-    app.getPath("userData"),
-    "logs"
-);
-
-if (fs.existsSync(logsFolder)) {
-
-    archive.glob("**/*", {
-        cwd: logsFolder,
-        ignore: ["KLBS.log", "KLBS.log.*"]
-    }, { prefix: "Logs" });
-
-}
-
-        archive.finalize();
-
-    });
 
 }
 
 async function createBackup() {
-    try {
-        return await createBackupInternal();
-    }
-    catch (error) {
-        technicalLogger.error(
-            "BACKUP",
-            "Backup creation failed",
-            error,
-            { operation: "CREATE_BACKUP" }
-        );
-        throw error;
-    }
+    const operation = backupQueueTail.then(async () => {
+        try {
+            return await createBackupInternal();
+        }
+        catch (error) {
+            technicalLogger.error(
+                "BACKUP",
+                "Backup creation failed",
+                error,
+                { operation: "CREATE_BACKUP" }
+            );
+            try {
+                await logBackupFailed(error.message);
+            }
+            catch (logError) {
+                console.error(logError);
+            }
+            throw error;
+        }
+    });
+    backupQueueTail = operation.catch(() => undefined);
+    return operation;
 }
 
 function getBackupHistory() {

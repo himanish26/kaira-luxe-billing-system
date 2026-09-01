@@ -198,6 +198,15 @@ setLockProgress(0);
 
 setLockMessage("Connecting...");
 
+const downloadGrant =
+    await requestAdminAuthorization("INSTALL_UPDATE");
+
+if (!downloadGrant) {
+    setAppState(APP_STATES.NORMAL);
+    unlockApplication();
+    return;
+}
+
 window.electronAPI.onDownloadProgress(
 
     progress => {
@@ -216,15 +225,7 @@ window.electronAPI.onDownloadProgress(
 
 const downloadResult =
 
-    await window.electronAPI.downloadUpdate(
-
-        info.downloadUrl,
-
-        "KAIRA_LUXE_BILLING_SYSTEM_Setup.exe",
-
-        info.version
-
-    );
+    await window.electronAPI.downloadUpdate(downloadGrant);
 
 unlockApplication();
 
@@ -310,11 +311,7 @@ if (!installGrant) {
 }
 
 const installResult =
-    await window.electronAPI.launchInstaller(
-        downloadResult.filePath,
-        info.sha256,
-        installGrant
-    );
+    await window.electronAPI.launchInstaller(installGrant);
 
 if (!installResult.success) {
 
