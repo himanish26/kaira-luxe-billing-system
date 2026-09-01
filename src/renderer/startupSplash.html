@@ -50,9 +50,23 @@
         <div id="finalStatus" class="final-status"><i></i><span>INITIALIZING</span></div>
 
         <div id="actions" class="actions" hidden>
+            <button id="initializeAdminBtn" hidden>INITIALIZE ADMIN PIN</button>
             <button id="reopenBtn" hidden>RE-OPEN BUSINESS DAY</button>
             <button id="retryBtn">RETRY CHECKS</button>
             <button id="exitBtn" class="secondary">EXIT APPLICATION</button>
+        </div>
+
+        <div id="adminInitializePanel" class="reopen-panel" hidden>
+            <h3>INITIALIZE ADMINISTRATOR SECURITY</h3>
+            <p>Use the provisioned Master PIN to create a separate Administrator PIN.</p>
+            <label>Master PIN<input id="adminMasterPin" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></label>
+            <label>New Administrator PIN<input id="adminNewPin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+            <label>Confirm Administrator PIN<input id="adminConfirmPin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+            <div id="adminInitializeError" class="reopen-error"></div>
+            <div class="actions">
+                <button id="confirmAdminInitializeBtn">INITIALIZE SECURITY</button>
+                <button id="cancelAdminInitializeBtn" class="secondary">CANCEL</button>
+            </div>
         </div>
 
         <div id="reopenPanel" class="reopen-panel" hidden>

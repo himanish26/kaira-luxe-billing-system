@@ -7,6 +7,7 @@ const {
     ipcMain,
 
     dialog,
+    safeStorage,
 
 } = require("electron");
 
@@ -82,8 +83,15 @@ process.on("unhandledRejection", reason => {
 });
 
 const {
-    verifyEmailConnection
+    verifyEmailConnection,
+    sendTestEmail,
+    setIntegrationConfigService
 } = require("../services/emailService");
+const { createIntegrationConfigService } = require("../services/integrationConfigService");
+const {
+    recordIntegrationActivity, emailSettingsEvent, dsrSettingsEvent,
+    connectionEvent, emailTestMessageEvent
+} = require("../services/integrationActivityService");
 
 const {
     exportReport
@@ -122,9 +130,20 @@ const { createAdministratorSecurityService } = require("../services/administrato
 const administratorSecurity = createAdministratorSecurityService(database, {
     masterVerifier: masterRecoveryVerifier
 });
+const integrationConfig = createIntegrationConfigService({
+    safeStorage,
+    storagePath: path.join(app.getPath("userData"), "integration-config.json")
+});
+setIntegrationConfigService(integrationConfig);
 
 function requireSecurityGrant(grant, purpose) {
     if (!administratorSecurity.consumeGrant(grant, purpose)) {
+        throw new Error("Required authorization is missing, invalid, or has expired.");
+    }
+}
+
+function requireIntegrationSession(grant, purpose) {
+    if (!administratorSecurity.validateGrant(grant, purpose)) {
         throw new Error("Required authorization is missing, invalid, or has expired.");
     }
 }
@@ -250,7 +269,8 @@ const {
 
     getActivities,
     searchActivities,
-    archiveActivities
+    archiveActivities,
+    logActivity
 
 } = require("../database/activityService");
 
@@ -306,6 +326,10 @@ const {
 const {
     createDayClosingService
 } = require("../database/dayClosingService");
+const { createDsrSyncService } = require("../services/dsrSyncService");
+const dsrSyncService = createDsrSyncService({
+    configProvider: () => integrationConfig.resolveDsrRuntime()
+});
 const {
     getDayClosingSummary,
     getDayClosingSnapshot,
@@ -315,6 +339,8 @@ const {
     retryDsrSync
 } = createDayClosingService({
     database,
+    getEmailConfiguration: () => integrationConfig.resolveEmailRuntime(),
+    dsrSyncService,
     klbsVersion: app.getVersion(),
     logBusinessDayClosed,
     logBusinessDayReopened,
@@ -489,6 +515,26 @@ app.whenReady().then(async () => {
         await databaseReady;
         technicalLogger.info("DATABASE", "Database readiness checkpoint completed");
 
+        try {
+            const legacySmtp = await new Promise((resolve, reject) => database.get(`
+                SELECT smtp_host, smtp_port, smtp_secure, smtp_user, smtp_password, smtp_from
+                FROM settings WHERE id = 1
+            `, [], (error, row) => error ? reject(error) : resolve(row)));
+            const migration = integrationConfig.migrateLegacyEmail(legacySmtp);
+            if (migration.migrated) {
+                await new Promise((resolve, reject) => database.run(
+                    "UPDATE settings SET smtp_password = NULL WHERE id = 1",
+                    [], error => error ? reject(error) : resolve()
+                ));
+                technicalLogger.info("INTEGRATIONS", "Legacy SMTP credential moved to Windows secure storage");
+            }
+        }
+        catch (error) {
+            technicalLogger.warn("INTEGRATIONS", "Legacy SMTP secure-storage migration was deferred", {
+                classification: "SECURE_STORAGE_UNAVAILABLE"
+            });
+        }
+
         const restoreIndex =
             process.argv.indexOf(
                 "--restore-completed"
@@ -643,10 +689,33 @@ ipcMain.handle("startup:reopen-closed-day", async (event, data) => {
     return reopenBusinessDay(reason);
 });
 
+ipcMain.handle("startup:initialize-administrator-pin", async (event, data) => {
+    if (!splashWindow || event.sender !== splashWindow.webContents) {
+        return { success: false, error: "Startup security request rejected." };
+    }
+    const status = await administratorSecurity.getStatus();
+    if (status.initialized) {
+        return { success: false, error: "Administrator Security is already initialized." };
+    }
+    return administratorSecurity.recoverPin(data || {});
+});
+
 ipcMain.handle("startup:ready", async event => {
 
     if (!splashWindow || event.sender !== splashWindow.webContents) {
         return { success: false };
+    }
+
+    const readinessDependencies = {
+        getAdministratorSecurityStatus: () => administratorSecurity.getStatus(),
+        getBusinessDayState
+    };
+    const readinessChecks = await Promise.all([
+        "database", "databaseIntegrity", "productInventory",
+        "administratorSecurity", "businessDay"
+    ].map(checkName => getStartupCheck(checkName, readinessDependencies)));
+    if (readinessChecks.some(check => check.critical && check.state === "failed")) {
+        return { success: false, error: "System readiness conditions are not satisfied." };
     }
 
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1646,6 +1715,68 @@ ipcMain.handle(
     }
 
 );
+
+ipcMain.handle("integrations:get-config", async () => {
+    const config = integrationConfig.getPublicConfig();
+    const latest = await new Promise((resolve, reject) => database.get(`
+        SELECT closed_at, email_status, dsr_sync_status, dsr_synced_at, dsr_sync_attempts
+        FROM day_closing_snapshots
+        WHERE close_status = 'CLOSED'
+        ORDER BY closed_at DESC LIMIT 1
+    `, [], (error, row) => error ? reject(error) : resolve(row || null)));
+    config.email.lastEmailBackup = latest ? {
+        at: latest.closed_at, status: latest.email_status
+    } : null;
+    config.dsr.lastSync = latest ? {
+        at: latest.dsr_synced_at || latest.closed_at,
+        status: latest.dsr_sync_status,
+        attempts: latest.dsr_sync_attempts
+    } : null;
+    return config;
+});
+ipcMain.handle("integrations:get-details", (event, kind, grant) => {
+    const purpose = kind === "email" ? "INTEGRATION_EMAIL_SETTINGS" :
+        kind === "dsr" ? "INTEGRATION_DSR_SETTINGS" : null;
+    if (!purpose) throw new Error("Unsupported integration configuration.");
+    requireIntegrationSession(grant, purpose);
+    return integrationConfig.getConfigurationDetails()[kind];
+});
+ipcMain.handle("integrations:save-email", async (event, data, grant) => {
+    requireIntegrationSession(grant, "INTEGRATION_EMAIL_SETTINGS");
+    const result = integrationConfig.saveEmail(data || {});
+    const activityWarning = await recordIntegrationActivity(logActivity, emailSettingsEvent(result));
+    return { ...result, activityWarning };
+});
+ipcMain.handle("integrations:save-dsr", async (event, data, grant) => {
+    requireIntegrationSession(grant, "INTEGRATION_DSR_SETTINGS");
+    const result = integrationConfig.saveDsr(data || {});
+    const activityWarning = await recordIntegrationActivity(logActivity, dsrSettingsEvent(result));
+    return { ...result, activityWarning };
+});
+ipcMain.handle("integrations:test-email", async (event, grant) => {
+    requireIntegrationSession(grant, "INTEGRATION_EMAIL_SETTINGS");
+    const result = await verifyEmailConnection();
+    integrationConfig.recordTest("email", result.success);
+    const activityWarning = await recordIntegrationActivity(logActivity, connectionEvent("email", result));
+    return { ...result, activityWarning };
+});
+ipcMain.handle("integrations:send-test-email", async (event, recipient, grant) => {
+    requireIntegrationSession(grant, "INTEGRATION_EMAIL_SETTINGS");
+    try {
+        const result = await sendTestEmail(String(recipient || ""));
+        if (!result.success) return result;
+        const activityWarning = await recordIntegrationActivity(logActivity, emailTestMessageEvent());
+        return { ...result, activityWarning };
+    }
+    catch (_) { return { success: false, error: "TEST EMAIL FAILED" }; }
+});
+ipcMain.handle("integrations:test-dsr", async (event, grant) => {
+    requireIntegrationSession(grant, "INTEGRATION_DSR_SETTINGS");
+    const result = await dsrSyncService.testConnection(app.getVersion());
+    integrationConfig.recordTest("dsr", result.success);
+    const activityWarning = await recordIntegrationActivity(logActivity, connectionEvent("dsr", result));
+    return { ...result, activityWarning };
+});
 
 ipcMain.handle(
 

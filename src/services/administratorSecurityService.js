@@ -23,6 +23,8 @@ const AUTHORIZATION_POLICY = Object.freeze({
     "ACTIVITY_EXPORT": AUTHORIZATION_LEVELS.ADMINISTRATOR,
     "ACTIVITY_ARCHIVE": AUTHORIZATION_LEVELS.ADMINISTRATOR,
     "DSR_SYNC_RETRY": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "INTEGRATION_EMAIL_SETTINGS": AUTHORIZATION_LEVELS.ADMINISTRATOR,
+    "INTEGRATION_DSR_SETTINGS": AUTHORIZATION_LEVELS.ADMINISTRATOR,
     "MANAGER_PIN_MANAGEMENT": AUTHORIZATION_LEVELS.ADMINISTRATOR
 });
 
@@ -53,6 +55,8 @@ const ADMIN_PIN_AUDIT_POLICY = Object.freeze({
     ACTIVITY_EXPORT: { classification: "BUSINESS_OPERATION", action: "ACTIVITY_LOG_EXPORTED" },
     ACTIVITY_ARCHIVE: { classification: "BUSINESS_OPERATION", action: "ACTIVITY_LOG_ARCHIVED" },
     DSR_SYNC_RETRY: { classification: "BUSINESS_OPERATION", action: "DSR_SYNC_RETRY" },
+    INTEGRATION_EMAIL_SETTINGS: { classification: "BUSINESS_OPERATION", action: "INTEGRATION_EMAIL_SETTINGS_UPDATED" },
+    INTEGRATION_DSR_SETTINGS: { classification: "BUSINESS_OPERATION", action: "INTEGRATION_DSR_SETTINGS_UPDATED" },
     MANAGER_PIN_MANAGEMENT: { classification: "BUSINESS_OPERATION", action: "MANAGER_PIN_CHANGED" }
 });
 
@@ -153,6 +157,13 @@ function createAdministratorSecurityService(database, options = {}) {
         const expectedLevel = AUTHORIZATION_POLICY[purpose];
         return Boolean(expectedLevel) && grant.purpose === purpose &&
             grant.level === expectedLevel && grant.expiresAt >= now();
+    }
+
+    function validateGrant(token, purpose) {
+        const grant = grants.get(String(token || ""));
+        const expectedLevel = AUTHORIZATION_POLICY[purpose];
+        return Boolean(expectedLevel && grant && grant.purpose === purpose &&
+            grant.level === expectedLevel && grant.expiresAt >= now());
     }
 
     function consumeGrants(requirements) {
@@ -332,7 +343,7 @@ function createAdministratorSecurityService(database, options = {}) {
 
     return {
         getStatus, authorizePin, changePin, recoverPin, configureManagerPin,
-        consumeGrant, consumeGrants,
+        consumeGrant, consumeGrants, validateGrant,
         clearGrants: () => grants.clear()
     };
 }

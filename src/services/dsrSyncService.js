@@ -71,6 +71,16 @@ function signPayload(payload, timestamp, secret) {
     return crypto.createHmac("sha256", secret).update(input, "utf8").digest("hex");
 }
 
+function signTestRequest(timestamp, secret) {
+    const normalizedTimestamp = String(timestamp || "");
+    if (!normalizedTimestamp || !Number.isFinite(Date.parse(normalizedTimestamp))) {
+        throw new Error("DSR request timestamp is invalid.");
+    }
+    if (!String(secret || "")) throw new Error("DSR sync secret is not configured.");
+    return crypto.createHmac("sha256", secret)
+        .update(`${normalizedTimestamp}\nTEST_CONNECTION`, "utf8").digest("hex");
+}
+
 function safeFailure(error) {
     if (error && error.code === "ECONNABORTED") return "DSR sync timed out.";
     if (error && error.response) return `DSR service returned HTTP ${Number(error.response.status) || "error"}.`;
@@ -116,15 +126,18 @@ function validateResponse(data, payload) {
 function createDsrSyncService(options = {}) {
     const httpClient = options.httpClient || axios;
     const now = options.now || (() => new Date());
-    const endpoint = options.endpoint === undefined
-        ? process.env.KLBS_DSR_WEB_APP_URL : options.endpoint;
-    const secret = options.secret === undefined
-        ? process.env.KLBS_DSR_SYNC_SECRET : options.secret;
+    const configProvider = options.configProvider || (() => ({
+        endpoint: options.endpoint === undefined ? process.env.KLBS_DSR_WEB_APP_URL : options.endpoint,
+        secret: options.secret === undefined ? process.env.KLBS_DSR_SYNC_SECRET : options.secret,
+        automaticSync: true
+    }));
     const timeout = options.timeout || 9000;
 
     async function sync(payload) {
         try {
+            const { endpoint, secret, automaticSync } = await configProvider();
             validatePayload(payload);
+            if (automaticSync === false) throw new Error("Automatic DSR sync is disabled.");
             if (!endpoint || !/^https:\/\//i.test(endpoint)) {
                 throw new Error("DSR HTTPS endpoint is not configured.");
             }
@@ -164,7 +177,34 @@ function createDsrSyncService(options = {}) {
             return { success: false, error: safeFailure(error) };
         }
     }
-    return { sync };
+    async function testConnection(appVersion) {
+        try {
+            const { endpoint, secret } = await configProvider();
+            if (!endpoint || !/^https:\/\//i.test(endpoint) || !secret) {
+                throw new Error("DSR configuration is incomplete.");
+            }
+            const timestamp = now().toISOString();
+            const response = await httpClient.post(endpoint, {
+                timestamp,
+                action: "TEST_CONNECTION",
+                appVersion: String(appVersion || ""),
+                signature: signTestRequest(timestamp, secret)
+            }, {
+                timeout, maxRedirects: 3, maxContentLength: 16 * 1024, maxBodyLength: 16 * 1024,
+                headers: { "Content-Type": "application/json" }, responseType: "json",
+                validateStatus: status => status >= 200 && status < 300
+            });
+            const data = response.data;
+            if (!data || data.success !== true || data.action !== "TEST_CONNECTION" || data.status !== "SUCCESS") {
+                throw new Error("DSR test returned an invalid response.");
+            }
+            return { success: true, action: "TEST_CONNECTION", status: "SUCCESS" };
+        }
+        catch (error) {
+            return { success: false, error: safeFailure(error), classification: classifyFailure(error) };
+        }
+    }
+    return { sync, testConnection };
 }
 
 module.exports = {
@@ -175,5 +215,5 @@ module.exports = {
     signPayload,
     validateResponse,
     createDsrSyncService,
-    classifyFailure
+    classifyFailure, signTestRequest
 };

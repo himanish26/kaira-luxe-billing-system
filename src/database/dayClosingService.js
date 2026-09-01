@@ -50,9 +50,12 @@ function createDayClosingService(options = {}) {
     const dsrSyncService = options.dsrSyncService || createDsrSyncService();
     const readDsrPayloadFn = options.readClosedDsrPayload || readClosedDsrPayload;
     const klbsVersion = String(options.klbsVersion || "").trim();
-    const closingEmail = options.closingEmail === undefined
-        ? process.env.DAY_CLOSING_EMAIL
-        : options.closingEmail;
+    const getEmailConfiguration = options.getEmailConfiguration || (() => ({
+        recipients: options.closingEmail === undefined
+            ? String(process.env.DAY_CLOSING_EMAIL || "").split(",").map(value => value.trim()).filter(Boolean)
+            : [options.closingEmail],
+        automaticEmailBackup: true
+    }));
     let closeInFlight = null;
 
     function run(sql, params = []) {
@@ -637,11 +640,15 @@ function createDayClosingService(options = {}) {
         let emailStatus = "FAILED";
         let emailWarning = null;
         try {
-            if (!closingEmail) {
+            const emailConfiguration = await getEmailConfiguration();
+            if (!emailConfiguration.automaticEmailBackup) {
+                throw new Error("Automatic email backup is disabled.");
+            }
+            if (!emailConfiguration.recipients || !emailConfiguration.recipients.length) {
                 throw new Error("Day Closing email recipient is not configured.");
             }
             await sendEmailFn({
-                to: closingEmail,
+                to: emailConfiguration.recipients,
                 subject: `KAIRA LUXE - Day Closing - ${formatBusinessDateDisplay(summary.businessDate)}`,
                 text: buildEmailText(summary),
                 attachments: [{

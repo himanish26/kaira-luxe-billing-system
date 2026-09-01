@@ -1472,8 +1472,7 @@ async function initializeSmtpSettings() {
                     process.env.SMTP_USER;
 
                 const smtpPassword =
-                    settings.smtp_password ||
-                    process.env.SMTP_PASSWORD;
+                    settings.smtp_password;
 
                 const smtpFrom =
                     settings.smtp_from ||

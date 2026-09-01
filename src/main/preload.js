@@ -287,6 +287,14 @@ emailTest: () =>
         "email:test"
     ),    
 
+getIntegrationConfig: () => ipcRenderer.invoke("integrations:get-config"),
+getIntegrationDetails: (kind, grant) => ipcRenderer.invoke("integrations:get-details", kind, grant),
+saveEmailIntegration: (data, grant) => ipcRenderer.invoke("integrations:save-email", data, grant),
+saveDsrIntegration: (data, grant) => ipcRenderer.invoke("integrations:save-dsr", data, grant),
+testEmailIntegration: grant => ipcRenderer.invoke("integrations:test-email", grant),
+sendIntegrationTestEmail: (recipient, grant) => ipcRenderer.invoke("integrations:send-test-email", recipient, grant),
+testDsrIntegration: grant => ipcRenderer.invoke("integrations:test-dsr", grant),
+
 getPrinters: () =>
     ipcRenderer.invoke(
         "printer:getAll"

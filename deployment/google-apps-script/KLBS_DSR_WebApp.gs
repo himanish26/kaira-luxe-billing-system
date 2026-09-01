@@ -1,4 +1,6 @@
 var KLBS_DSR_TAB = 'KLBS_Daily_Data';
+var KLBS_TEST_TAB = 'KLBS_Test';
+var KLBS_TEST_HEADERS = ['Timestamp', 'Source', 'Action', 'Result', 'Message', 'App Version'];
 var KLBS_DSR_HEADERS = [
   'Contract Version', 'Business Date', 'Closing ID', 'Close Sequence',
   'Snapshot Version', 'Closed At', 'Bills Generated', 'Qty Sold',
@@ -128,6 +130,44 @@ function verifyEnvelope_(envelope) {
   }
 }
 
+function verifyTestEnvelope_(envelope) {
+  if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope) ||
+      Object.keys(envelope).sort().join(',') !== 'action,appVersion,signature,timestamp' ||
+      envelope.action !== 'TEST_CONNECTION') {
+    throw new Error('Invalid test request envelope.');
+  }
+  var requestTime = new Date(envelope.timestamp).getTime();
+  if (!isFinite(requestTime) || Math.abs(Date.now() - requestTime) > 5 * 60 * 1000) {
+    throw new Error('Request timestamp is outside the replay window.');
+  }
+  var secret = PropertiesService.getScriptProperties().getProperty('KLBS_DSR_SYNC_SECRET');
+  if (!secret) throw new Error('Server secret is not configured.');
+  var expected = hex_(Utilities.computeHmacSha256Signature(
+    envelope.timestamp + '\nTEST_CONNECTION', secret));
+  if (!constantTimeEqual_(expected, envelope.signature)) {
+    throw new Error('Request authentication failed.');
+  }
+}
+
+function appendConnectionTest_(spreadsheet, envelope) {
+  var sheet = spreadsheet.getSheetByName(KLBS_TEST_TAB);
+  if (!sheet) sheet = spreadsheet.insertSheet(KLBS_TEST_TAB);
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, KLBS_TEST_HEADERS.length).setValues([KLBS_TEST_HEADERS]);
+    sheet.setFrozenRows(1);
+  } else {
+    var headers = sheet.getRange(1, 1, 1, KLBS_TEST_HEADERS.length).getValues()[0];
+    if (JSON.stringify(headers) !== JSON.stringify(KLBS_TEST_HEADERS)) {
+      throw new Error('KLBS_Test header does not match the contract.');
+    }
+  }
+  sheet.appendRow([
+    Utilities.formatDate(new Date(), 'Asia/Kolkata', 'dd-MMM-yyyy hh:mm:ss a'),
+    'KLBS', 'TEST_CONNECTION', 'SUCCESS', 'DSR connection successful',
+    String(envelope.appVersion || '')
+  ]);
+}
+
 function verifyHeaders_(sheet) {
   if (sheet.getLastColumn() < KLBS_DSR_HEADERS.length || sheet.getLastRow() < 1) {
     throw new Error('KLBS_Daily_Data header is not initialized.');
@@ -160,6 +200,20 @@ function doPost(event) {
       throw new Error('JSON POST is required.');
     }
     var envelope = JSON.parse(event.postData.contents);
+    if (envelope && envelope.action === 'TEST_CONNECTION') {
+      verifyTestEnvelope_(envelope);
+      var testSpreadsheetId = PropertiesService.getScriptProperties()
+        .getProperty('KLBS_SPREADSHEET_ID');
+      if (!testSpreadsheetId) throw new Error('Spreadsheet ID is not configured.');
+      var testLock = LockService.getScriptLock();
+      testLock.waitLock(10000);
+      try {
+        appendConnectionTest_(SpreadsheetApp.openById(testSpreadsheetId), envelope);
+      } finally {
+        testLock.releaseLock();
+      }
+      return jsonResponse_({ success: true, action: 'TEST_CONNECTION', status: 'SUCCESS' });
+    }
     verifyEnvelope_(envelope);
     var payload = envelope.payload;
     var spreadsheetId = PropertiesService.getScriptProperties()

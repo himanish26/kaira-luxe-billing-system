@@ -105,7 +105,8 @@ async function getProductInventoryStatus() {
             GROUP BY p.id
             LIMIT 1
         `);
-        return { healthy: true };
+        const countRows = await all("SELECT COUNT(*) AS product_count FROM products");
+        return { healthy: true, productCount: Number(countRows[0].product_count) };
     }
     catch (error) {
         return { healthy: false };
@@ -142,14 +143,19 @@ async function getStartupCheck(checkName, dependencies = {}) {
         }
         case "productInventory": {
             const status = await getProductInventoryStatus();
-            return status.healthy
-                ? result("ready", "Ready")
-                : result("failed", "Product or inventory layer unavailable");
+            if (!status.healthy) {
+                return result("failed", "Product or inventory layer unavailable");
+            }
+            return status.productCount === 0
+                ? result("warning", "No products found - import products from Inventory to start billing",
+                    { productCount: 0 })
+                : result("ready", `Ready - ${status.productCount} products`,
+                    { productCount: status.productCount });
         }
         case "administratorSecurity": {
             const status = await dependencies.getAdministratorSecurityStatus();
             if (!status.initialized) {
-                return result("failed", "Administrator Security not initialized");
+                return result("failed", "Setup required", { action: "initializeAdministratorPin" });
             }
             if (!status.masterRecoveryProvisioned) {
                 return result("failed", "Administrator recovery not provisioned");

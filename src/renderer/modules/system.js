@@ -194,7 +194,7 @@ if (diagnosticsCard) {
 
 diagnosticsCard.addEventListener(
     "click",
-    () => showComingSoon("System Health")
+    showSystemHealthPage
 );
 
 }
