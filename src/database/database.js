@@ -18,8 +18,6 @@ const technicalLogger = require("../services/technicalLogger");
 // Keeps Electron and DB Browser pointed at the same billing.db
 const dbPath = path.join(__dirname, "..", "..", "billing.db");
 
-console.log("Database Path:", dbPath);
-
 let databaseReadyResolve;
 
 let databaseReadyReject;

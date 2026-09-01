@@ -373,16 +373,6 @@ async function loadPrinters() {
 
         ]);
 
-        console.log(
-            "Installed Printers:",
-            result
-        );
-
-        console.log(
-            "Saved Printer Setting:",
-            settings.default_printer
-        );
-
         if (!result.success) {
 
             printerStatus.textContent =

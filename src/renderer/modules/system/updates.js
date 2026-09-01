@@ -95,8 +95,6 @@ async function showUpdatesPage() {
             const result =
                 await window.electronAPI.checkForUpdates();
 
-            console.log(result);
-
             if (!result.success) {
 
                 await window.electronAPI.showMessageBox({
@@ -302,11 +300,6 @@ setLockProgress(25);
 
 setLockMessage("Downloading latest version...");
 
-console.log("===== UPDATE INFO =====");
-console.log(info);
-console.log("SHA256 =", info.sha256);
-console.log("Download Result =", downloadResult);
-
 const installGrant =
     await requestAdminAuthorization("INSTALL_UPDATE");
 
@@ -322,8 +315,6 @@ const installResult =
         info.sha256,
         installGrant
     );
-
-console.log("INSTALL RESULT =", installResult);
 
 if (!installResult.success) {
 

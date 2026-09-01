@@ -394,8 +394,6 @@ async function startReportExport() {
             const result =
                 await window.electronAPI.exportReport(request, grant);
 
-            console.log(result);
-
             if (result.success) {
 
                 alert("✅ Report exported successfully.");

@@ -16,11 +16,6 @@ function getInventoryProductByBarcode(barcode) {
         const cleanBarcode =
             String(barcode).trim();
 
-        console.log(
-            "INVENTORY LOOKUP BARCODE:",
-            cleanBarcode
-        );
-
         db.get(
             `
             SELECT
@@ -43,11 +38,6 @@ function getInventoryProductByBarcode(barcode) {
 
                     return;
                 }
-
-                console.log(
-                    "INVENTORY PRODUCT FOUND:",
-                    product
-                );
 
                 if (!product) {
 

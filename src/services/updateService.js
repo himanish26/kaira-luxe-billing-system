@@ -110,17 +110,6 @@ async function checkForUpdates() {
         const latest =
             response.data;
 
-            console.log("LATEST JSON FROM GITHUB");
-            console.log("Response Keys:");
-
-console.log(Object.keys(latest));
-
-console.log("Raw Response:");
-
-console.dir(latest, { depth: null });
-
-console.log("SHA256 =", latest.sha256);
-
         const currentVersion =
             packageJson.version;
 

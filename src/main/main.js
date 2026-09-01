@@ -2269,9 +2269,6 @@ ipcMain.handle(
             const printers =
                 await mainWindow.webContents.getPrintersAsync();
 
-                console.log("===== INSTALLED PRINTERS =====");
-                console.log(printers);
-
             return {
 
                 success: true,
@@ -2414,10 +2411,6 @@ ipcMain.handle(
         try {
 
             requireSecurityGrant(grant, "INSTALL_UPDATE");
-
-            console.log("Installer Path:", installerPath);
-
-console.log("Expected Hash:", expectedHash);
 
 const checksumValid =
 

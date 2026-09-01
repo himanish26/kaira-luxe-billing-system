@@ -44,23 +44,6 @@ window.refreshNewBillBusinessDayState = refreshNewBillBusinessDayState;
    SCREEN REFERENCES
 ===================================== */
 
-console.log(document.getElementById("viewBillScreen"));
-console.log(document.getElementById("viewBillNo"));
-console.log(document.getElementById("viewBillDate"));
-console.log(document.getElementById("viewBillTime"));
-console.log(document.getElementById("viewCustomer"));
-console.log(document.getElementById("viewMobile"));
-console.log(document.getElementById("viewGross"));
-console.log(document.getElementById("viewDiscount"));
-console.log(document.getElementById("viewNet"));
-console.log(document.getElementById("viewItems"));
-console.log(document.getElementById("viewQty"));
-console.log(document.getElementById("viewTaxable"));
-console.log(document.getElementById("viewCash"));
-console.log(document.getElementById("viewUPI"));
-console.log(document.getElementById("viewCard"));
-console.log(document.getElementById("viewBillItems"));
-
 function formatCurrency(value) {
 
     return new Intl.NumberFormat("en-IN", {
@@ -399,8 +382,6 @@ const deviceCard =
 
 const systemCard =
     document.getElementById("systemCard");
-
-    console.log(systemCard);
 
 const aboutCard =
     document.getElementById("aboutCard");
@@ -831,13 +812,6 @@ document.getElementById("storeMessageValue");
 receiptMessageInput =
 document.getElementById("receiptMessageInput");
 
-console.log({
-    editReceiptBtn,
-    receiptEditor,
-    receiptMessage,
-    receiptMessageInput
-});
-
 saveReceiptBtn =
 document.getElementById("saveReceiptBtn");
 
@@ -904,8 +878,6 @@ unlockBtn.addEventListener("click", () => {
     requireAdminAuthorization("RECEIPT_SETTINGS", grant => {
 
         receiptSettingsGrant = grant;
-
-        console.log("Callback Executed");
 
         unlockBtn.style.display = "none";
 
@@ -1025,8 +997,6 @@ systemCard.addEventListener(
     "click",
     showSystemPage
 );
-
-console.log("System listener attached");
 
     const settingsPage =
     document.getElementById("settingsPage");
@@ -2344,8 +2314,6 @@ gst_amount:
 
     };
 
-    console.log(billData);
-
     const result =
         await window
             .electronAPI
@@ -3495,11 +3463,6 @@ if (!result.bill) {
 
 }
 
-
-                console.log(
-                    "RETURN BILL LOADED:",
-                    result
-                );
 
                 document.getElementById(
                     "customerName"
@@ -6315,8 +6278,6 @@ async function viewBill(billNo){
 
 
 
-    console.log("VIEW FUNCTION");
-
     const details =
         await window.electronAPI.getBillDetails(billNo);
 
@@ -6324,10 +6285,6 @@ async function viewBill(billNo){
     await window.electronAPI.getPaymentCorrections(
         billNo
     );
-
-        console.log(corrections);
-
-        console.log(details);
 
         currentViewedBill = {
 
@@ -6630,9 +6587,6 @@ async function reprintBill(billNo){
 
     };
 
-    console.log("REPRINT DATA");
-    console.log(billData);
-
     const result =
         await window.electronAPI.printBill(billData);
 
@@ -6848,18 +6802,6 @@ const cancelPaymentCorrectionBtn =
 
 let paymentCorrectionAuthorizationGrant = null;
 
-    console.log({
-    paymentCorrectionModal,
-    paymentBillNo,
-    paymentCash,
-    paymentUpi,
-    paymentCard,
-    paymentRemarks,
-    paymentTotal,
-    savePaymentCorrectionBtn,
-    cancelPaymentCorrectionBtn
-});
-
 correctPaymentBtn.onclick = () => {
 
     if (!currentViewedBill){
@@ -6871,14 +6813,6 @@ correctPaymentBtn.onclick = () => {
     requireAdminAuthorization("PAYMENT_CORRECTION", grant => {
 
         paymentCorrectionAuthorizationGrant = grant;
-
-        console.log("Modal:", paymentCorrectionModal);
-        console.log("Bill No:", paymentBillNo);
-        console.log("Cash:", paymentCash);
-        console.log("UPI:", paymentUpi);
-        console.log("Card:", paymentCard);
-        console.log("Remarks:", paymentRemarks);
-        console.log("Total:", paymentTotal);
 
         paymentBillNo.textContent =
             currentViewedBill.bill_no;

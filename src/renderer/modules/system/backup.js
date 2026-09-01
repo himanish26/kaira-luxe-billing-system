@@ -184,12 +184,8 @@ async function showBackupPage() {
         .addEventListener("click", () => {
             requireAdminAuthorization("BACKUP_LOCATION", async grant => {
 
-            console.log("===== Backup Location Clicked =====");
-
             const selectedFolder =
                 await window.electronAPI.selectBackupFolder();
-
-            console.log("Selected Folder:", selectedFolder);
 
             if (!selectedFolder) {
 
@@ -215,8 +211,6 @@ const lastUpdated =
                     backup_location: selectedFolder,
                     last_updated: lastUpdated
                 }, grant);
-
-            console.log("Save Result:", saved);
 
             if (saved) {
 
