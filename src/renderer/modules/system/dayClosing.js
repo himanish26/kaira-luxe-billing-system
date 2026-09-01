@@ -586,6 +586,7 @@ async function startDayClosing() {
                 ? warnings.join("\n")
                 : "Mandatory backup completed and verified. No further bills can be generated today."
         });
+        await window.refreshNewBillBusinessDayState?.();
         await showDayClosingPage();
     }
     catch (error) {
@@ -824,6 +825,8 @@ async function reopenBusinessDay(options = {}) {
                 ? `The snapshot was preserved, but Activity Log failed: ${result.activityWarning}`
                 : "The prior snapshot was preserved. Billing is available and the next close will create a new snapshot."
         });
+
+        await window.refreshNewBillBusinessDayState?.();
 
         if (typeof options.afterSuccess === "function") {
             await options.afterSuccess(result);

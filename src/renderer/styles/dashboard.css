@@ -44,6 +44,17 @@
 
 }
 
+.dashboard-grid button:disabled,
+.dashboard-grid button:disabled:hover {
+    background: #f1f1f1;
+    border-color: #b8b8b8;
+    color: #777;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.75;
+}
+
 
 /* ==========================
    DASHBOARD HEADER

@@ -438,7 +438,7 @@ case "paste": {
 
 }
 
-function openNewBill() {
+async function openNewBill() {
 
     if (
         document.getElementById("paymentScreen")?.style.display === "block"
@@ -452,7 +452,21 @@ function openNewBill() {
 
     }
 
-    document.getElementById("newBillBtn")?.click();
+    const newBillButton =
+        document.getElementById("newBillBtn");
+
+    if (newBillButton?.disabled) {
+        const allowed =
+            await window.guardNewBillBusinessDay?.();
+
+        if (!allowed) {
+            return;
+        }
+
+        await window.refreshNewBillBusinessDayState?.();
+    }
+
+    newBillButton?.click();
 
 }
 

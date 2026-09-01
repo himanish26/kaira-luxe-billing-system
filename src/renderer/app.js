@@ -16,6 +16,30 @@ function getKLBSBusinessDate(value = new Date()) {
     );
 }
 
+async function refreshNewBillBusinessDayState() {
+    const button = document.getElementById("newBillBtn");
+    if (!button) return;
+
+    try {
+        const status = await window.electronAPI.getBusinessDayStatus();
+        const unavailable = Boolean(status?.closed || status?.closing);
+
+        button.disabled = unavailable;
+        button.setAttribute("aria-disabled", String(unavailable));
+        button.title = unavailable
+            ? "Business Day must be open before creating a new bill."
+            : "Create a new bill.";
+    }
+    catch (error) {
+        console.error("New Bill Visual State Refresh Error:", error);
+        button.disabled = true;
+        button.setAttribute("aria-disabled", "true");
+        button.title = "Business Day status is unavailable. New billing is temporarily blocked.";
+    }
+}
+
+window.refreshNewBillBusinessDayState = refreshNewBillBusinessDayState;
+
 /* =====================================
    SCREEN REFERENCES
 ===================================== */
@@ -178,6 +202,10 @@ function formatCurrency(value) {
             err
         );
 
+    }
+
+    finally {
+        await refreshNewBillBusinessDayState();
     }
 
 
@@ -1472,6 +1500,8 @@ async function guardNewBillBusinessDay() {
     }
 
 }
+
+window.guardNewBillBusinessDay = guardNewBillBusinessDay;
 
 /* =====================================
    NEW BILL BUTTON
