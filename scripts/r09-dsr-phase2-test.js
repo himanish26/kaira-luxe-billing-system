@@ -1,5 +1,7 @@
 const assert = require("assert");
 const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 const { migrateDayClosingSnapshots } = require("../src/database/dayClosingMigration");
 const { readClosedDsrPayload } = require("../src/database/dayClosingDsrService");
@@ -9,8 +11,8 @@ const {
 const { createDayClosingService } = require("../src/database/dayClosingService");
 const { AUTHORIZATION_POLICY } = require("../src/services/administratorSecurityService");
 
-const dbPath = "/private/tmp/klbs_r09_dsr_phase2_test.db";
-try { fs.unlinkSync(dbPath); } catch (_) {}
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-r09-dsr-phase2-"));
+const dbPath = path.join(tempDir, "test.db");
 const db = new sqlite3.Database(dbPath);
 const run = (sql, params = []) => new Promise((resolve, reject) =>
     db.run(sql, params, function(error) {
@@ -170,7 +172,23 @@ async function main() {
     console.log(`Disposable database: ${dbPath}`);
 }
 
-main().then(() => db.close()).catch(error => {
+function closeDatabaseAndCleanup(exitCode) {
+    db.close(error => {
+        if (error) {
+            console.error(error);
+            exitCode = 1;
+        }
+        try {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+            console.error(cleanupError);
+            exitCode = 1;
+        }
+        if (exitCode !== 0) process.exit(exitCode);
+    });
+}
+
+main().then(() => closeDatabaseAndCleanup(0)).catch(error => {
     console.error(error);
-    db.close(() => process.exit(1));
+    closeDatabaseAndCleanup(1);
 });

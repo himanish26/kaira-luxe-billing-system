@@ -235,8 +235,6 @@ async function importProductMaster(grant){
     const result =
         await window.electronAPI.importProducts(filePath, grant);
 
-    console.log(result);
-
     if(result.success){
 
     alert(

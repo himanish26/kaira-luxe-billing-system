@@ -5,5 +5,6 @@ contextBridge.exposeInMainWorld("startupAPI", {
     runCheck: checkName => ipcRenderer.invoke("startup:run-check", checkName),
     reopenClosedDay: data => ipcRenderer.invoke("startup:reopen-closed-day", data),
     ready: () => ipcRenderer.invoke("startup:ready"),
-    exit: () => ipcRenderer.invoke("startup:exit")
+    exit: () => ipcRenderer.invoke("startup:exit"),
+    onSplashShown: callback => ipcRenderer.once("startup:splash-shown", callback),
 });

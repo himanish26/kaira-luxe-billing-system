@@ -989,12 +989,10 @@ footer span {
 ========================================================= */
 
 @media (prefers-reduced-motion: reduce) {
-
     .check,
     .check[data-state="checking"] i,
     .final-status,
     .final-status.checking i,
-    .live-indicator::before,
     .cursor,
     .diagnostics::after {
         animation: none;

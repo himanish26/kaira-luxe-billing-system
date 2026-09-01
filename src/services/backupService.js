@@ -10,6 +10,10 @@ const archiver = require("archiver");
 const AdmZip = require("adm-zip");
 const sqlite3 = require("sqlite3").verbose();
 const technicalLogger = require("./technicalLogger");
+const {
+    getAuthoritativeDatabasePath,
+    assertAuthoritativeDatabaseConnection
+} = require("../database/databasePath");
 const DEFAULT_BACKUP_FOLDER = path.join(
     os.homedir(),
     "Documents",
@@ -48,7 +52,9 @@ function ensureDirectory(folderPath) {
 
 }
 
-function createSQLiteSnapshot(snapshotPath) {
+async function createSQLiteSnapshot(snapshotPath) {
+
+    await assertAuthoritativeDatabaseConnection(database);
 
     return new Promise((resolve, reject) => {
         let backup;
@@ -89,6 +95,45 @@ function createSQLiteSnapshot(snapshotPath) {
         });
     });
 
+}
+
+function validateWritableSQLiteDatabase(databasePath) {
+    return new Promise((resolve, reject) => {
+        const writableDb = new sqlite3.Database(
+            databasePath,
+            sqlite3.OPEN_READWRITE,
+            openError => {
+                if (openError) {
+                    reject(openError);
+                    return;
+                }
+                writableDb.run("BEGIN IMMEDIATE TRANSACTION", beginError => {
+                    if (beginError) {
+                        writableDb.close(() => reject(beginError));
+                        return;
+                    }
+                    writableDb.run("ROLLBACK", rollbackError => {
+                        writableDb.close(closeError => {
+                            if (rollbackError || closeError) {
+                                reject(rollbackError || closeError);
+                                return;
+                            }
+                            resolve();
+                        });
+                    });
+                });
+            }
+        );
+    });
+}
+
+function forceControlledRestartAfterRestoreFailure() {
+    try {
+        app.relaunch({ args: [...process.argv.slice(1)] });
+    }
+    finally {
+        app.exit(1);
+    }
 }
 
 function validateSQLiteDatabase(databasePath) {
@@ -641,6 +686,7 @@ async function restoreBackup(zipPath) {
 
     let liveDatabase = null;
     let backupDatabase = null;
+    let databaseClosed = false;
 
     try {
 
@@ -723,20 +769,22 @@ const extractedDatabase = path.join(
         extractedDatabase
     );
 
-    liveDatabase = path.join(
-    app.getPath("userData"),
-    "billing.db"
-);
+    liveDatabase = getAuthoritativeDatabasePath();
+    backupDatabase = `${liveDatabase}.restore-recovery`;
 
-backupDatabase = path.join(
-    app.getPath("userData"),
-    "billing.db.bak"
-);
+    await assertAuthoritativeDatabaseConnection(database);
+
+    if (fs.existsSync(backupDatabase)) {
+        throw new Error(
+            "A prior database restore recovery file exists. Resolve it before restoring again."
+        );
+    }
 
 // Close the active SQLite connection
 // before replacing the live database file.
 
 await closeDatabase();
+databaseClosed = true;
 
 console.log(
     "STEP 0 : Database connection closed."
@@ -779,6 +827,8 @@ fs.chmodSync(
     liveDatabase,
     0o644
 );
+
+await validateWritableSQLiteDatabase(liveDatabase);
 
 console.log(
     "STEP 1B : Database permissions restored."
@@ -834,14 +884,7 @@ if (!fs.existsSync(liveDatabase)) {
 
     }
 
-    return {
-
-        success: false,
-
-        message:
-            "Database restore verification failed."
-
-    };
+    throw new Error("Database restore verification failed.");
 
 }
 
@@ -909,6 +952,7 @@ return {
         { operation: "RESTORE_BACKUP" }
     );
 
+    let originalRecovered = false;
     if (
         liveDatabase &&
         backupDatabase &&
@@ -922,6 +966,7 @@ return {
                 backupDatabase,
                 liveDatabase
             );
+            originalRecovered = true;
         }
         catch (restoreOriginalError) {
             technicalLogger.fatal(
@@ -935,6 +980,23 @@ return {
                 restoreOriginalError && restoreOriginalError.code || "Unknown error"
             );
         }
+    }
+
+    if (databaseClosed) {
+        technicalLogger.fatal(
+            "RESTORE",
+            originalRecovered
+                ? "Restore failed after database close; original database recovered and restart required"
+                : "Restore failed after database close; controlled restart required",
+            error,
+            { operation: "RESTORE_BACKUP" }
+        );
+        forceControlledRestartAfterRestoreFailure();
+        return {
+            success: false,
+            restartRequired: true,
+            message: "Database restore failed after the live database was closed. KLBS is restarting."
+        };
     }
 
     try {
@@ -982,6 +1044,10 @@ module.exports = {
 
     validateBackup,
 
-    restoreBackup
+    restoreBackup,
+
+    validateSQLiteDatabase,
+
+    validateWritableSQLiteDatabase
 
 };

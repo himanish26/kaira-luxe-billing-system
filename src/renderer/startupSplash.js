@@ -76,7 +76,12 @@ function randomBinary(length) {
 
 function updateTelemetry() {
     document.getElementById("telemetryLine").textContent =
-        `SYS  ${randomBinary(8)} ${randomBinary(8)} · IDX ${randomHex(4)}:${randomHex(4)} · BUS ${randomHex(4)}`;
+        `SYS ${randomBinary(8)} ${randomBinary(8)} · ` +
+        `IDX ${randomHex(4)}:${randomHex(4)}:${randomHex(4)} · ` +
+        `BUS ${randomHex(4)} · ` +
+        `MEM ${randomHex(4)} · ` +
+        `IO ${randomHex(2)}:${randomHex(2)} · ` +
+        `DB ${randomHex(4)}`;
 }
 
 function startPresentationMotion() {
@@ -88,13 +93,13 @@ function startPresentationMotion() {
             .forEach(status => { status.textContent = text; });
     }, reducedMotion ? 900 : 220);
 
-    updateTelemetry();
-if (!reducedMotion) {
-    telemetryTimer = setInterval(
-        updateTelemetry,
-        180
-    );
-}
+updateTelemetry();
+
+telemetryTimer = setInterval(
+    updateTelemetry,
+    120
+);
+
 }
 
 function stopPresentationMotion() {
@@ -168,13 +173,15 @@ async function runChecks() {
     advancePresentation();
     await presentationDone;
 
-    checksRunning = false;
-    stopPresentationMotion();
-    const failed = results.some(result => result.critical && result.state === "failed");
+checksRunning = false;
+
+const failed = results.some(result => result.critical && result.state === "failed");
     const finalStatus = document.getElementById("finalStatus");
 
-    if (failed) {
-        setTerminal([
+if (failed) {
+    stopPresentationMotion();
+
+    setTerminal([
             "CRITICAL READINESS CONDITION DETECTED",
             "OPERATIONAL DASHBOARD REMAINS ISOLATED",
             "OPERATOR RECOVERY REQUIRED"
@@ -196,7 +203,9 @@ async function runChecks() {
     ]);
     finalStatus.className = "final-status ready";
     finalStatus.querySelector("span").textContent = "SYSTEM READY";
-    setTimeout(() => window.startupAPI.ready(), 1200);
+    setTimeout(() => {
+    window.startupAPI.ready();
+}, 1200);
 }
 
 document.getElementById("retryBtn").addEventListener("click", runChecks);
@@ -239,4 +248,6 @@ window.addEventListener("beforeunload", () => {
     stopPresentationQueue();
 });
 
-runChecks();
+window.startupAPI.onSplashShown(() => {
+    runChecks();
+});

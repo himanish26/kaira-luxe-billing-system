@@ -573,7 +573,7 @@ async function startDayClosing() {
             warnings.push(`Activity Log failed: ${result.activityWarning}`);
         }
         if (result.dsrSyncStatus === "FAILED" || result.dsrSyncWarning) {
-            warnings.push(`DSR sync pending: ${result.dsrSyncWarning || "Retry is required."}`);
+            warnings.push("Daily Sales Report sync is pending. It can be synced later.");
         }
 
         await window.electronAPI.showMessageBox({

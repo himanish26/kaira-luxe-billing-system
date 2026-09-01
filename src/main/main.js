@@ -1,5 +1,3 @@
-require("dotenv").config();
-
 const {
 
     app,
@@ -11,6 +9,40 @@ const {
     dialog,
 
 } = require("electron");
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+    app.quit();
+}
+else {
+
+let mainWindow;
+let splashWindow = null;
+let operationalWindowReady = false;
+
+app.on("second-instance", () => {
+    if (
+        splashWindow &&
+        !splashWindow.isDestroyed() &&
+        splashWindow.isVisible()
+    ) {
+        splashWindow.focus();
+        return;
+    }
+
+    if (
+        operationalWindowReady &&
+        mainWindow &&
+        !mainWindow.isDestroyed()
+    ) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        if (!mainWindow.isVisible()) mainWindow.show();
+        mainWindow.focus();
+    }
+});
+
+require("dotenv").config();
 
 const path = require("path");
 const fs = require("fs");
@@ -290,8 +322,6 @@ const {
     logDsrSyncFailed
 });
 
-let mainWindow;
-let splashWindow = null;
 let splashShownAt = 0;
 
 let isAppQuitting = false;
@@ -444,6 +474,10 @@ function createSplashWindow() {
     splashWindow.once("ready-to-show", () => {
     splashShownAt = Date.now();
     splashWindow.show();
+
+    splashWindow.webContents.send(
+        "startup:splash-shown"
+    );
 });
     splashWindow.on("closed", () => { splashWindow = null; });
 }
@@ -676,7 +710,7 @@ ipcMain.handle("startup:ready", async event => {
         await dashboardReady;
 
 /*
- * Keep the splash visible for a minimum of 3 seconds
+ * Keep the splash visible for a minimum of 8 seconds
  * from the moment it was actually shown.
  *
  * If Dashboard initialization itself takes longer than
@@ -706,6 +740,7 @@ if (remainingSplashTime > 0) {
  * Only now reveal KLBS.
  */
 
+operationalWindowReady = true;
 mainWindow.maximize();
 mainWindow.show();
 mainWindow.focus();
@@ -2845,3 +2880,5 @@ ipcMain.handle("day-closing:retry-dsr-sync", async (event, grant, snapshotId) =>
         return { success: false, error: error.message };
     }
 });
+
+}

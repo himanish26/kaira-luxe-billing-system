@@ -1,6 +1,10 @@
 const path = require("path");
+const fs = require("fs");
 const sqlite3 = require("sqlite3").verbose();
-const { app } = require("electron");
+const {
+    getAuthoritativeDatabasePath,
+    assertAuthoritativeDatabaseConnection
+} = require("./databasePath");
 const {
     hashCredential,
     isCredentialRecord
@@ -14,9 +18,11 @@ const {
 const { migrateManagerSecurity } = require("./managerSecurityMigration");
 const technicalLogger = require("../services/technicalLogger");
 
-// Development database path
-// Keeps Electron and DB Browser pointed at the same billing.db
-const dbPath = path.join(__dirname, "..", "..", "billing.db");
+const dbPath = getAuthoritativeDatabasePath();
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+if (fs.existsSync(dbPath) && fs.statSync(dbPath).isDirectory()) {
+    throw new Error("The authoritative KLBS database path identifies a directory.");
+}
 
 let databaseReadyResolve;
 
@@ -27,7 +33,7 @@ const databaseReady = new Promise((resolve, reject) => {
     databaseReadyReject = reject;
 });
 
-const db = new sqlite3.Database(dbPath, (err) => {
+const db = new sqlite3.Database(dbPath, async (err) => {
     if (err) {
         technicalLogger.fatal("DATABASE", "SQLite database connection failed", err, {
             code: err.code || null
@@ -36,6 +42,19 @@ const db = new sqlite3.Database(dbPath, (err) => {
         databaseReadyReject(err);
     } else {
         console.log('Database Connected Successfully');
+
+        try {
+            await assertAuthoritativeDatabaseConnection(db);
+        }
+        catch (identityError) {
+            technicalLogger.fatal(
+                "DATABASE",
+                "SQLite database identity verification failed",
+                identityError
+            );
+            databaseReadyReject(identityError);
+            return;
+        }
 
         db.run(
             "PRAGMA foreign_keys = ON",
@@ -2956,3 +2975,4 @@ function closeDatabase() {
 module.exports = db;
 module.exports.databaseReady = databaseReady;
 module.exports.closeDatabase = closeDatabase;
+module.exports.databasePath = dbPath;
