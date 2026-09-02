@@ -173,6 +173,9 @@ function importProducts(filePath) {
             let updated = 0;
             let skipped = 0;
 
+            let openingTransactionsCreated = 0;
+            let openingQuantityCreated = 0;
+
             const now =
                 new Date().toISOString();
 
@@ -303,12 +306,14 @@ function importProducts(filePath) {
                                     }
 
 
-                                    /* ===========================
-                                       COMMIT EVERYTHING
-                                    =========================== */
+                                    function commitImport() {
 
-                                    db.run(
-                                        "COMMIT",
+                                        /* =======================
+                                           COMMIT EVERYTHING
+                                        ======================= */
+
+                                        db.run(
+                                            "COMMIT",
 
                                         (
                                             commitError
@@ -387,6 +392,64 @@ function importProducts(filePath) {
 
                                                     }
                                                 );
+
+                                        }
+                                        );
+
+                                    }
+
+
+                                    if (
+                                        openingTransactionsCreated === 0
+                                    ) {
+
+                                        commitImport();
+                                        return;
+
+                                    }
+
+
+                                    db.run(
+                                        `
+                                        INSERT INTO inventory_initialization
+                                        (
+                                            initialization_type,
+                                            status,
+                                            initialized_at,
+                                            initialized_by,
+                                            remarks
+                                        )
+                                        VALUES
+                                        (
+                                            'OPENING_STOCK',
+                                            'COMPLETED',
+                                            ?,
+                                            'Administrator',
+                                            ?
+                                        )
+                                        ON CONFLICT(initialization_type)
+                                        DO UPDATE SET
+                                            status = excluded.status,
+                                            initialized_at = excluded.initialized_at,
+                                            initialized_by = excluded.initialized_by,
+                                            remarks = excluded.remarks
+                                        `,
+                                        [
+                                            now,
+                                            `${openingTransactionsCreated} products / ${openingQuantityCreated} units from Product Master import`
+                                        ],
+                                        (initializationError) => {
+
+                                            if (initializationError) {
+
+                                                failImport(
+                                                    initializationError
+                                                );
+                                                return;
+
+                                            }
+
+                                            commitImport();
 
                                         }
                                     );
@@ -713,6 +776,12 @@ function importProducts(filePath) {
                                                                 return;
 
                                                             }
+
+
+                                                            openingTransactionsCreated++;
+
+                                                            openingQuantityCreated +=
+                                                                safeOpeningStock;
 
 
                                                             finishNewProduct();

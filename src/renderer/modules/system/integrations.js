@@ -32,6 +32,14 @@ async function enterIntegration(kind) {
     try { const details = await window.electronAPI.getIntegrationDetails(kind, grant); kind === "email" ? showEmailIntegrationForm(details, grant) : showDsrIntegrationForm(details, grant); }
     catch (error) { alert(error.message); }
 }
+async function requestFreshIntegrationGrant(kind) {
+    const purpose =
+        kind === "email"
+            ? "INTEGRATION_EMAIL_SETTINGS"
+            : "INTEGRATION_DSR_SETTINGS";
+
+    return await requestAdminAuthorization(purpose);
+}
 function recipientRows(values) {
     return (values.length ? values : [""]).map(value => `<div class="integration-recipient-row"><input class="integration-recipient" type="email" value="${integrationEscape(value)}" placeholder="backup@example.com" aria-label="Backup recipient"><button type="button" class="removeIntegrationRecipient integration-button integration-button-small integration-button-destructive">REMOVE</button></div>`).join("");
 }
@@ -51,9 +59,75 @@ function showEmailIntegrationForm(email, grant) {
     const wireRemove = () => document.querySelectorAll(".removeIntegrationRecipient").forEach(b => { b.onclick = () => b.closest(".integration-recipient-row").remove(); }); wireRemove();
     document.getElementById("addRecipient").onclick = () => { document.getElementById("recipients").insertAdjacentHTML("beforeend", recipientRows([""])); wireRemove(); };
     const read = () => ({ accountName:accountName.value, senderEmail:senderEmail.value, smtpHost:smtpHost.value, smtpPort:smtpPort.value, securityMode:securityMode.value, smtpUsername:smtpUsername.value, password:integrationSecret.value, recipients:[...document.querySelectorAll(".integration-recipient")].map(i => i.value) });
-    save.onclick = async () => { try { const r=await window.electronAPI.saveEmailIntegration(read(), grant); message.textContent="Configuration saved securely."+(r.activityWarning?` ${r.activityWarning}`:""); setTimeout(showSystemHealthPage, r.activityWarning?1800:500); } catch(e){ message.textContent=e.message; } };
-    testConnection.onclick = async () => { const r=await window.electronAPI.testEmailIntegration(grant); message.textContent=(r.success?"Connection Successful":integrationLabel(r.error))+(r.activityWarning?` ${r.activityWarning}`:""); };
-    sendTest.onclick = async () => { const to=read().recipients.map(v=>v.trim().toLowerCase()).find(Boolean)||""; const r=await window.electronAPI.sendIntegrationTestEmail(to, grant); message.textContent=(r.success?"Test Email Sent":integrationLabel(r.error))+(r.activityWarning?` ${r.activityWarning}`:""); }; cancel.onclick=showSystemHealthPage;
+save.onclick = async () => {
+    try {
+        const freshGrant = await requestFreshIntegrationGrant("email");
+        if (!freshGrant) return;
+
+        const r = await window.electronAPI.saveEmailIntegration(
+            read(),
+            freshGrant
+        );
+
+        message.textContent =
+            "Configuration saved securely." +
+            (r.activityWarning ? ` ${r.activityWarning}` : "");
+
+        setTimeout(
+            showSystemHealthPage,
+            r.activityWarning ? 1800 : 500
+        );
+    } catch (e) {
+        message.textContent = e.message;
+    }
+};
+
+testConnection.onclick = async () => {
+    try {
+        const freshGrant = await requestFreshIntegrationGrant("email");
+        if (!freshGrant) return;
+
+        const r = await window.electronAPI.testEmailIntegration(
+            freshGrant
+        );
+
+        message.textContent =
+            (r.success
+                ? "Connection Successful"
+                : integrationLabel(r.error)) +
+            (r.activityWarning ? ` ${r.activityWarning}` : "");
+    } catch (e) {
+        message.textContent = e.message;
+    }
+};
+
+sendTest.onclick = async () => {
+    try {
+        const freshGrant = await requestFreshIntegrationGrant("email");
+        if (!freshGrant) return;
+
+        const to =
+            read().recipients
+                .map(v => v.trim().toLowerCase())
+                .find(Boolean) || "";
+
+        const r =
+            await window.electronAPI.sendIntegrationTestEmail(
+                to,
+                freshGrant
+            );
+
+        message.textContent =
+            (r.success
+                ? "Test Email Sent"
+                : integrationLabel(r.error)) +
+            (r.activityWarning ? ` ${r.activityWarning}` : "");
+    } catch (e) {
+        message.textContent = e.message;
+    }
+};
+
+cancel.onclick = showSystemHealthPage;
 }
 function emailGuide() { return `<section class="integration-guide"><h2>SETUP GUIDE</h2><ol><li>Enter the Gmail/email address KLBS will use for Day Closing backups.</li><li>For Gmail use smtp.gmail.com, port 587 and STARTTLS.</li><li>Enter the Gmail address as SMTP Username.</li><li>Generate and enter a Google App Password.</li><li>Add one or more backup recipients.</li><li>Save the configuration.</li><li>Click Test Connection.</li><li>Click Send Test Email and confirm receipt.</li></ol><p><strong>IMPORTANT:</strong> Use a Google App Password, not the normal Gmail account password. Saved SMTP credentials are never displayed by KLBS.</p></section>`; }
 function detectedSheetId(value) { const input=String(value||"").trim(); if(/^[A-Za-z0-9_-]{20,}$/.test(input))return input; const m=/^https:\/\/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/.exec(input); return m?m[1]:""; }
@@ -62,8 +136,55 @@ function showDsrIntegrationForm(dsr, grant) {
     renderSettingsPage({ title:"DAILY SALES REPORT", icon:"&#128202;", subtitle:"KLBS → Apps Script Web App → Google Sheet. No Google login is required.", backText:"← System Health", backAction:showSystemHealthPage,
         content:`<div class="integration-form">${banner}<h2>GOOGLE SHEET</h2><label>Google Sheet URL or Sheet ID<input id="sheetInput" value="${integrationEscape(dsr.sheetId)}"></label><label>Detected Sheet ID<input id="detectedSheet" value="${integrationEscape(dsr.sheetId)}" readonly></label><label>Data Sheet / Tab Name<input id="tabName" value="${integrationEscape(dsr.tabName||"KLBS_Daily_Data")}"></label><h2>APPS SCRIPT CONNECTION</h2><label>Apps Script Web App URL<input id="webAppUrl" type="url" value="${integrationEscape(dsr.webAppUrl)}"></label>${secretControl("dsr",dsr.secretConfigured)}<h2>SYNC STATUS</h2><div class="integration-info-row"><span>Daily Sales Report Sync</span><strong>ENABLED</strong></div><p>Test Connection verifies the Apps Script and Google Sheet connection. A diagnostic entry will be written to KLBS_Test.</p><div id="message" class="security-message" aria-live="polite"></div><div class="integration-actions"><button id="testConnection" class="integration-button integration-button-secondary">TEST CONNECTION</button><button id="cancel" class="integration-button integration-button-neutral">CANCEL</button><button id="save" class="integration-button integration-button-primary">SAVE CHANGES</button></div>${dsrGuide()}</div>` });
     wireSecret(); sheetInput.oninput=()=>{detectedSheet.value=detectedSheetId(sheetInput.value);};
-    save.onclick=async()=>{try{const r=await window.electronAPI.saveDsrIntegration({sheetUrlOrId:sheetInput.value,tabName:tabName.value,webAppUrl:webAppUrl.value,secret:integrationSecret.value},grant);message.textContent="Configuration saved securely."+(r.activityWarning?` ${r.activityWarning}`:"");setTimeout(showSystemHealthPage,r.activityWarning?1800:500);}catch(e){message.textContent=e.message;}};
-    testConnection.onclick=async()=>{const r=await window.electronAPI.testDsrIntegration(grant);message.textContent=(r.success?"Connection Successful\nTest log written to KLBS_Test.":integrationLabel(r.error))+(r.activityWarning?` ${r.activityWarning}`:"");}; cancel.onclick=showSystemHealthPage;
+save.onclick = async () => {
+    try {
+        const freshGrant = await requestFreshIntegrationGrant("dsr");
+        if (!freshGrant) return;
+
+        const r = await window.electronAPI.saveDsrIntegration(
+            {
+                sheetUrlOrId: sheetInput.value,
+                tabName: tabName.value,
+                webAppUrl: webAppUrl.value,
+                secret: integrationSecret.value
+            },
+            freshGrant
+        );
+
+        message.textContent =
+            "Configuration saved securely." +
+            (r.activityWarning ? ` ${r.activityWarning}` : "");
+
+        setTimeout(
+            showSystemHealthPage,
+            r.activityWarning ? 1800 : 500
+        );
+    } catch (e) {
+        message.textContent = e.message;
+    }
+};
+
+testConnection.onclick = async () => {
+    try {
+        const freshGrant = await requestFreshIntegrationGrant("dsr");
+        if (!freshGrant) return;
+
+        const r =
+            await window.electronAPI.testDsrIntegration(
+                freshGrant
+            );
+
+        message.textContent =
+            (r.success
+                ? "Connection Successful\nTest log written to KLBS_Test."
+                : integrationLabel(r.error)) +
+            (r.activityWarning ? ` ${r.activityWarning}` : "");
+    } catch (e) {
+        message.textContent = e.message;
+    }
+};
+
+cancel.onclick = showSystemHealthPage;
 }
 function dsrGuide(){return `<section class="integration-guide"><h2>SETUP GUIDE</h2><ol><li>Paste the Google Sheet URL.</li><li>KLBS detects the Sheet ID.</li><li>Confirm KLBS_Daily_Data.</li><li>Enter the Apps Script Web App URL.</li><li>Enter the DSR Sync Secret.</li><li>Save the configuration.</li><li>Click Test Connection.</li><li>Verify a SUCCESS entry in KLBS_Test.</li></ol><p><strong>IMPORTANT:</strong> Normal DSR data is written only to KLBS_Daily_Data. Test logs are written only to KLBS_Test. No Google username or password is required.</p></section>`;}
 function showIntegrationsPage(){return showSystemHealthPage();}

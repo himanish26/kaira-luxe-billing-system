@@ -12,10 +12,16 @@ function resetInventory() {
 
         db.serialize(() => {
 
-            db.run("BEGIN TRANSACTION");
+            db.run("BEGIN TRANSACTION", function(beginError){
+
+                if(beginError){
+
+                    return reject(beginError);
+
+                }
 
             db.run(
-                "DELETE FROM products",
+                "DELETE FROM inventory_transactions",
                 function(err){
 
                     if(err){
@@ -27,7 +33,7 @@ function resetInventory() {
                     }
 
                     db.run(
-                        "DELETE FROM inventory_import_log",
+                        "DELETE FROM inventory_initialization",
                         function(err){
 
                             if(err){
@@ -39,8 +45,32 @@ function resetInventory() {
                             }
 
                             db.run(
+                                "DELETE FROM inventory_import_log",
+                                function(err){
 
-                                "COMMIT",
+                                    if(err){
+
+                                        db.run("ROLLBACK");
+
+                                        return reject(err);
+
+                                    }
+
+                                    db.run(
+                                        "DELETE FROM products",
+                                        function(err){
+
+                                            if(err){
+
+                                                db.run("ROLLBACK");
+
+                                                return reject(err);
+
+                                            }
+
+                                            db.run(
+
+                                                "COMMIT",
 
                                 async function(err){
 
@@ -80,6 +110,14 @@ function resetInventory() {
 
                                 }
 
+                                            );
+
+                                        }
+
+                                    );
+
+                                }
+
                             );
 
                         }
@@ -89,6 +127,8 @@ function resetInventory() {
                 }
 
             );
+
+            });
 
         });
 
