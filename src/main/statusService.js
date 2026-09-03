@@ -147,15 +147,23 @@ async function getStartupCheck(checkName, dependencies = {}) {
                 return result("failed", "Product or inventory layer unavailable");
             }
             return status.productCount === 0
-                ? result("warning", "No products found - import products from Inventory to start billing",
+                ? result("warning", "Inventory setup required",
                     { productCount: 0 })
                 : result("ready", `Ready - ${status.productCount} products`,
                     { productCount: status.productCount });
         }
         case "administratorSecurity": {
             const status = await dependencies.getAdministratorSecurityStatus();
-            if (!status.initialized) {
-                return result("failed", "Setup required", { action: "initializeAdministratorPin" });
+            if (!status.initialized || !status.managerPinConfigured) {
+                const missing = [
+                    !status.initialized ? "Administrator PIN" : null,
+                    !status.managerPinConfigured ? "Manager PIN" : null
+                ].filter(Boolean).join(" and ");
+                return result("failed", `${missing} setup required`, {
+                    action: "completeSecuritySetup",
+                    administratorPinConfigured: status.initialized,
+                    managerPinConfigured: status.managerPinConfigured
+                });
             }
             if (!status.masterRecoveryProvisioned) {
                 return result("failed", "Administrator recovery not provisioned");

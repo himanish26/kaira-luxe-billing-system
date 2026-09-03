@@ -20,16 +20,7 @@ function renderSettingsPage({
 
 }) {
 
-    /* Hide Settings Dashboard */
-
-    settingsScreen.style.display = "none";
-
-    /* Show Settings Content Page */
-
-    settingsPage.style.display = "block";
-
-    /* Render Page */
-
+    /* Build the replacement before publishing the page visibility. */
     settingsPageContent.innerHTML = `
 
 <div class="settings-layout">
@@ -55,6 +46,9 @@ function renderSettingsPage({
 </div>
 
 `;
+
+    settingsScreen.style.display = "none";
+    settingsPage.style.display = "block";
 
     requestAnimationFrame(() => {
 
@@ -106,6 +100,8 @@ function showDeviceSettings() {
     settingsScreen.style.display = "none";
 
     settingsPage.style.display = "block";
+    const pageBackButton = document.getElementById("settingsPageBackBtn");
+    if (pageBackButton) pageBackButton.hidden = false;
 
     settingsPageContent.innerHTML = `
 

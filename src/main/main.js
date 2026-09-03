@@ -21,6 +21,48 @@ else {
 let mainWindow;
 let splashWindow = null;
 let operationalWindowReady = false;
+const nativeDialogQueue = [];
+let nativeDialogActive = false;
+
+function restoreWindowAfterNativeDialog(window) {
+    if (!window || window.isDestroyed()) return false;
+    if (window.isMinimized()) window.restore();
+    if (!window.isVisible()) window.show();
+    window.focus();
+    window.webContents.focus();
+    window.webContents.send("dialog:native-closed");
+    return true;
+}
+
+function enqueueNativeDialog(owner, options) {
+    return new Promise((resolve, reject) => {
+        nativeDialogQueue.push({ owner, options, resolve, reject });
+        pumpNativeDialogQueue();
+    });
+}
+
+async function pumpNativeDialogQueue() {
+    if (nativeDialogActive || nativeDialogQueue.length === 0) return;
+
+    nativeDialogActive = true;
+    const request = nativeDialogQueue.shift();
+    try {
+        if (!request.owner || request.owner.isDestroyed()) {
+            throw new Error("Native dialog owner is no longer available.");
+        }
+        request.resolve(await dialog.showMessageBox(request.owner, request.options));
+    }
+    catch (error) {
+        request.reject(error);
+    }
+    finally {
+        nativeDialogActive = false;
+        if (nativeDialogQueue.length === 0) {
+            restoreWindowAfterNativeDialog(request.owner);
+        }
+        pumpNativeDialogQueue();
+    }
+}
 
 app.on("second-instance", () => {
     if (
@@ -325,6 +367,7 @@ const {
 });
 
 let splashShownAt = 0;
+let startupSecuritySetupInProgress = false;
 
 let isAppQuitting = false;
 let orderlyShutdownLogged = false;
@@ -448,6 +491,9 @@ function createWindow() {
 
                 mainWindow.close();
 
+            }
+            else {
+                restoreWindowAfterNativeDialog(mainWindow);
             }
 
         }
@@ -665,15 +711,73 @@ ipcMain.handle("startup:reopen-closed-day", async (event, data) => {
     return reopenBusinessDay(reason);
 });
 
-ipcMain.handle("startup:initialize-administrator-pin", async (event, data) => {
+ipcMain.handle("startup:open-security-setup", async event => {
     if (!splashWindow || event.sender !== splashWindow.webContents) {
         return { success: false, error: "Startup security request rejected." };
     }
     const status = await administratorSecurity.getStatus();
-    if (status.initialized) {
-        return { success: false, error: "Administrator Security is already initialized." };
+    if (status.initialized && status.managerPinConfigured) {
+        return { success: false, error: "Security setup is already complete." };
     }
-    return administratorSecurity.recoverPin(data || {});
+    if (startupSecuritySetupInProgress) {
+        return { success: true, alreadyOpen: true };
+    }
+    startupSecuritySetupInProgress = true;
+    await dialog.showMessageBox(splashWindow, {
+        type: "warning",
+        title: "Security Setup Incomplete",
+        message: "KLBS security setup is incomplete.",
+        detail: "Both Administrator PIN and Manager PIN must be configured before normal operation can continue."
+    });
+    if (mainWindow.webContents.isLoadingMainFrame()) {
+        await new Promise(resolve => mainWindow.webContents.once("did-finish-load", resolve));
+    }
+    mainWindow.webContents.send("startup:security-setup-required", status);
+    mainWindow.maximize();
+    mainWindow.show();
+    mainWindow.focus();
+    splashWindow.hide();
+    return { success: true };
+});
+
+ipcMain.handle("startup:security-setup-complete", async event => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || operationalWindowReady) {
+        return { success: false, error: "Startup security completion request rejected." };
+    }
+    const status = await administratorSecurity.getStatus();
+    if (!status.initialized || !status.managerPinConfigured) {
+        return { success: false, error: "Both Administrator PIN and Manager PIN must be configured." };
+    }
+    administratorSecurity.clearStartupSetupSessions();
+    startupSecuritySetupInProgress = false;
+    mainWindow.hide();
+    if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.show();
+        splashWindow.focus();
+        splashWindow.webContents.send("startup:security-setup-completed");
+    }
+    return { success: true };
+});
+
+ipcMain.handle("startup:verify-master-pin", (event, masterPin) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || !startupSecuritySetupInProgress) {
+        return { success: false, error: "Startup security setup request rejected." };
+    }
+    return administratorSecurity.beginStartupSetup(masterPin);
+});
+
+ipcMain.handle("startup:configure-missing-administrator-pin", (event, data) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || !startupSecuritySetupInProgress) {
+        return { success: false, error: "Startup security setup request rejected." };
+    }
+    return administratorSecurity.configureMissingAdministratorPin(data);
+});
+
+ipcMain.handle("startup:configure-missing-manager-pin", (event, data) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || !startupSecuritySetupInProgress) {
+        return { success: false, error: "Startup security setup request rejected." };
+    }
+    return administratorSecurity.configureMissingManagerPin(data);
 });
 
 ipcMain.handle("startup:ready", async event => {
@@ -810,6 +914,8 @@ ipcMain.handle("security:change-pin", (event, data) =>
     administratorSecurity.changePin(data.currentPin, data.newPin, data.confirmPin));
 ipcMain.handle("security:recover", (event, data) =>
     administratorSecurity.recoverPin(data));
+ipcMain.handle("security:recover-manager-pin", (event, data) =>
+    administratorSecurity.recoverManagerPin(data || {}));
 ipcMain.handle("security:configure-manager-pin", (event, data, grant) => {
     requireSecurityGrant(grant, "MANAGER_PIN_MANAGEMENT");
     const managerPinData = data || {};
@@ -2411,18 +2517,20 @@ ipcMain.handle(
     "dialog:showMessageBox",
 
     async (event, options) => {
-
-        return await dialog.showMessageBox(
-
-            BrowserWindow.getFocusedWindow(),
-
-            options
-
-        );
+        const owner = BrowserWindow.fromWebContents(event.sender);
+        if (!owner || owner !== mainWindow || owner.isDestroyed()) {
+            throw new Error("Native dialog request rejected.");
+        }
+        return await enqueueNativeDialog(owner, options);
 
     }
 
 );
+
+ipcMain.on("dialog:restore-focus", event => {
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    if (owner === mainWindow) restoreWindowAfterNativeDialog(owner);
+});
 
 
 

@@ -380,6 +380,75 @@ const deviceCard =
 
 }
 
+let lastUsableFocusTarget = null;
+
+function isUsableFocusTarget(element) {
+    return Boolean(
+        element && element.isConnected && !element.disabled &&
+        typeof element.focus === "function" &&
+        element.getAttribute("aria-hidden") !== "true" &&
+        element.getClientRects().length > 0
+    );
+}
+
+function firstUsableControlWithinVisibleModal() {
+    const selectors = [
+        '[role="dialog"]', '.modal', '.modal-overlay',
+        '[class*="modal"][style*="display: flex"]',
+        '[class*="modal"][style*="display: block"]'
+    ];
+    for (const container of document.querySelectorAll(selectors.join(","))) {
+        if (container.getClientRects().length === 0) continue;
+        const control = container.querySelector("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])");
+        if (isUsableFocusTarget(control)) return control;
+    }
+    return null;
+}
+
+function restoreRendererFocusAfterNativeDialog() {
+    const active = document.activeElement;
+    const modalControl = firstUsableControlWithinVisibleModal();
+    const target = modalControl ||
+        (isUsableFocusTarget(active) && active !== document.body ? active : null) ||
+        (isUsableFocusTarget(lastUsableFocusTarget) ? lastUsableFocusTarget : null);
+    if (!target) return;
+    requestAnimationFrame(() => {
+        if (isUsableFocusTarget(target)) target.focus({ preventScroll: true });
+    });
+}
+
+document.addEventListener("focusin", event => {
+    if (isUsableFocusTarget(event.target) && event.target !== document.body) {
+        lastUsableFocusTarget = event.target;
+    }
+});
+
+window.electronAPI.onNativeDialogClosed(restoreRendererFocusAfterNativeDialog);
+
+function showNativeAlert(message, preferredFocusTarget = null) {
+    if (isUsableFocusTarget(preferredFocusTarget)) lastUsableFocusTarget = preferredFocusTarget;
+    return window.electronAPI.showMessageBox({
+        type: "info",
+        buttons: ["OK"],
+        message: String(message || "")
+    });
+}
+
+function showNativeConfirm(message, preferredFocusTarget = null) {
+    if (isUsableFocusTarget(preferredFocusTarget)) lastUsableFocusTarget = preferredFocusTarget;
+    return window.electronAPI.showMessageBox({
+        type: "question",
+        buttons: ["Cancel", "OK"],
+        defaultId: 1,
+        cancelId: 0,
+        message: String(message || "")
+    }).then(result => result && result.response === 1);
+}
+
+/* Compatibility for legacy informational call sites: all alerts now use the
+   parented asynchronous Electron dialog IPC instead of browser dialogs. */
+window.alert = message => showNativeAlert(message);
+
 const systemCard =
     document.getElementById("systemCard");
 
@@ -393,9 +462,33 @@ if (adminCard) {
     adminCard.addEventListener("click", showAdministratorSecurityPage);
 }
 
+let startupSecuritySetupActive = false;
+let startupSecuritySetupToken = null;
+
+async function continueAfterStartupSecuritySetup() {
+    if (!startupSecuritySetupActive) return false;
+    const status = await window.electronAPI.administratorSecurity.getStatus();
+    if (!status.initialized || !status.managerPinConfigured) return false;
+    const result = await window.electronAPI.completeStartupSecuritySetup();
+    if (!result.success) throw new Error(result.error || "Security readiness could not be confirmed.");
+    startupSecuritySetupActive = false;
+    return true;
+}
+
 async function showAdministratorSecurityPage() {
     const status = await window.electronAPI.administratorSecurity.getStatus();
-    const workflow = status.initialized
+    const startupMasterVerification = startupSecuritySetupActive && !startupSecuritySetupToken
+        ? `<section class="security-card security-initialize-card">
+                <h2>VERIFY MASTER PIN</h2>
+                <p>Verify once to configure every missing startup security PIN in this setup session.</p>
+                <div class="security-form-grid"><label>Master PIN
+                    <input id="startupSecurityMasterPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off">
+                </label></div>
+                <div id="startupSecurityMasterMessage" class="security-message"></div>
+                <button id="startupSecurityVerifyBtn" class="dashboard-btn security-action-btn">Verify Master PIN</button>
+            </section>`
+        : "";
+    const workflow = startupMasterVerification ? "" : status.initialized
         ? `
             <section class="security-card">
                 <h2>CHANGE ADMINISTRATOR PIN</h2>
@@ -457,9 +550,9 @@ async function showAdministratorSecurityPage() {
                 <h2>INITIALIZE SECURITY</h2>
                 <p>Enter the provisioned Master PIN to create the store Administrator PIN.</p>
                 <div class="security-form-grid">
-                    <label>Master PIN
+                    ${startupSecuritySetupActive ? "" : `<label>Master PIN
                         <input id="securityMasterPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off">
-                    </label>
+                    </label>`}
                     <label>New Administrator PIN
                         <input id="securityRecoveryPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
                     </label>
@@ -488,6 +581,11 @@ renderSettingsPage({
     },
 
     content: `
+            ${startupSecuritySetupActive ? `<section class="security-card security-initialize-card">
+                <h2>SECURITY SETUP REQUIRED</h2>
+                <p>Configure both the Administrator PIN and Manager PIN before KLBS can continue.</p>
+            </section>` : ""}
+            ${startupMasterVerification}
             <div class="security-status-grid">
                 <div class="security-status-card"><span>Status</span><strong>${status.initialized ? "Configured" : "Not Configured"}</strong></div>
                 <div class="security-status-card"><span>Master Recovery</span><strong>${status.masterRecoveryProvisioned ? "Provisioned" : "Provisioning Required"}</strong></div>
@@ -495,7 +593,29 @@ renderSettingsPage({
             ${workflow}`
     });
 
+    if (startupSecuritySetupActive) {
+        hideAllScreens();
+        settingsPage.style.display = "block";
+        settingsPageBackBtn.hidden = true;
+    }
+    else {
+        settingsPageBackBtn.hidden = false;
+    }
+
     const changeButton = document.getElementById("securityChangePinBtn");
+    const startupVerifyButton = document.getElementById("startupSecurityVerifyBtn");
+    if (startupVerifyButton) startupVerifyButton.onclick = async () => {
+        const input = document.getElementById("startupSecurityMasterPin");
+        const message = document.getElementById("startupSecurityMasterMessage");
+        const result = await window.electronAPI.verifyStartupMasterPin(input.value);
+        input.value = "";
+        if (!result.success) {
+            message.textContent = result.error;
+            return;
+        }
+        startupSecuritySetupToken = result.setupToken;
+        await showAdministratorSecurityPage();
+    };
     if (changeButton) changeButton.onclick = async () => {
         const message = document.getElementById("securityChangeMessage");
         const result = await window.electronAPI.administratorSecurity.changePin({
@@ -540,8 +660,10 @@ if (result.success) {
     let managerManagementGrant = null;
     const openManagerButton = document.getElementById("securityOpenManagerPinBtn");
     if (openManagerButton) openManagerButton.onclick = async () => {
-        managerManagementGrant = await requestAdminAuthorization("MANAGER_PIN_MANAGEMENT");
-        if (!managerManagementGrant) return;
+        if (!(startupSecuritySetupActive && startupSecuritySetupToken && !status.managerPinConfigured)) {
+            managerManagementGrant = await requestAdminAuthorization("MANAGER_PIN_MANAGEMENT");
+            if (!managerManagementGrant) return;
+        }
         document.getElementById("securityManagerPinPanel").hidden = false;
         openManagerButton.hidden = true;
         document.getElementById("securityManagerPin").focus();
@@ -553,16 +675,27 @@ if (result.success) {
         const confirmInput = document.getElementById("securityManagerConfirmPin");
         const message = document.getElementById("securityManagerMessage");
         try {
-            const result = await window.electronAPI.administratorSecurity.configureManagerPin({
+            const data = {
                 newPin: pinInput.value,
                 confirmPin: confirmInput.value
-            }, managerManagementGrant);
+            };
+            const result = startupSecuritySetupActive && startupSecuritySetupToken && !status.managerPinConfigured
+                ? await window.electronAPI.configureMissingStartupManagerPin({ ...data, setupToken: startupSecuritySetupToken })
+                : await window.electronAPI.administratorSecurity.configureManagerPin(data, managerManagementGrant);
             managerManagementGrant = null;
             pinInput.value = "";
             confirmInput.value = "";
             message.textContent = result.success ? "Manager PIN saved successfully." : result.error;
             message.classList.toggle("success", result.success);
-            if (result.success) setTimeout(showAdministratorSecurityPage, 600);
+            if (!result.success && String(result.error || "").includes("authorization has expired")) {
+                startupSecuritySetupToken = null;
+                setTimeout(showAdministratorSecurityPage, 600);
+            }
+            if (result.success) {
+                if (!await continueAfterStartupSecuritySetup()) {
+                    setTimeout(showAdministratorSecurityPage, 600);
+                }
+            }
         }
         catch (error) {
             managerManagementGrant = null;
@@ -579,19 +712,33 @@ if (result.success) {
         const newPinInput = document.getElementById("securityRecoveryPin");
         const confirmPinInput = document.getElementById("securityRecoveryConfirmPin");
         const message = document.getElementById("securityRecoveryMessage");
-        const result = await window.electronAPI.administratorSecurity.recover({
+        const result = startupSecuritySetupActive && startupSecuritySetupToken && !status.initialized
+            ? await window.electronAPI.configureMissingStartupAdministratorPin({
+                setupToken: startupSecuritySetupToken,
+                newPin: newPinInput.value,
+                confirmPin: confirmPinInput.value
+            })
+            : await window.electronAPI.administratorSecurity.recover({
             masterPin: masterPinInput.value,
             newPin: newPinInput.value,
             confirmPin: confirmPinInput.value
         });
-        masterPinInput.value = "";
+        if (masterPinInput) masterPinInput.value = "";
         newPinInput.value = "";
         confirmPinInput.value = "";
         message.textContent = result.success
             ? (status.initialized ? "Administrator PIN reset successfully." : "Administrator Security initialized successfully.")
             : result.error;
         message.classList.toggle("success", result.success);
-        if (result.success) setTimeout(showAdministratorSecurityPage, 600);
+        if (!result.success && String(result.error || "").includes("authorization has expired")) {
+            startupSecuritySetupToken = null;
+            setTimeout(showAdministratorSecurityPage, 600);
+        }
+        if (result.success) {
+            if (!await continueAfterStartupSecuritySetup()) {
+                setTimeout(showAdministratorSecurityPage, 600);
+            }
+        }
     };
 }
 
@@ -2086,6 +2233,23 @@ if (storeCreditAmount > payable) {
 
 }
 
+function selectZeroPaymentValue(event) {
+    const input = event.currentTarget;
+
+    if (input.value === "0") {
+        input.select();
+    }
+}
+
+document.getElementById("cashAmount")
+    ?.addEventListener("focus", selectZeroPaymentValue);
+
+document.getElementById("upiAmount")
+    ?.addEventListener("focus", selectZeroPaymentValue);
+
+document.getElementById("cardAmount")
+    ?.addEventListener("focus", selectZeroPaymentValue);
+
 document.getElementById("cashAmount")
     ?.addEventListener("input", calculatePayment);
 
@@ -2127,14 +2291,14 @@ async function saveAndPrintBill(){
 
         if(result.success){
 
-    alert(
-        `Bill No.: ${billData.bill_no}\n\nPrinted Successfully.`
+    await showNativeAlert(
+        `Bill No.: ${billData.bill_no}\n\nPrinted Successfully.`,
     );
 
 }
 else{
 
-    alert(result.error);
+    await showNativeAlert(result.error);
 
 }
 
@@ -2402,7 +2566,7 @@ const backBtn =
 
 if (backBtn) {
 
-    backBtn.addEventListener("click", () => {
+    backBtn.addEventListener("click", async () => {
 
     if (billItems.length === 0){
 
@@ -2434,7 +2598,7 @@ if (backBtn) {
 
 }
 
-    const confirmDiscard = confirm(
+    const confirmDiscard = await showNativeConfirm(
 
         `Discard Current Bill?\n\n` +
         `This bill contains ${billItems.length} item(s).\n\n` +
@@ -2667,7 +2831,7 @@ if (saleType === "RETURN") {
         }
 
 const proceed =
-    confirm(
+    await showNativeConfirm(
         "RETURN CONFIRMATION\n\n" +
         "Please review the selected return quantities carefully.\n\n" +
         "This return will be processed against the original bill, and no further return or exchange can be made against this bill.\n\n" +
@@ -3309,7 +3473,7 @@ if (saleReturnType) {
 
     saleReturnType.addEventListener(
         "change",
-        () => {
+        async () => {
 
             const requestedMode =
                 saleReturnType.value;
@@ -3323,7 +3487,7 @@ if (saleReturnType) {
             if (billItems.length > 0) {
 
                 const confirmed =
-                    window.confirm(
+                    await showNativeConfirm(
                         `Switching to ${requestedMode} mode will discard the current bill items.\n\nContinue?`
                     );
 
@@ -7054,7 +7218,7 @@ async function startOperationalDashboard() {
 
     operationalDashboardStarted = true;
 
-    dashboardScreen.style.display = "block";
+    showScreen(dashboardScreen);
 
     await Promise.all([
         loadDashboardSummary(),
@@ -7072,6 +7236,12 @@ async function startOperationalDashboard() {
 }
 
 window.electronAPI.onOperationalReady(startOperationalDashboard);
+
+window.electronAPI.onSecuritySetupRequired(() => {
+    startupSecuritySetupActive = true;
+    startupSecuritySetupToken = null;
+    showAdministratorSecurityPage();
+});
 
 /* =====================================
    SCREEN NAVIGATION

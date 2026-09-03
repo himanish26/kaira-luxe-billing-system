@@ -130,7 +130,7 @@
 
     margin-top:25px;
 
-    background:#7A003C;
+    background:var(--primary);
 
     color:#fff;
 

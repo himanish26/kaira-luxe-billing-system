@@ -225,7 +225,7 @@ transform:rotate(360deg);
 
     margin:10px 0;
 
-    color:#7a0045;
+    color:var(--primary);
 
 }
 
@@ -271,7 +271,7 @@ transform:rotate(360deg);
 
 .inventory-empty-state h2{
 
-    color:#7a0045;
+    color:var(--primary);
 
     margin-bottom:10px;
 
@@ -360,7 +360,7 @@ transform:rotate(360deg);
 
     border:6px solid #ececec;
 
-    border-top:6px solid #7A002C;
+    border-top:6px solid var(--primary);
 
     border-radius:50%;
 
@@ -424,7 +424,7 @@ transform:rotate(360deg);
 
     height:100%;
 
-    background:#7A002C;
+    background:var(--primary);
 
     transition:width .25s ease;
 
@@ -438,7 +438,7 @@ transform:rotate(360deg);
 
     font-weight:bold;
 
-    color:#7A002C;
+    color:var(--primary);
 
 }
 
@@ -800,11 +800,11 @@ transform:rotate(360deg);
 
     margin-top:4px;
 
-    border:1px solid #8b004b;
+    border:1px solid var(--primary);
     border-radius:10px;
 
     background:#fff8fb;
-    color:#8b004b;
+    color:var(--primary);
 
     font-size:16px;
     font-weight:700;
@@ -819,7 +819,7 @@ transform:rotate(360deg);
 }
 
 .credit-voucher-btn:hover{
-    background:#8b004b;
+    background:var(--primary);
     color:#ffffff;
 
     box-shadow:
@@ -834,7 +834,7 @@ transform:rotate(360deg);
 =========================================== */
 
 .store-credit-payment-card.store-credit-available{
-    border-color:#8b004b;
+    border-color:var(--primary);
 
     background:#fff8fb;
 
@@ -844,29 +844,29 @@ transform:rotate(360deg);
 
 .store-credit-payment-card.store-credit-available
 .payment-special-title{
-    color:#8b004b;
+    color:var(--primary);
 }
 
 .store-credit-payment-card.store-credit-available
 .payment-special-amount{
-    color:#8b004b;
+    color:var(--primary);
 }
 
 .store-credit-payment-card.store-credit-available
 .credit-voucher-availability{
-    color:#8b004b;
+    color:var(--primary);
 
     font-weight:700;
 }
 
 .store-credit-payment-card.store-credit-available
 .credit-voucher-validity{
-    color:#7a003c;
+    color:var(--primary);
 }
 
 .store-credit-payment-card.store-credit-available
 .credit-voucher-btn{
-    background:#8b004b;
+    background:var(--primary);
     color:#ffffff;
 
     animation:
@@ -987,7 +987,7 @@ transform:rotate(360deg);
 #ffPinDialog .modal-content h2{
     margin:0 0 8px;
 
-    color:#7a003c;
+    color:var(--primary);
 
     font-size:30px;
     font-weight:800;
@@ -1105,7 +1105,7 @@ transform:rotate(360deg);
 .klbs-cancel-btn {
     min-height: 44px;
     padding: 0 22px;
-    border: 2px solid #8B004B;
+    border: 2px solid var(--primary);
     border-radius: 8px;
     font-weight: 700;
     cursor: pointer;
@@ -1115,13 +1115,13 @@ transform:rotate(360deg);
 }
 
 .klbs-primary-btn {
-    background: #8B004B;
+    background: var(--primary);
     color: #FFFFFF;
 }
 
 .klbs-primary-btn:hover:not(:disabled) {
-    background: #72003E;
-    border-color: #72003E;
+    background: var(--primary-dark);
+    border-color: var(--primary-dark);
     color: #FFFFFF;
     box-shadow: none;
     transform: none;
@@ -1129,13 +1129,13 @@ transform:rotate(360deg);
 
 .klbs-cancel-btn {
     background: #FFFFFF;
-    color: #8B004B;
+    color: var(--primary);
 }
 
 .klbs-cancel-btn:hover:not(:disabled) {
     background: #F7E8EE;
-    color: #8B004B;
-    border-color: #8B004B;
+    color: var(--primary);
+    border-color: var(--primary);
     box-shadow: none;
     transform: none;
 }

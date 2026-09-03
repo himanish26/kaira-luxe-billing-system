@@ -355,11 +355,9 @@ async function startInventoryReset(grant){
 
         await refreshInventory();
 
-        setTimeout(() => {
+        hideProcessingDialog();
 
-            hideProcessingDialog();
-
-            alert(
+        await alert(
 `Inventory Reset Successful
 
 The Product Master has been reset successfully.
@@ -368,14 +366,12 @@ Please import a Product Master Excel file before creating new bills.`
     + (result.activityWarning ? `\n\nWarning: ${result.activityWarning}` : "")
 );
 
-        }, 500);
-
     }
     else{
 
         hideProcessingDialog();
 
-        alert(result.error);
+        await alert(result.error);
 
     }
 

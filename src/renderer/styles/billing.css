@@ -29,7 +29,7 @@
 }
 
 .back-btn{
-    background:#8b0035;
+    background:var(--primary);
     color:white;
     border:none;
     padding:16px 30px;
@@ -37,6 +37,16 @@
     font-weight:700;
     border-radius:12px;
     cursor:pointer;
+    transition:background-color .18s ease;
+}
+
+.back-btn:hover{
+    background:var(--primary-dark);
+}
+
+.back-btn:focus-visible{
+    outline:3px solid rgba(139,0,75,.28);
+    outline-offset:3px;
 }
 
 .settings-home .back-btn{
@@ -57,7 +67,7 @@
 .billing-page-title{
     font-size:72px;
     font-weight:900;
-    color:#8b0035;
+    color:var(--primary);
     margin-bottom:30px;
 }
 
@@ -140,7 +150,7 @@
 
     font-weight:700;
 
-    border:3px solid #8b0035;
+    border:3px solid var(--primary);
 
     border-radius:15px;
 
@@ -204,7 +214,7 @@
 
     z-index:30;
 
-    background:#8B004B;
+    background:var(--primary);
 
     color:#fff;
 
@@ -236,7 +246,7 @@
 
 
 #billTable th{
-    background:#8b0035;
+    background:var(--primary);
     color:white;
     padding:20px;
     font-size:26px;
@@ -353,7 +363,7 @@
 
     text-align:center;
 
-    border:2px solid #7a002c;
+    border:2px solid var(--primary);
 
     border-radius:8px;
 
@@ -462,7 +472,7 @@
 
 .payable-card{
     margin-top:20px;
-    background:#8b0035;
+    background:var(--primary);
     color:white;
     border-radius:20px;
     text-align:center;
@@ -560,7 +570,7 @@
     height: 75px;
     border: none;
     border-radius: 12px;
-    background: #7a002c;
+    background: var(--primary);
     color: white;
     font-size: 28px;
     font-weight: 700;
@@ -662,7 +672,7 @@
 
     font-weight:600;
 
-    border:2px solid #8b0035;
+    border:2px solid var(--primary);
 
     border-radius:12px;
 
@@ -712,7 +722,7 @@
 
     z-index:30;
 
-    background:#8B004B;
+    background:var(--primary);
 
     color:#fff;
 
@@ -823,7 +833,7 @@
 
     box-sizing:border-box;
 
-    border-top:6px solid #6d0033;
+    border-top:6px solid var(--primary-dark);
 
     border-radius:22px;
 
@@ -867,7 +877,7 @@
 
     font-weight:800;
 
-    color:#6d0033;
+    color:var(--primary-dark);
 
 }
 
@@ -897,7 +907,7 @@
 
 .correction-bill strong{
 
-    color:#6d0033;
+    color:var(--primary-dark);
 
 }
 
@@ -978,7 +988,7 @@
 .payment-row input:focus,
 .payment-row textarea:focus{
 
-    border-color:#7A003C;
+    border-color:var(--primary);
 
     box-shadow:0 0 0 3px rgba(122,0,60,.10);
 
@@ -1064,7 +1074,7 @@
 
     background:#fafafa;
 
-    border-left:6px solid #8B004B;
+    border-left:6px solid var(--primary);
 
     border-radius:12px;
 
@@ -1082,7 +1092,7 @@
 
     font-weight:800;
 
-    color:#8B004B;
+    color:var(--primary);
 
     margin-bottom:12px;
 
@@ -1168,9 +1178,9 @@
     padding: 0 48px 0 24px !important;
 
     background-color: #ffffff !important;
-    color: #8b0035 !important;
+    color: var(--primary) !important;
 
-    border: 2px solid #8b0035 !important;
+    border: 2px solid var(--primary) !important;
 
     cursor: pointer !important;
     outline: none !important;
@@ -1179,8 +1189,8 @@
     -webkit-appearance: none !important;
 
     background-image:
-        linear-gradient(45deg, transparent 50%, #8b0035 50%),
-        linear-gradient(135deg, #8b0035 50%, transparent 50%) !important;
+        linear-gradient(45deg, transparent 50%, var(--primary) 50%),
+        linear-gradient(135deg, var(--primary) 50%, transparent 50%) !important;
 
     background-position:
         calc(100% - 28px) 31px,
@@ -1192,8 +1202,8 @@
 
 .billing-actions-row .action-dropdown:hover,
 .billing-actions-row .action-dropdown:focus {
-    border-color: #6d0033 !important;
-    color: #6d0033 !important;
+    border-color: var(--primary-dark) !important;
+    color: var(--primary-dark) !important;
 }
 
 
@@ -1208,9 +1218,9 @@
     padding: 0 28px !important;
 
     background-color: #ffffff !important;
-    color: #8b0035 !important;
+    color: var(--primary) !important;
 
-    border: 2px solid #8b0035 !important;
+    border: 2px solid var(--primary) !important;
 
     cursor: pointer !important;
     white-space: nowrap !important;
@@ -1221,7 +1231,7 @@
 
 .billing-actions-row .action-btn-secondary:hover {
     background-color: #f8eef2 !important;
-    color: #6d0033 !important;
+    color: var(--primary-dark) !important;
 }
 
 
@@ -1305,7 +1315,7 @@
 
     text-align: center;
 
-    color: #7A002C;
+    color: var(--primary);
 
     font-size: 34px;
 
@@ -1387,7 +1397,7 @@
 
     padding: 18px 14px;
 
-    background: #7A002C;
+    background: var(--primary);
 
     color: #ffffff;
 
@@ -1491,7 +1501,7 @@
 
 .ff-final-discount-input:focus {
 
-    border-color: #7A002C;
+    border-color: var(--primary);
 
     box-shadow:
         0
@@ -1715,7 +1725,7 @@
 
     font-weight:900;
 
-    color:#8b0035;
+    color:var(--primary);
 
     margin-bottom:15px;
 
@@ -1764,7 +1774,7 @@
 
     border-radius:10px;
 
-    background:#8b0035;
+    background:var(--primary);
 
     color:white;
 
@@ -1794,7 +1804,7 @@
 
     font-weight:700;
 
-    color:#8b0035;
+    color:var(--primary);
 
 }
 
@@ -1830,7 +1840,7 @@
 
     text-align: center;
 
-    color: #7A002C;
+    color: var(--primary);
 
     font-size: 32px;
 
@@ -1933,7 +1943,7 @@
 
 #giftVoucherDialog #giftVoucherAmountInput:focus {
 
-    border-color: #7A002C;
+    border-color: var(--primary);
 }
 
 #giftVoucherDialog .dialog-error {

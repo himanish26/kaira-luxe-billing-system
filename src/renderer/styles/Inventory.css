@@ -20,7 +20,7 @@ font-size:34px;
 
 font-weight:700;
 
-color:#7a003c;
+color:var(--primary);
 
 }
 
@@ -42,7 +42,7 @@ font-size:30px;
 
 font-weight:700;
 
-color:#7a003c;
+color:var(--primary);
 
 }
 
@@ -108,7 +108,7 @@ margin-bottom:20px;
 
     z-index:30;
 
-    background:#8B004B;
+    background:var(--primary);
 
     color:#fff;
 
@@ -158,7 +158,7 @@ box-shadow:0 2px 8px rgba(0,0,0,.08);
 
     font-size:64px;
     font-weight:800;
-    color:#8B004B;
+    color:var(--primary);
     margin-top:20px;
     margin-bottom:10px;
 
@@ -196,7 +196,7 @@ box-shadow:0 2px 8px rgba(0,0,0,.08);
 
     font-size:34px;
 
-    color:#8B004B;
+    color:var(--primary);
 
     margin-bottom:25px;
 
@@ -234,7 +234,7 @@ box-shadow:0 2px 8px rgba(0,0,0,.08);
 
 .master-stats span{
 
-    color:#8B004B;
+    color:var(--primary);
 
     font-size:34px;
 
@@ -296,7 +296,7 @@ box-shadow:0 2px 8px rgba(0,0,0,.08);
 
     outline:none;
 
-    border-color:#8B004B;
+    border-color:var(--primary);
 
 }
 
@@ -474,7 +474,7 @@ box-shadow:0 2px 8px rgba(0,0,0,.08);
 .stock-transaction-input:focus {
     outline: none;
 
-    border-color: #7A002C;
+    border-color: var(--primary);
 
     box-shadow:
         0 0 0 3px rgba(122, 0, 44, 0.12);

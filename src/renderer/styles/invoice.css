@@ -119,7 +119,7 @@
 
     margin-top:20px;
 
-    background:#8b0035;
+    background:var(--primary);
 
     color:#fff;
 
@@ -216,7 +216,7 @@
 
     border-radius:8px;
 
-    background:#8b0035;
+    background:var(--primary);
 
     color:white;
 
@@ -230,14 +230,20 @@
 
 .invoice-actions button:hover{
 
-    background:#680026;
+    background:var(--primary-dark);
 
 }
 #viewBillScreen{
 
+    width:100%;
+
+}
+
+#viewBillScreen > .invoice-content{
+
     max-width:1200px;
 
-    margin:auto;
+    margin:0 auto;
 
 }
 @media print{
@@ -260,6 +266,14 @@
     #viewBillScreen{
 
         max-width:none;
+
+    }
+
+    #viewBillScreen > .invoice-content{
+
+        max-width:none;
+
+        margin:0;
 
     }
 
@@ -403,7 +417,7 @@
 
 .invoice-table-container thead th{
 
-    background:#8B004B;
+    background:var(--primary);
 
     color:#fff;
 

@@ -20,7 +20,8 @@ const criticalChecks = new Set([
 const warningChecks = new Set(["backup", "printer", "internet"]);
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let checksRunning = false;
-let adminInitializationRunning = false;
+let securitySetupOpening = false;
+let securitySetupOpened = false;
 let ellipsisTimer = null;
 let telemetryTimer = null;
 let presentationTimer = null;
@@ -145,8 +146,7 @@ function resetChecks() {
     finalStatus.querySelector("span").textContent = "INITIALIZING";
     document.getElementById("actions").hidden = true;
     document.getElementById("reopenBtn").hidden = true;
-    document.getElementById("initializeAdminBtn").hidden = true;
-    document.getElementById("adminInitializePanel").hidden = true;
+    document.getElementById("securitySetupBtn").hidden = true;
     document.getElementById("reopenPanel").hidden = true;
     document.getElementById("reopenError").textContent = "";
     startPresentationMotion();
@@ -194,12 +194,14 @@ if (failed) {
         document.getElementById("actions").hidden = false;
         const business = results.find(result => result.id === "businessDay");
         const administrator = results.find(result => result.id === "administratorSecurity");
+        const securityIncomplete = Boolean(
+            administrator && administrator.action === "completeSecuritySetup"
+        );
         document.getElementById("reopenBtn").hidden = !(
-            business && String(business.message || "").startsWith("CLOSED")
+            !securityIncomplete && business && String(business.message || "").startsWith("CLOSED")
         );
-        document.getElementById("initializeAdminBtn").hidden = !(
-            administrator && administrator.action === "initializeAdministratorPin"
-        );
+        document.getElementById("securitySetupBtn").hidden = !securityIncomplete;
+        if (securityIncomplete) await openSecuritySetup();
         return;
     }
 
@@ -217,50 +219,20 @@ if (failed) {
 
 document.getElementById("retryBtn").addEventListener("click", runChecks);
 document.getElementById("exitBtn").addEventListener("click", () => window.startupAPI.exit());
-document.getElementById("initializeAdminBtn").addEventListener("click", () => {
-    if (adminInitializationRunning) return;
-    document.getElementById("actions").hidden = true;
-    document.getElementById("adminInitializePanel").hidden = false;
-    document.getElementById("adminInitializeError").textContent = "";
-    document.getElementById("adminMasterPin").focus();
-});
-document.getElementById("cancelAdminInitializeBtn").addEventListener("click", () => {
-    if (adminInitializationRunning) return;
-    document.getElementById("adminInitializePanel").hidden = true;
-    document.getElementById("actions").hidden = false;
-    ["adminMasterPin", "adminNewPin", "adminConfirmPin"].forEach(id => {
-        document.getElementById(id).value = "";
-    });
-    document.getElementById("adminInitializeError").textContent = "";
-});
-document.getElementById("confirmAdminInitializeBtn").addEventListener("click", async () => {
-    if (adminInitializationRunning) return;
-    const button = document.getElementById("confirmAdminInitializeBtn");
-    const error = document.getElementById("adminInitializeError");
-    adminInitializationRunning = true;
-    button.disabled = true;
+async function openSecuritySetup() {
+    if (securitySetupOpening || securitySetupOpened) return;
+    securitySetupOpening = true;
     try {
-        const result = await window.startupAPI.initializeAdministratorPin({
-            masterPin: document.getElementById("adminMasterPin").value,
-            newPin: document.getElementById("adminNewPin").value,
-            confirmPin: document.getElementById("adminConfirmPin").value
-        });
-        ["adminMasterPin", "adminNewPin", "adminConfirmPin"].forEach(id => {
-            document.getElementById(id).value = "";
-        });
-        if (!result.success) {
-            error.textContent = result.error || "Administrator Security could not be initialized.";
-            return;
-        }
-        error.textContent = "";
-        document.getElementById("adminInitializePanel").hidden = true;
-        await runChecks();
+        const result = await window.startupAPI.openSecuritySetup();
+        if (!result.success) alert(result.error || "Security setup could not be opened.");
+        else securitySetupOpened = true;
     }
     finally {
-        adminInitializationRunning = false;
-        button.disabled = false;
+        securitySetupOpening = false;
     }
-});
+}
+
+document.getElementById("securitySetupBtn").addEventListener("click", openSecuritySetup);
 document.getElementById("reopenBtn").addEventListener("click", () => {
     document.getElementById("actions").hidden = true;
     document.getElementById("reopenPanel").hidden = false;
@@ -300,5 +272,10 @@ window.addEventListener("beforeunload", () => {
 });
 
 window.startupAPI.onSplashShown(() => {
+    runChecks();
+});
+
+window.startupAPI.onSecuritySetupCompleted(() => {
+    securitySetupOpened = false;
     runChecks();
 });

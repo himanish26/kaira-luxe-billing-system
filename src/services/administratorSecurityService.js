@@ -72,6 +72,7 @@ function createAdministratorSecurityService(database, options = {}) {
     const grantTtlMs = options.grantTtlMs || 60 * 1000;
     const now = options.now || (() => Date.now());
     const grants = new Map();
+    const startupSetupSessions = new Map();
     let failedMasterAttempts = 0;
 
     const get = (sql, params = []) => new Promise((resolve, reject) => {
@@ -341,10 +342,145 @@ function createAdministratorSecurityService(database, options = {}) {
         return { success: true };
     }
 
+    async function beginStartupSetup(masterPin) {
+        const status = await getStatus();
+        if (status.initialized && status.managerPinConfigured) {
+            return { success: false, error: "Security setup is already complete." };
+        }
+        if (!isCredentialRecord(masterVerifier)) {
+            return { success: false, error: "Master Recovery is not provisioned." };
+        }
+        if (!/^\d{6}$/.test(String(masterPin || ""))) {
+            return { success: false, error: "Master PIN must contain exactly 6 digits." };
+        }
+        if (!await verifyCredential(masterPin, masterVerifier)) {
+            await safeLog({
+                action: "MASTER_RECOVERY_FAILED", details: "Startup security setup authorization failed",
+                status: "FAILED", entity_type: "ADMIN_SECURITY", reference_no: "MASTER_RECOVERY"
+            });
+            await delayMasterFailure();
+            return { success: false, error: "Master PIN is incorrect." };
+        }
+        failedMasterAttempts = 0;
+        startupSetupSessions.clear();
+        const token = crypto.randomBytes(32).toString("hex");
+        startupSetupSessions.set(token, { expiresAt: now() + grantTtlMs });
+        await safeLog({
+            action: "MASTER_RECOVERY_SUCCESS", details: "Startup security setup authorized",
+            status: "SUCCESS", entity_type: "ADMIN_SECURITY", reference_no: "MASTER_RECOVERY"
+        });
+        return { success: true, setupToken: token };
+    }
+
+    function validateStartupSetupSession(token) {
+        const normalizedToken = String(token || "");
+        const session = startupSetupSessions.get(normalizedToken);
+        if (!session || session.expiresAt < now()) {
+            startupSetupSessions.delete(normalizedToken);
+            return false;
+        }
+        return true;
+    }
+
+    async function configureMissingPinWithStartupSetup(data, level) {
+        if (!validateStartupSetupSession(data && data.setupToken)) {
+            return { success: false, error: "Startup security setup authorization has expired." };
+        }
+        const status = await getStatus();
+        const isManager = level === AUTHORIZATION_LEVELS.MANAGER;
+        if (isManager ? status.managerPinConfigured : status.initialized) {
+            return { success: false, error: `${isManager ? "Manager" : "Administrator"} PIN is already configured.` };
+        }
+        if (!/^\d{4}$/.test(String(data.newPin || "")) || data.newPin !== data.confirmPin) {
+            return { success: false, error: `${isManager ? "Manager" : "Administrator"} PIN must be 4 digits and match its confirmation.` };
+        }
+        const pinHash = await hashCredential(data.newPin);
+        const sql = isManager
+            ? "UPDATE settings SET manager_pin_hash = ?, manager_security_initialized = 1 WHERE id = 1"
+            : "UPDATE settings SET admin_pin_hash = ?, admin_security_initialized = 1, ff_pin = NULL WHERE id = 1";
+        await run("BEGIN IMMEDIATE TRANSACTION");
+        try {
+            await run(sql, [pinHash]);
+            await run("COMMIT");
+        }
+        catch (error) {
+            await run("ROLLBACK").catch(() => {});
+            throw error;
+        }
+        await safeLog({
+            action: isManager ? "MANAGER_PIN_CONFIGURED" : "ADMIN_SECURITY_INITIALIZED",
+            details: isManager ? "Manager PIN configured" : "Administrator Security initialized",
+            user_name: AUTHORIZATION_LEVELS.ADMINISTRATOR,
+            status: "SUCCESS",
+            entity_type: isManager ? "MANAGER_SECURITY" : "ADMIN_SECURITY",
+            reference_no: isManager ? "MANAGER_PIN" : "ADMIN_PIN"
+        });
+        const updatedStatus = await getStatus();
+        if (updatedStatus.initialized && updatedStatus.managerPinConfigured) {
+            startupSetupSessions.clear();
+        }
+        return { success: true };
+    }
+
+    async function recoverManagerPin(data) {
+        const status = await getStatus();
+        if (!isCredentialRecord(masterVerifier)) {
+            return { success: false, error: "Master Recovery is not provisioned." };
+        }
+        if (!/^\d{6}$/.test(String(data.masterPin || ""))) {
+            return { success: false, error: "Master PIN must contain exactly 6 digits." };
+        }
+        if (!/^\d{4}$/.test(String(data.newPin || "")) || data.newPin !== data.confirmPin) {
+            return { success: false, error: "Manager PIN must be 4 digits and match its confirmation." };
+        }
+        if (!await verifyCredential(data.masterPin, masterVerifier)) {
+            await safeLog({
+                action: "MASTER_RECOVERY_FAILED", details: "Master recovery authorization failed",
+                status: "FAILED", entity_type: "MANAGER_SECURITY", reference_no: "MASTER_RECOVERY"
+            });
+            await delayMasterFailure();
+            return { success: false, error: "Master PIN is incorrect." };
+        }
+
+        const pinHash = await hashCredential(data.newPin);
+        await run("BEGIN IMMEDIATE TRANSACTION");
+        try {
+            await run(`
+                UPDATE settings
+                SET manager_pin_hash = ?, manager_security_initialized = 1
+                WHERE id = 1
+            `, [pinHash]);
+            await run("COMMIT");
+        }
+        catch (error) {
+            await run("ROLLBACK").catch(() => {});
+            throw error;
+        }
+        failedMasterAttempts = 0;
+        grants.clear();
+        await safeLog({
+            action: status.managerPinConfigured ? "MANAGER_PIN_RECOVERED" : "MANAGER_PIN_CONFIGURED",
+            details: status.managerPinConfigured ? "Manager PIN recovered" : "Manager PIN configured",
+            user_name: AUTHORIZATION_LEVELS.ADMINISTRATOR,
+            status: "SUCCESS", entity_type: "MANAGER_SECURITY", reference_no: "MANAGER_PIN"
+        });
+        await safeLog({
+            action: "MASTER_RECOVERY_SUCCESS", details: "Master recovery completed",
+            status: "SUCCESS", entity_type: "MANAGER_SECURITY", reference_no: "MASTER_RECOVERY"
+        });
+        return { success: true };
+    }
+
     return {
-        getStatus, authorizePin, changePin, recoverPin, configureManagerPin,
+        getStatus, authorizePin, changePin, recoverPin, recoverManagerPin, configureManagerPin,
+        beginStartupSetup,
+        configureMissingAdministratorPin: data =>
+            configureMissingPinWithStartupSetup(data || {}, AUTHORIZATION_LEVELS.ADMINISTRATOR),
+        configureMissingManagerPin: data =>
+            configureMissingPinWithStartupSetup(data || {}, AUTHORIZATION_LEVELS.MANAGER),
         consumeGrant, consumeGrants, validateGrant,
-        clearGrants: () => grants.clear()
+        clearGrants: () => grants.clear(),
+        clearStartupSetupSessions: () => startupSetupSessions.clear()
     };
 }
 

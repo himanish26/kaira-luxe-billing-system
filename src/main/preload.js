@@ -358,6 +358,18 @@ getSystemStatus: () =>
 onOperationalReady: callback =>
     ipcRenderer.once("startup:operational-ready", callback),
 
+onSecuritySetupRequired: callback =>
+    ipcRenderer.once("startup:security-setup-required", (_event, status) => callback(status)),
+
+completeStartupSecuritySetup: () =>
+    ipcRenderer.invoke("startup:security-setup-complete"),
+verifyStartupMasterPin: masterPin =>
+    ipcRenderer.invoke("startup:verify-master-pin", masterPin),
+configureMissingStartupAdministratorPin: data =>
+    ipcRenderer.invoke("startup:configure-missing-administrator-pin", data),
+configureMissingStartupManagerPin: data =>
+    ipcRenderer.invoke("startup:configure-missing-manager-pin", data),
+
 notifyDashboardReady: () =>
     ipcRenderer.send("startup:dashboard-ready"),
 
@@ -366,6 +378,10 @@ showMessageBox: (options) =>
         "dialog:showMessageBox",
         options
     ),
+restoreFocusAfterNativeDialog: () =>
+    ipcRenderer.send("dialog:restore-focus"),
+onNativeDialogClosed: callback =>
+    ipcRenderer.on("dialog:native-closed", callback),
 
 selectRestoreFile: () =>
     ipcRenderer.invoke(
@@ -455,6 +471,7 @@ administratorSecurity: {
     authorizePin: (pin, purpose) => ipcRenderer.invoke("security:authorize-pin", pin, purpose),
     changePin: data => ipcRenderer.invoke("security:change-pin", data),
     recover: data => ipcRenderer.invoke("security:recover", data),
+    recoverManagerPin: data => ipcRenderer.invoke("security:recover-manager-pin", data),
     configureManagerPin: (data, grant) =>
         ipcRenderer.invoke("security:configure-manager-pin", data, grant)
 },

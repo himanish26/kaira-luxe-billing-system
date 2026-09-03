@@ -13,6 +13,12 @@ function integrationTime(value) {
 }
 function integrationEvent(event) { return event ? `${integrationTime(event.at)} · ${integrationLabel(event.status)}` : "Never"; }
 
+function leaveIntegrationConfiguration() {
+    settingsPageContent.innerHTML = "";
+    settingsPage.style.display = "none";
+    return showSystemHealthPage();
+}
+
 async function showSystemHealthPage() {
     const config = await window.electronAPI.getIntegrationConfig();
     const source = item => item.source === "ENVIRONMENT" ? '<p class="integration-source">Using Windows system configuration</p>' : "";
@@ -69,14 +75,11 @@ save.onclick = async () => {
             freshGrant
         );
 
-        message.textContent =
+        const savedEmail = await window.electronAPI.getIntegrationDetails("email", freshGrant);
+        showEmailIntegrationForm(savedEmail, freshGrant);
+        document.getElementById("message").textContent =
             "Configuration saved securely." +
             (r.activityWarning ? ` ${r.activityWarning}` : "");
-
-        setTimeout(
-            showSystemHealthPage,
-            r.activityWarning ? 1800 : 500
-        );
     } catch (e) {
         message.textContent = e.message;
     }
@@ -84,14 +87,11 @@ save.onclick = async () => {
 
 testConnection.onclick = async () => {
     try {
-        const freshGrant = await requestFreshIntegrationGrant("email");
-        if (!freshGrant) return;
-
         const r = await window.electronAPI.testEmailIntegration(
-            freshGrant
+            grant
         );
 
-        message.textContent =
+        document.getElementById("message").textContent =
             (r.success
                 ? "Connection Successful"
                 : integrationLabel(r.error)) +
@@ -103,9 +103,6 @@ testConnection.onclick = async () => {
 
 sendTest.onclick = async () => {
     try {
-        const freshGrant = await requestFreshIntegrationGrant("email");
-        if (!freshGrant) return;
-
         const to =
             read().recipients
                 .map(v => v.trim().toLowerCase())
@@ -114,7 +111,7 @@ sendTest.onclick = async () => {
         const r =
             await window.electronAPI.sendIntegrationTestEmail(
                 to,
-                freshGrant
+                grant
             );
 
         message.textContent =
@@ -127,7 +124,7 @@ sendTest.onclick = async () => {
     }
 };
 
-cancel.onclick = showSystemHealthPage;
+cancel.onclick = leaveIntegrationConfiguration;
 }
 function emailGuide() { return `<section class="integration-guide"><h2>SETUP GUIDE</h2><ol><li>Enter the Gmail/email address KLBS will use for Day Closing backups.</li><li>For Gmail use smtp.gmail.com, port 587 and STARTTLS.</li><li>Enter the Gmail address as SMTP Username.</li><li>Generate and enter a Google App Password.</li><li>Add one or more backup recipients.</li><li>Save the configuration.</li><li>Click Test Connection.</li><li>Click Send Test Email and confirm receipt.</li></ol><p><strong>IMPORTANT:</strong> Use a Google App Password, not the normal Gmail account password. Saved SMTP credentials are never displayed by KLBS.</p></section>`; }
 function detectedSheetId(value) { const input=String(value||"").trim(); if(/^[A-Za-z0-9_-]{20,}$/.test(input))return input; const m=/^https:\/\/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/.exec(input); return m?m[1]:""; }
@@ -151,14 +148,11 @@ save.onclick = async () => {
             freshGrant
         );
 
-        message.textContent =
+        const savedDsr = await window.electronAPI.getIntegrationDetails("dsr", freshGrant);
+        showDsrIntegrationForm(savedDsr, freshGrant);
+        document.getElementById("message").textContent =
             "Configuration saved securely." +
             (r.activityWarning ? ` ${r.activityWarning}` : "");
-
-        setTimeout(
-            showSystemHealthPage,
-            r.activityWarning ? 1800 : 500
-        );
     } catch (e) {
         message.textContent = e.message;
     }
@@ -166,12 +160,9 @@ save.onclick = async () => {
 
 testConnection.onclick = async () => {
     try {
-        const freshGrant = await requestFreshIntegrationGrant("dsr");
-        if (!freshGrant) return;
-
         const r =
             await window.electronAPI.testDsrIntegration(
-                freshGrant
+                grant
             );
 
         message.textContent =
@@ -184,7 +175,7 @@ testConnection.onclick = async () => {
     }
 };
 
-cancel.onclick = showSystemHealthPage;
+cancel.onclick = leaveIntegrationConfiguration;
 }
 function dsrGuide(){return `<section class="integration-guide"><h2>SETUP GUIDE</h2><ol><li>Paste the Google Sheet URL.</li><li>KLBS detects the Sheet ID.</li><li>Confirm KLBS_Daily_Data.</li><li>Enter the Apps Script Web App URL.</li><li>Enter the DSR Sync Secret.</li><li>Save the configuration.</li><li>Click Test Connection.</li><li>Verify a SUCCESS entry in KLBS_Test.</li></ol><p><strong>IMPORTANT:</strong> Normal DSR data is written only to KLBS_Daily_Data. Test logs are written only to KLBS_Test. No Google username or password is required.</p></section>`;}
 function showIntegrationsPage(){return showSystemHealthPage();}

@@ -23,21 +23,21 @@
 
 .dashboard-grid button:hover {
     transform: translateY(-2px);
-    background-color:#7A002C;
+    background-color:var(--primary-dark);
     color: white;
 }
 
 .dashboard-grid button{
 
     background:#fff;
-    border:2px solid #8B004B;
+    border:2px solid var(--primary);
     border-radius:20px;
     transition:.2s;
 }
 
 .dashboard-grid button:hover{
 
-    background:#8B004B;
+    background:var(--primary);
     color:#fff;
     transform:translateY(-2px);
     box-shadow:0 10px 20px rgba(139,0,75,.15);
@@ -121,7 +121,7 @@
 
     border-radius:18px;
 
-    border: 2px solid #7A002C; 
+    border: 2px solid var(--primary);
 
     padding:25px;
 
@@ -137,7 +137,7 @@
 
     font-weight:700;
 
-    color:#7A002C;
+    color:var(--primary);
 
 }
 
@@ -213,7 +213,7 @@
 
 #businessOverviewCard h3 {
 
-    color: #7A002C;
+    color: var(--primary);
 
 }
 
