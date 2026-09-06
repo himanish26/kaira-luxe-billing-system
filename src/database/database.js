@@ -22,11 +22,28 @@ const {
     SCHEMA_METADATA_TABLE,
     prepareDatabaseSchema
 } = require("./schemaVersion");
+const {
+    recoverInterruptedRestoreAtStartup,
+    forceRecoverPreviousDatabase
+} = require("../services/restoreSafety");
 
 const dbPath = getAuthoritativeDatabasePath();
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-if (fs.existsSync(dbPath) && fs.statSync(dbPath).isDirectory()) {
-    throw new Error("The authoritative KLBS database path identifies a directory.");
+let startupRestoreRecoveryError = null;
+try {
+    recoverInterruptedRestoreAtStartup(dbPath);
+}
+catch (error) {
+    startupRestoreRecoveryError = error;
+    technicalLogger.fatal("RESTORE", "Interrupted restore recovery blocked database startup", error, {
+        operation: "STARTUP_RESTORE_RECOVERY",
+        code: error.code || null
+    });
+}
+if (!startupRestoreRecoveryError) {
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    if (fs.existsSync(dbPath) && fs.statSync(dbPath).isDirectory()) {
+        throw new Error("The authoritative KLBS database path identifies a directory.");
+    }
 }
 
 let databaseReadyResolve;
@@ -38,7 +55,11 @@ const databaseReady = new Promise((resolve, reject) => {
     databaseReadyReject = reject;
 });
 
-const db = new sqlite3.Database(dbPath, async (err) => {
+const db = new sqlite3.Database(startupRestoreRecoveryError ? ":memory:" : dbPath, async (err) => {
+    if (startupRestoreRecoveryError) {
+        databaseReadyReject(startupRestoreRecoveryError);
+        return;
+    }
     if (err) {
         technicalLogger.fatal("DATABASE", "SQLite database connection failed", err, {
             code: err.code || null
@@ -2942,6 +2963,22 @@ try {
 }
 
 catch (error) {
+
+    if (startupRestoreRecoveryError === null) {
+        try {
+            await new Promise(resolve => db.close(() => resolve()));
+            if (forceRecoverPreviousDatabase(dbPath)) {
+                technicalLogger.warn("RESTORE", "Previous database recovered after startup validation failure", {
+                    operation: "STARTUP_RESTORE_ROLLBACK"
+                });
+            }
+        }
+        catch (recoveryError) {
+            technicalLogger.fatal("RESTORE", "Startup restore rollback failed", recoveryError, {
+                operation: "STARTUP_RESTORE_ROLLBACK"
+            });
+        }
+    }
 
     technicalLogger.fatal(
         "DATABASE",

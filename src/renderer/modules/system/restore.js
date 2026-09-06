@@ -2,6 +2,23 @@
    RESTORE BACKUP
 ===================================== */
 
+function formatRestoreDateTime(value) {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true
+    }).formatToParts(new Date(value));
+
+    const get = type =>
+        parts.find(part => part.type === type)?.value || "";
+
+    return `${get("day")} ${get("month")}, ${get("year")}, ${get("hour").padStart(2, "0")}:${get("minute")} ${get("dayPeriod").toUpperCase()}`;
+}
+
 function showRestorePage() {
 
     renderSettingsPage({
@@ -39,7 +56,9 @@ function showRestorePage() {
         <h2>Warning</h2>
 
         <p>
-            Restoring will replace the current database.
+            Restoring replaces current local business data with the backup state.
+            A durable safety copy of the current database is created first.
+            The application restarts after a successful restore.
         </p>
 
     </div>
@@ -116,7 +135,7 @@ const confirmation =
 
 Version : ${m.appVersion}
 
-Created : ${new Date(m.createdOn).toLocaleString()}
+Created : ${formatRestoreDateTime(m.createdOn)}
 
 Database : ${backup.databaseExists ? "✓ Present" : "✗ Missing"}
 
@@ -124,7 +143,8 @@ Logs : ${backup.logsExists ? "✓ Present" : "✗ None"}
 
 Settings : ${backup.settingsExists ? "✓ Present" : "✗ None"}
 
-This operation will replace your current database.
+This operation will replace your current local business data.
+The current database will be safety-backed up first, and the application will restart after success.
 
 This operation cannot be undone.`
 

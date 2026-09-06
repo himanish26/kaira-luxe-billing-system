@@ -15,6 +15,22 @@ const {
     getAuthoritativeDatabasePath,
     assertAuthoritativeDatabaseConnection
 } = require("../database/databasePath");
+const {
+    CURRENT_DB_SCHEMA_VERSION,
+    SCHEMA_METADATA_TABLE,
+    assertSupportedSchemaVersion
+} = require("../database/schemaVersion");
+const {
+    getRestoreSafetyPaths,
+    operationId,
+    atomicWriteJson,
+    createState,
+    forceRecoverPreviousDatabase
+} = require("./restoreSafety");
+const {
+    beginRestore,
+    endRestoreBeforeClose
+} = require("./restoreState");
 const DEFAULT_BACKUP_FOLDER = path.join(
     os.homedir(),
     "Documents",
@@ -257,6 +273,55 @@ let backupOperationSequence = 0;
 function getBackupOperationId() {
     backupOperationSequence += 1;
     return `${process.pid}_${backupOperationSequence}_${crypto.randomBytes(6).toString("hex")}`;
+}
+
+function readRestoredSchemaVersion(databasePath) {
+    return new Promise((resolve, reject) => {
+        const validationDb = new sqlite3.Database(databasePath, sqlite3.OPEN_READONLY, openError => {
+            if (openError) return reject(openError);
+            validationDb.get(
+                `SELECT schema_version FROM ${SCHEMA_METADATA_TABLE} WHERE id = 1`,
+                [],
+                (error, row) => {
+                    validationDb.close(closeError => {
+                        if (error && !/no such table/i.test(error.message || "")) return reject(error);
+                        if (closeError) return reject(closeError);
+                        if (!row) return resolve(null);
+                        const version = Number(row.schema_version);
+                        if (!Number.isInteger(version) || version < 0) {
+                            return reject(new Error("Restored database schema metadata is invalid."));
+                        }
+                        resolve(version);
+                    });
+                }
+            );
+        });
+    });
+}
+
+async function validateRestoredDatabase(databasePath) {
+    if (!fs.existsSync(databasePath) || fs.statSync(databasePath).size <= 0) {
+        throw new Error("Restored billing.db is missing or empty.");
+    }
+    await validateSQLiteDatabase(databasePath);
+    const schemaVersion = await readRestoredSchemaVersion(databasePath);
+    await assertSupportedSchemaVersion(schemaVersion, CURRENT_DB_SCHEMA_VERSION);
+    await new Promise((resolve, reject) => {
+        const db = new sqlite3.Database(databasePath, sqlite3.OPEN_READONLY, error => {
+            if (error) return reject(error);
+            db.all(`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?, ?, ?)`,
+                ["products", "bills", "settings", "inventory_transactions", "day_closing"],
+                (listError, rows) => db.close(closeError => {
+                    if (listError || closeError) return reject(listError || closeError);
+                    const names = new Set((rows || []).map(row => row.name));
+                    const missing = ["products", "bills", "settings", "inventory_transactions", "day_closing"]
+                        .filter(name => !names.has(name));
+                    if (missing.length) return reject(new Error("Restored database is missing required KLBS tables."));
+                    resolve();
+                }));
+        });
+    });
+    return { schemaVersion };
 }
 
 function removeOwnArtifact(filePath) {
@@ -623,350 +688,120 @@ const settingsExists = entries.some(
 
 }
 
-async function restoreBackup(zipPath) {
-
+async function restoreBackupInternal(zipPath) {
     let liveDatabase = null;
-    let backupDatabase = null;
+    let recoveryDatabase = null;
+    let state = null;
     let databaseClosed = false;
-
+    let stagingFolder = null;
     try {
+        technicalLogger.info("RESTORE", "Restore requested", { operation: "RESTORE_BACKUP" });
+        const backupValidation = await validateBackup(zipPath);
+        if (!backupValidation.success) return backupValidation;
+        const zip = new AdmZip(zipPath);
+        const databaseEntry = zip.getEntries().find(entry => entry.entryName === "Database/billing.db");
+        if (!databaseEntry) throw new Error("billing.db not found inside backup.");
 
-        const backupValidation =
-            await validateBackup(zipPath);
-
-        if (!backupValidation.success) {
-            technicalLogger.warn("RESTORE", "Backup restore validation was rejected", {
-                operation: "VALIDATE_RESTORE_BACKUP"
-            });
-            return backupValidation;
+        liveDatabase = getAuthoritativeDatabasePath();
+        recoveryDatabase = `${liveDatabase}.restore-recovery`;
+        await assertAuthoritativeDatabaseConnection(database);
+        if (fs.existsSync(recoveryDatabase)) {
+            throw new Error("A previous restore recovery copy exists; resolve it before restoring again.");
         }
 
-        
+        const restoreId = operationId();
+        stagingFolder = path.join(app.getPath("temp"), "kaira_restore", restoreId);
+        fs.mkdirSync(stagingFolder, { recursive: true });
+        zip.extractEntryTo(databaseEntry, stagingFolder, false, true);
+        const stagedDatabase = path.join(stagingFolder, "billing.db");
+        technicalLogger.info("RESTORE", "Unique restore staging created", { operationId: restoreId });
+        await validateRestoredDatabase(stagedDatabase);
+        technicalLogger.info("RESTORE", "Staged database validation succeeded", { operationId: restoreId });
 
-        const zip =
-            new AdmZip(zipPath);
+        const safetyPaths = getRestoreSafetyPaths(liveDatabase);
+        fs.mkdirSync(safetyPaths.safetyFolder, { recursive: true });
+        const safetyBackupPath = path.join(safetyPaths.safetyFolder, `PreRestoreSafety_${getTimestamp()}_${restoreId}.db`);
+        state = createState(liveDatabase, { operationId: restoreId, stagedDatabasePath: stagedDatabase, safetyBackupPath });
+        atomicWriteJson(safetyPaths.statePath, state);
+        beginRestore();
+        await closeDatabase();
+        databaseClosed = true;
+        state.phase = "PREPARED";
+        atomicWriteJson(safetyPaths.statePath, state);
+        fs.copyFileSync(liveDatabase, safetyBackupPath, fs.constants.COPYFILE_EXCL);
+        await validateRestoredDatabase(safetyBackupPath);
+        technicalLogger.info("RESTORE", "Pre-restore safety backup created", { operationId: restoreId });
 
-        const entries =
-            zip.getEntries();
-
-        const databaseEntry =
-            entries.find(
-
-                entry =>
-
-                    entry.entryName ===
-                    "Database/billing.db"
-
-            );
-
-        if (!databaseEntry) {
-
-            technicalLogger.warn("RESTORE", "Backup restore archive is missing its database entry", {
-                operation: "RESTORE_BACKUP"
-            });
-
-            return {
-
-                success: false,
-
-                message:
-                    "billing.db not found inside backup."
-
-            };
-
+        fs.copyFileSync(liveDatabase, recoveryDatabase, fs.constants.COPYFILE_EXCL);
+        await validateRestoredDatabase(recoveryDatabase);
+        state.phase = "LIVE_MOVED";
+        atomicWriteJson(safetyPaths.statePath, state);
+        for (const suffix of ["-wal", "-shm"]) {
+            const sidecar = `${liveDatabase}${suffix}`;
+            if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar);
         }
+        const authoritativeTemporary = `${liveDatabase}.${restoreId}.tmp`;
+        fs.copyFileSync(stagedDatabase, authoritativeTemporary, fs.constants.COPYFILE_EXCL);
+        fs.renameSync(liveDatabase, `${liveDatabase}.${restoreId}.old`);
+        fs.renameSync(authoritativeTemporary, liveDatabase);
+        state.phase = "RESTORED_ESTABLISHED";
+        atomicWriteJson(safetyPaths.statePath, state);
+        await validateRestoredDatabase(liveDatabase);
+        await validateWritableSQLiteDatabase(liveDatabase);
+        state.phase = "VERIFIED";
+        atomicWriteJson(safetyPaths.statePath, state);
+        const oldMovedPath = `${liveDatabase}.${restoreId}.old`;
+        if (fs.existsSync(oldMovedPath)) fs.unlinkSync(oldMovedPath);
+        // The durable PreRestoreSafety copy remains. The transient recovery
+        // name is removed only after the new authoritative DB is verified.
+        if (fs.existsSync(recoveryDatabase)) fs.unlinkSync(recoveryDatabase);
+        fs.unlinkSync(safetyPaths.statePath);
+        technicalLogger.info("RESTORE", "Restore complete; authoritative database verified", { operationId: restoreId });
 
-        const tempFolder =
-            path.join(
-
-                app.getPath("temp"),
-
-                "kaira_restore"
-
-            );
-
-        ensureDirectory(tempFolder);
-
-        zip.extractEntryTo(
-
-            databaseEntry,
-
-            tempFolder,
-
-            false,
-
-            true
-
-        );
-
-const extractedDatabase = path.join(
-    tempFolder,
-    "billing.db"
-);
-
-        technicalLogger.info("RESTORE", "Backup database extracted for validation");
-
-    await validateSQLiteDatabase(
-        extractedDatabase
-    );
-
-    liveDatabase = getAuthoritativeDatabasePath();
-    backupDatabase = `${liveDatabase}.restore-recovery`;
-
-    await assertAuthoritativeDatabaseConnection(database);
-
-    if (fs.existsSync(backupDatabase)) {
-        throw new Error(
-            "A prior database restore recovery file exists. Resolve it before restoring again."
-        );
+        const logsExist = zip.getEntries().some(entry => entry.entryName.startsWith("Logs/"));
+        if (logsExist) {
+            const logsFolder = path.join(app.getPath("userData"), "logs");
+            ensureDirectory(logsFolder);
+            zip.getEntries().filter(entry => entry.entryName.startsWith("Logs/") &&
+                !/^KLBS\.log(?:\.\d+)?$/i.test(path.basename(entry.entryName)))
+                .forEach(entry => zip.extractEntryTo(entry, app.getPath("userData"), true, true));
+        }
+        fs.rmSync(stagingFolder, { recursive: true, force: true });
+        return { success: true, message: "Database restored successfully." };
     }
-
-// Close the active SQLite connection
-// before replacing the live database file.
-
-await closeDatabase();
-databaseClosed = true;
-
-console.log(
-    "STEP 0 : Database connection closed."
-);
-
-// Backup current database
-
-if (fs.existsSync(liveDatabase)) {
-
-    fs.renameSync(
-        liveDatabase,
-        backupDatabase
-    );
-
-    console.log(
-        "STEP 0A : Existing database backed up."
-    );
-
-}
-
-// Copy restored database
-
-fs.copyFileSync(
-
-    extractedDatabase,
-
-    liveDatabase
-
-);
-
-console.log(
-    "STEP 1 : Database copied."
-);
-
-await validateSQLiteDatabase(liveDatabase);
-
-// Ensure the restored database is writable.
-
-fs.chmodSync(
-    liveDatabase,
-    0o644
-);
-
-await validateWritableSQLiteDatabase(liveDatabase);
-
-console.log(
-    "STEP 1B : Database permissions restored."
-);
-
-// Verify restore
-
-const logsExist = entries.some(
-
-    entry =>
-
-        entry.entryName.startsWith(
-            "Logs/"
-        )
-
-);
-
-if (logsExist) {
-
-    const logsFolder = path.join(
-    app.getPath("userData"),
-    "logs"
-);
-
-    ensureDirectory(logsFolder);
-
-    entries
-        .filter(entry =>
-            entry.entryName.startsWith("Logs/") &&
-            !/^KLBS\.log(?:\.\d+)?$/i.test(path.basename(entry.entryName))
-        )
-        .forEach(entry => zip.extractEntryTo(
-            entry,
-            app.getPath("userData"),
-            true,
-            true
-        ));
-
-    console.log(
-        "STEP 1A : Logs restored."
-    );
-
-}
-
-if (!fs.existsSync(liveDatabase)) {
-
-    if (fs.existsSync(backupDatabase)) {
-
-        fs.renameSync(
-            backupDatabase,
-            liveDatabase
-        );
-
-    }
-
-    throw new Error("Database restore verification failed.");
-
-}
-
-// Delete backup
-
-if (fs.existsSync(backupDatabase)) {
-
-    fs.unlinkSync(
-        backupDatabase
-    );
-
-}
-
-console.log(
-    "STEP 2 : Backup deleted."
-);
-
-// Delete temporary folder
-
-fs.rmSync(
-
-    tempFolder,
-
-    {
-
-        recursive: true,
-
-        force: true
-
-    }
-
-);
-
-console.log(
-    "STEP 3 : Temp folder deleted."
-);
-
-console.log(
-    "STEP 4 : Returning success."
-);
-
-        console.log(
-    "Restart required."
-);
-
-
-return {
-
-    success: true,
-
-    message:
-        "Database restored successfully."
-
-};
-
-    }
-
     catch (error) {
-
-    console.error("Backup restore failed. See KLBS.log for sanitized diagnostics.");
-    technicalLogger.error(
-        "RESTORE",
-        "Backup restore failed",
-        error,
-        { operation: "RESTORE_BACKUP" }
-    );
-
-    let originalRecovered = false;
-    if (
-        liveDatabase &&
-        backupDatabase &&
-        fs.existsSync(backupDatabase)
-    ) {
-        try {
-            if (fs.existsSync(liveDatabase)) {
-                fs.unlinkSync(liveDatabase);
+        technicalLogger.error("RESTORE", "Backup restore failed", error, { operation: "RESTORE_BACKUP" });
+        if (liveDatabase && recoveryDatabase && fs.existsSync(recoveryDatabase)) {
+            try {
+                if (forceRecoverPreviousDatabase(liveDatabase) && state) {
+                    const paths = getRestoreSafetyPaths(liveDatabase);
+                    state.phase = "RECOVERED";
+                    atomicWriteJson(paths.statePath, state);
+                    fs.unlinkSync(paths.statePath);
+                }
+                technicalLogger.warn("RESTORE", "Previous database recovered after restore failure", { operation: "RECOVER_ORIGINAL_DATABASE" });
             }
-            fs.renameSync(
-                backupDatabase,
-                liveDatabase
-            );
-            originalRecovered = true;
+            catch (recoveryError) {
+                technicalLogger.fatal("RESTORE", "Previous database recovery failed", recoveryError, { operation: "RECOVER_ORIGINAL_DATABASE" });
+            }
         }
-        catch (restoreOriginalError) {
-            technicalLogger.fatal(
-                "RESTORE",
-                "Original database recovery failed after restore error",
-                restoreOriginalError,
-                { operation: "RECOVER_ORIGINAL_DATABASE" }
-            );
-            console.error(
-                "Original database recovery failed:",
-                restoreOriginalError && restoreOriginalError.code || "Unknown error"
-            );
+        if (stagingFolder) { try { fs.rmSync(stagingFolder, { recursive: true, force: true }); } catch (_) {} }
+        if (databaseClosed) {
+            forceControlledRestartAfterRestoreFailure();
+            return { success: false, restartRequired: true, message: "Restore failed. KLBS is restarting to verify database recovery." };
         }
+        endRestoreBeforeClose();
+        try { await logRestoreFailed(error.message); } catch (_) {}
+        return { success: false, message: error.message };
     }
-
-    if (databaseClosed) {
-        technicalLogger.fatal(
-            "RESTORE",
-            originalRecovered
-                ? "Restore failed after database close; original database recovered and restart required"
-                : "Restore failed after database close; controlled restart required",
-            error,
-            { operation: "RESTORE_BACKUP" }
-        );
-        forceControlledRestartAfterRestoreFailure();
-        return {
-            success: false,
-            restartRequired: true,
-            message: "Database restore failed after the live database was closed. KLBS is restarting."
-        };
-    }
-
-    try {
-
-        await logRestoreFailed(
-
-            error.message
-
-        );
-
-    }
-
-    catch (err) {
-
-        console.error(err);
-
-    }
-
-    return {
-
-        success: false,
-
-        message:
-            error.message
-
-    };
-
 }
 
+// Restore shares the existing backup queue so scheduled/manual snapshots
+// cannot overlap the close-and-replace window.
+async function restoreBackup(zipPath) {
+    const operation = backupQueueTail.then(() => restoreBackupInternal(zipPath));
+    backupQueueTail = operation.catch(() => undefined);
+    return operation;
 }
 
 module.exports = {

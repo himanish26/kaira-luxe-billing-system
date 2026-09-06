@@ -174,6 +174,11 @@ const {
     getStartupCheck
 } = require("./statusService");
 
+const {
+    isRestoreInProgress,
+    setRestoreQuiesceHandler
+} = require("../services/restoreState");
+
 const database = require("../database/database");
 const { databaseReady } = database;
 const masterRecoveryVerifier = require("../config/masterRecoveryVerifier");
@@ -324,7 +329,8 @@ const {
 
 const {
 
-    startBackupScheduler
+    startBackupScheduler,
+    stopBackupScheduler
 
 } = require("../services/backupScheduler");
 
@@ -554,9 +560,32 @@ function createSplashWindow() {
 
 let integrationOutboxTimer = null;
 let integrationOutboxOnline = false;
+function stopIntegrationOutboxDrain() {
+    if (integrationOutboxTimer) {
+        clearInterval(integrationOutboxTimer);
+        integrationOutboxTimer = null;
+    }
+}
+
+setRestoreQuiesceHandler(() => {
+    stopBackupScheduler();
+    stopIntegrationOutboxDrain();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("restore:quiescing");
+    }
+    return () => {
+        startBackupScheduler();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("restore:resumed");
+        }
+        startIntegrationOutboxDrain();
+    };
+});
+
 function startIntegrationOutboxDrain() {
     if (integrationOutboxTimer) return;
     const poll = async () => {
+        if (isRestoreInProgress()) return;
         try {
             const status = await getSystemStatus();
             const online = Boolean(status.internet && status.internet.online);
@@ -667,18 +696,26 @@ app.whenReady().then(async () => {
         );
 
         const newerSchema = error && error.code === "KLBS_DB_SCHEMA_NEWER";
+        const restoreRecoveryBlocked = error && (
+            error.code === "KLBS_RESTORE_RECOVERY_REQUIRED" ||
+            error.code === "KLBS_RESTORE_STATE_INVALID"
+        );
         await dialog.showMessageBox({
 
             type: "error",
 
-            title: newerSchema ? "DATABASE VERSION NOT SUPPORTED" : "Database Initialization Failed",
+            title: newerSchema
+                ? "DATABASE VERSION NOT SUPPORTED"
+                : restoreRecoveryBlocked ? "RESTORE RECOVERY REQUIRED" : "Database Initialization Failed",
 
             message:
                 "Kaira Luxe Billing System could not initialize its database.",
 
             detail: newerSchema
                 ? "This database was created by a newer version of Kaira Luxe Billing System.\n\nInstall the required newer KLBS version to continue."
-                : "Kaira Luxe Billing System could not initialize its database."
+                : restoreRecoveryBlocked
+                    ? "An interrupted database restore could not be recovered safely. No blank database was created. Contact support before continuing."
+                    : "Kaira Luxe Billing System could not initialize its database."
 
         });
 
@@ -2208,6 +2245,14 @@ ipcMain.handle(
 
     async () => {
 
+        if (isRestoreInProgress()) {
+            return {
+                products: 0, customers: 0, todayBills: 0, todaySales: 0,
+                mtdBills: 0, mtdSales: 0, cashToday: 0, upiToday: 0, cardToday: 0,
+                restoreInProgress: true
+            };
+        }
+
         try {
 
             return await getDashboardSummary();
@@ -2216,13 +2261,12 @@ ipcMain.handle(
 
         catch (error) {
 
-            console.error(
-
-                "Dashboard Summary Error:",
-
-                error
-
-            );
+            if (!isRestoreInProgress()) {
+                console.error(
+                    "Dashboard Summary Error:",
+                    error
+                );
+            }
 
             return {
 
@@ -2286,6 +2330,16 @@ ipcMain.handle(
     "get-system-status",
 
     async () => {
+
+        if (isRestoreInProgress()) {
+            return {
+                database: { healthy: false, status: "Restore in progress", latency: null },
+                internet: { online: false, status: "Restore in progress" },
+                printer: { status: "Unavailable" },
+                backup: { status: "Unavailable" },
+                restoreInProgress: true
+            };
+        }
 
         try {
 
@@ -2929,7 +2983,35 @@ ipcMain.handle(
 
     async () => {
 
-        return await getDayClosingSummary();
+        if (isRestoreInProgress()) {
+            return {
+                businessDate: null, totalBills: null, qtySold: null, grossSales: null,
+                totalDiscount: null, netBilling: null, creditNoteCount: null,
+                qtyReturned: null, returnCnValue: null, netSalesAfterReturns: null,
+                cash: null, upi: null, card: null, storeCreditRedeemed: null,
+                giftVoucherRedeemed: null, settlementTotal: null, actualMoneyCollection: null,
+                storeCreditIssued: null, settlementDifference: null,
+                backupStatus: "PAUSED", emailStatus: "PAUSED", restoreInProgress: true
+            };
+        }
+
+        try {
+            return await getDayClosingSummary();
+        }
+        catch (error) {
+            if (isRestoreInProgress()) {
+                return {
+                    businessDate: null, totalBills: null, qtySold: null, grossSales: null,
+                    totalDiscount: null, netBilling: null, creditNoteCount: null,
+                    qtyReturned: null, returnCnValue: null, netSalesAfterReturns: null,
+                    cash: null, upi: null, card: null, storeCreditRedeemed: null,
+                    giftVoucherRedeemed: null, settlementTotal: null, actualMoneyCollection: null,
+                    storeCreditIssued: null, settlementDifference: null,
+                    backupStatus: "PAUSED", emailStatus: "PAUSED", restoreInProgress: true
+                };
+            }
+            throw error;
+        }
 
     }
 

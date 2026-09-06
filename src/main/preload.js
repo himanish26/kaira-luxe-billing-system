@@ -383,6 +383,10 @@ restoreFocusAfterNativeDialog: () =>
     ipcRenderer.send("dialog:restore-focus"),
 onNativeDialogClosed: callback =>
     ipcRenderer.on("dialog:native-closed", callback),
+onRestoreQuiescing: callback =>
+    ipcRenderer.on("restore:quiescing", callback),
+onRestoreResumed: callback =>
+    ipcRenderer.on("restore:resumed", callback),
 
 selectRestoreFile: () =>
     ipcRenderer.invoke(

@@ -10,19 +10,24 @@ const {
 
 } = require("../database/settingsService");
 const technicalLogger = require("./technicalLogger");
+const { isRestoreInProgress } = require("./restoreState");
 
 let lastBackupDate = "";
 let schedulerCheckInFlight = false;
+let schedulerTimer = null;
 
 function startBackupScheduler() {
 
+    if (schedulerTimer) return;
+
     console.log("✓ Backup Scheduler Started");
 
-    setInterval(
+    schedulerTimer = setInterval(
 
         async () => {
 
             if (schedulerCheckInFlight) return;
+            if (isRestoreInProgress()) return;
             schedulerCheckInFlight = true;
 
             try {
@@ -98,8 +103,16 @@ function startBackupScheduler() {
 
 }
 
+function stopBackupScheduler() {
+    if (schedulerTimer) {
+        clearInterval(schedulerTimer);
+        schedulerTimer = null;
+    }
+}
+
 module.exports = {
 
-    startBackupScheduler
+    startBackupScheduler,
+    stopBackupScheduler
 
 };

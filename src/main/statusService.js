@@ -9,6 +9,7 @@ const {
 const {
     getSettings
 } = require("../database/settingsService");
+const { isRestoreInProgress } = require("../services/restoreState");
 
 /* ==========================================
    DATABASE STATUS
@@ -486,10 +487,12 @@ async function getPrinterStatus() {
 
     catch (error) {
 
-        console.error(
-            "Printer Status Error:",
-            error
-        );
+        if (!isRestoreInProgress()) {
+            console.error(
+                "Printer Status Error:",
+                error
+            );
+        }
 
         return {
 
@@ -569,10 +572,12 @@ async function getLatestBackupStatus() {
 
     catch (error) {
 
-        console.error(
-            "Unable to read backup status:",
-            error
-        );
+        if (!isRestoreInProgress()) {
+            console.error(
+                "Unable to read backup status:",
+                error
+            );
+        }
 
         return {
 

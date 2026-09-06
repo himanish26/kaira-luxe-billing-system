@@ -7211,6 +7211,26 @@ else{
 
 let operationalDashboardStarted = false;
 let operationalRefreshTimer = null;
+let restoreQuiescing = false;
+
+window.electronAPI.onRestoreQuiescing(() => {
+    restoreQuiescing = true;
+    if (operationalRefreshTimer) {
+        clearInterval(operationalRefreshTimer);
+        operationalRefreshTimer = null;
+    }
+});
+
+window.electronAPI.onRestoreResumed(() => {
+    restoreQuiescing = false;
+    if (operationalDashboardStarted && !operationalRefreshTimer) {
+        operationalRefreshTimer = setInterval(() => {
+            if (restoreQuiescing) return;
+            loadDashboardSummary();
+            loadSystemStatus();
+        }, 10000);
+    }
+});
 
 async function startOperationalDashboard() {
 
@@ -7228,6 +7248,7 @@ async function startOperationalDashboard() {
     initializeKeyboardShortcuts();
 
     operationalRefreshTimer = setInterval(() => {
+        if (restoreQuiescing) return;
         loadDashboardSummary();
         loadSystemStatus();
     }, 10000);
