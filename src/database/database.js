@@ -17,6 +17,11 @@ const {
 } = require("./activityMigration");
 const { migrateManagerSecurity } = require("./managerSecurityMigration");
 const technicalLogger = require("../services/technicalLogger");
+const {
+    CURRENT_DB_SCHEMA_VERSION,
+    SCHEMA_METADATA_TABLE,
+    prepareDatabaseSchema
+} = require("./schemaVersion");
 
 const dbPath = getAuthoritativeDatabasePath();
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -405,6 +410,12 @@ Berhampur-760001',
     )
 `);
 
+        db.run(`
+            CREATE TABLE IF NOT EXISTS ${SCHEMA_METADATA_TABLE} (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                schema_version INTEGER NOT NULL CHECK (schema_version >= 0)
+            )
+        `);
         console.log("All Tables Created Successfully");
     });
 
@@ -2887,6 +2898,12 @@ try {
             }
         };
 
+        await prepareDatabaseSchema({
+            database: db,
+            currentVersion: CURRENT_DB_SCHEMA_VERSION,
+            logger: technicalLogger,
+            migrations: [],
+            runCurrentMigrations: async () => {
         await runNamedMigration("settings_columns", () => runDatabaseMigrations());
 
         await runNamedMigration("activity_log", () => migrateActivityLogSchema(db));
@@ -2914,6 +2931,8 @@ try {
         await runNamedMigration("bill_payment", () => migrateBillPaymentColumns());
 
         await runNamedMigration("opening_stock", () => initializeOpeningStock());
+            }
+        });
 
     console.log(
         '✓ Database Initialization Complete'
@@ -2975,3 +2994,4 @@ module.exports = db;
 module.exports.databaseReady = databaseReady;
 module.exports.closeDatabase = closeDatabase;
 module.exports.databasePath = dbPath;
+module.exports.CURRENT_DB_SCHEMA_VERSION = CURRENT_DB_SCHEMA_VERSION;

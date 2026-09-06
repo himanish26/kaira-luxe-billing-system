@@ -865,3 +865,8 @@ CREATE TABLE IF NOT EXISTS integration_outbox (
 
 CREATE INDEX idx_integration_outbox_pending
 ON integration_outbox (status, business_date, id);
+
+CREATE TABLE IF NOT EXISTS klbs_schema_metadata (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    schema_version INTEGER NOT NULL CHECK (schema_version >= 0)
+);

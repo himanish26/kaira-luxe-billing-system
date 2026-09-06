@@ -666,17 +666,19 @@ app.whenReady().then(async () => {
             error
         );
 
+        const newerSchema = error && error.code === "KLBS_DB_SCHEMA_NEWER";
         await dialog.showMessageBox({
 
             type: "error",
 
-            title: "Database Initialization Failed",
+            title: newerSchema ? "DATABASE VERSION NOT SUPPORTED" : "Database Initialization Failed",
 
             message:
                 "Kaira Luxe Billing System could not initialize its database.",
 
-            detail:
-                error.message
+            detail: newerSchema
+                ? "This database was created by a newer version of Kaira Luxe Billing System.\n\nInstall the required newer KLBS version to continue."
+                : "Kaira Luxe Billing System could not initialize its database."
 
         });
 
