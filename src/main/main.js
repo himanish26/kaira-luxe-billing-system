@@ -132,8 +132,12 @@ process.on("unhandledRejection", reason => {
 const {
     verifyEmailConnection,
     sendTestEmail,
+    sendEmail,
     setIntegrationConfigService
 } = require("../services/emailService");
+const { createIntegrationOutboxService } = require("../services/integrationOutboxService");
+const { readClosedDsrPayload } = require("../database/dayClosingDsrService");
+const { getBackupFolder } = require("../services/backupService");
 const { createIntegrationConfigService } = require("../services/integrationConfigService");
 const {
     recordIntegrationActivity, emailSettingsEvent, dsrSettingsEvent,
@@ -348,10 +352,27 @@ const { createDsrSyncService } = require("../services/dsrSyncService");
 const dsrSyncService = createDsrSyncService({
     configProvider: () => integrationConfig.resolveDsrRuntime()
 });
+const integrationOutbox = createIntegrationOutboxService({
+    database,
+    logActivity,
+    activityExists: event => new Promise((resolve, reject) => database.get(
+        `SELECT 1 FROM activities
+         WHERE category = ? AND action = ? AND status = ?
+           AND reference_no = ? AND details = ? LIMIT 1`,
+        [event.category, event.action, event.status, event.reference_no, event.details],
+        (error, row) => error ? reject(error) : resolve(Boolean(row))
+    )),
+    sendEmail,
+    syncDsr: payload => dsrSyncService.sync(payload),
+    readDsrPayload: snapshotId => readClosedDsrPayload(database, snapshotId, app.getVersion()),
+    getEmailConfiguration: () => integrationConfig.resolveEmailRuntime(),
+    getBackupPath: async fileName => path.join(await getBackupFolder(), fileName)
+});
 const {
     getDayClosingSummary,
     getDayClosingSnapshot,
     getBusinessDayState,
+    ensureOperationalBusinessDay,
     closeBusinessDay,
     reopenBusinessDay,
     retryDsrSync
@@ -359,6 +380,7 @@ const {
     database,
     getEmailConfiguration: () => integrationConfig.resolveEmailRuntime(),
     dsrSyncService,
+    integrationOutbox,
     klbsVersion: app.getVersion(),
     logBusinessDayClosed,
     logBusinessDayReopened,
@@ -530,6 +552,22 @@ function createSplashWindow() {
     splashWindow.on("closed", () => { splashWindow = null; });
 }
 
+let integrationOutboxTimer = null;
+let integrationOutboxOnline = false;
+function startIntegrationOutboxDrain() {
+    if (integrationOutboxTimer) return;
+    const poll = async () => {
+        try {
+            const status = await getSystemStatus();
+            const online = Boolean(status.internet && status.internet.online);
+            if (online) await integrationOutbox.drain();
+            integrationOutboxOnline = online;
+        } catch (_) {}
+    };
+    poll();
+    integrationOutboxTimer = setInterval(poll, 15000);
+}
+
 app.whenReady().then(async () => {
 
     try {
@@ -611,6 +649,7 @@ app.whenReady().then(async () => {
 
         createWindow();
         createSplashWindow();
+        startIntegrationOutboxDrain();
 
     }
 
@@ -709,6 +748,25 @@ ipcMain.handle("startup:reopen-closed-day", async (event, data) => {
     if (!authorization.success) return authorization;
     requireSecurityGrant(authorization.grant, "DAY_REOPEN");
     return reopenBusinessDay(reason);
+});
+
+ipcMain.handle("startup:close-previous-day", async (event, data) => {
+    if (!splashWindow || event.sender !== splashWindow.webContents) {
+        return { success: false, error: "Startup recovery request rejected." };
+    }
+    const targetDate = String(data && data.businessDate || "");
+    const pin = String(data && data.pin || "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate) || !/^\d{4}$/.test(pin)) {
+        return { success: false, error: "Enter the pending business date and valid 4-digit Manager PIN." };
+    }
+    const state = await getBusinessDayState();
+    if (state.pendingPreviousBusinessDate !== targetDate) {
+        return { success: false, error: "The pending previous business day has changed. Please retry checks." };
+    }
+    const authorization = await administratorSecurity.authorizePin(pin, "DAY_REOPEN");
+    if (!authorization.success) return authorization;
+    requireSecurityGrant(authorization.grant, "DAY_REOPEN");
+    return closeBusinessDay(targetDate);
 });
 
 ipcMain.handle("startup:open-security-setup", async event => {
@@ -857,6 +915,10 @@ ipcMain.handle("startup:ready", async event => {
          */
 
         await dashboardReady;
+
+        // Persist OPEN only after the operational renderer has completed readiness.
+        // Security/setup and blocked previous-day screens never reach this point.
+        await ensureOperationalBusinessDay();
 
 /*
  * Keep the splash visible for a minimum of 8 seconds
@@ -1185,7 +1247,7 @@ ipcMain.handle(
             const dayState =
                 await getBusinessDayState();
 
-            if (dayState.closed || dayState.closing) {
+            if (dayState.pendingPreviousBusinessDate || dayState.closed || dayState.closing) {
 
                 return {
 
@@ -1194,11 +1256,15 @@ ipcMain.handle(
                     businessDayClosed:
                         dayState.closed,
 
+                    previousBusinessDayPending: Boolean(dayState.pendingPreviousBusinessDate),
+                    pendingPreviousBusinessDate: dayState.pendingPreviousBusinessDate || null,
                     businessDayClosing:
                         dayState.closing,
 
                     error:
-                        dayState.closing
+                        dayState.pendingPreviousBusinessDate
+                            ? `Previous business day closing is required for ${dayState.pendingPreviousBusinessDate}.`
+                            : dayState.closing
                             ? "Business Day closing is in progress. Please retry after it completes."
                             : "Business Day is already closed. No further billing is allowed today."
 
@@ -1782,6 +1848,11 @@ ipcMain.handle("integrations:get-config", async () => {
         attempts: latest.dsr_sync_attempts
     } : null;
     return config;
+});
+ipcMain.handle("integrations:get-outbox-status", async () => {
+    const view = await integrationOutbox.getStatusView();
+    const system = await getSystemStatus();
+    return { online: Boolean(system.internet && system.internet.online), ...view };
 });
 ipcMain.handle("integrations:get-details", (event, kind, grant) => {
     const purpose = kind === "email" ? "INTEGRATION_EMAIL_SETTINGS" :

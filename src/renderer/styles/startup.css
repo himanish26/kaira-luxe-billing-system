@@ -1001,3 +1001,22 @@ footer span {
     color: var(--muted);
     font-size: 12px;
 }
+
+.previous-day-heading {
+    color: #8B0040;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: .12em;
+}
+
+.previous-day-date {
+    margin-top: 8px;
+    color: #8B0040;
+    font-size: 28px;
+    font-weight: 800;
+}
+
+.previous-day-message {
+    color: #4b5563;
+    line-height: 1.55;
+}

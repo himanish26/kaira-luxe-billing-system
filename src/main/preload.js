@@ -281,6 +281,7 @@ saveSettings: (settings, grant) =>
     ),
 
 getIntegrationConfig: () => ipcRenderer.invoke("integrations:get-config"),
+getIntegrationOutboxStatus: () => ipcRenderer.invoke("integrations:get-outbox-status"),
 getIntegrationDetails: (kind, grant) => ipcRenderer.invoke("integrations:get-details", kind, grant),
 saveEmailIntegration: (data, grant) => ipcRenderer.invoke("integrations:save-email", data, grant),
 saveDsrIntegration: (data, grant) => ipcRenderer.invoke("integrations:save-dsr", data, grant),

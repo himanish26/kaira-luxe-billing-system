@@ -93,7 +93,7 @@ function validatePayload_(payload) {
     throw new Error('Invalid count or sequence.');
   }
   if (payload.backupStatus !== 'SUCCESS' ||
-      ['SUCCESS', 'FAILED'].indexOf(payload.emailStatus) < 0 ||
+      ['SUCCESS', 'FAILED', 'PENDING'].indexOf(payload.emailStatus) < 0 ||
       !String(payload.klbsVersion || '').trim()) {
     throw new Error('Invalid operational metadata.');
   }
@@ -162,10 +162,11 @@ function appendConnectionTest_(spreadsheet, envelope) {
     }
   }
   sheet.appendRow([
-    Utilities.formatDate(new Date(), 'Asia/Kolkata', 'dd-MMM-yyyy hh:mm:ss a'),
+    new Date(),
     'KLBS', 'TEST_CONNECTION', 'SUCCESS', 'DSR connection successful',
     String(envelope.appVersion || '')
   ]);
+  sheet.getRange('A:A').setNumberFormat('dd-mmm-yyyy hh:mm:ss AM/PM');
 }
 
 function verifyHeaders_(sheet) {
@@ -181,7 +182,7 @@ function verifyHeaders_(sheet) {
 function meaningfulRow_(payload) {
   return [
     payload.contractVersion, payload.businessDate, payload.closingId,
-    payload.closeSequence, payload.snapshotVersion, payload.closedAt,
+    payload.closeSequence, payload.snapshotVersion, new Date(payload.closedAt),
     payload.totalBills, payload.qtySold, payload.grossSalesPaise / 100,
     payload.totalDiscountPaise / 100, payload.netBillingPaise / 100,
     payload.creditNoteCount, payload.qtyReturned, payload.returnCnValuePaise / 100,
@@ -192,6 +193,47 @@ function meaningfulRow_(payload) {
     payload.storeCreditIssuedPaise / 100, payload.settlementDifferencePaise / 100,
     payload.backupStatus, payload.emailStatus, payload.klbsVersion
   ];
+}
+
+function closedAtMillis_(value) {
+  var millis = new Date(value).getTime();
+  return isFinite(millis) ? millis : null;
+}
+
+function normalizeBusinessDate_(value, timeZone) {
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, timeZone || Session.getScriptTimeZone() || 'Asia/Kolkata', 'yyyy-MM-dd');
+  }
+  var text = String(value || '').trim();
+  var iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
+  var slash = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
+  if (slash) return slash[3] + '-' + slash[2] + '-' + slash[1];
+  var named = /^(\d{2})\s+([A-Za-z]{3}),\s*(\d{4})$/.exec(text);
+  if (named) {
+    var months = { Jan:'01', Feb:'02', Mar:'03', Apr:'04', May:'05', Jun:'06',
+      Jul:'07', Aug:'08', Sep:'09', Oct:'10', Nov:'11', Dec:'12' };
+    var month = months[named[2].charAt(0).toUpperCase() + named[2].slice(1).toLowerCase()];
+    return month ? named[3] + '-' + month + '-' + named[1] : text;
+  }
+  return text;
+}
+
+function businessDateCell_(isoDate) {
+  var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
+  if (!match) throw new Error('Invalid canonical Business Date.');
+  // Noon UTC avoids a date rollover in the India-local spreadsheet timezone.
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0));
+}
+
+function applyDsrRowFormats_(sheet, rowNumber) {
+  var businessDateFormat = sheet.getRange('B3').getNumberFormat();
+  var closedAtFormat = sheet.getRange('F3').getNumberFormat();
+  var syncedAtFormat = sheet.getRange('AB3').getNumberFormat();
+
+  sheet.getRange(rowNumber, 2).setNumberFormat(businessDateFormat);
+  sheet.getRange(rowNumber, 6).setNumberFormat(closedAtFormat);
+  sheet.getRange(rowNumber, 28).setNumberFormat(syncedAtFormat);
 }
 
 function doPost(event) {
@@ -226,17 +268,20 @@ function doPost(event) {
       if (!sheet) throw new Error('KLBS_Daily_Data sheet was not found.');
       verifyHeaders_(sheet);
       var values = meaningfulRow_(payload);
+      values[1] = businessDateCell_(payload.businessDate);
+      var sheetTimeZone = sheet.getParent().getSpreadsheetTimeZone() || 'Asia/Kolkata';
       var data = sheet.getLastRow() > 1
-        ? sheet.getRange(2, 2, sheet.getLastRow() - 1, 1).getDisplayValues() : [];
+        ? sheet.getRange(2, 2, sheet.getLastRow() - 1, 1).getValues() : [];
       var matchingRows = [];
       data.forEach(function(row, index) {
-        if (String(row[0]).trim() === payload.businessDate) matchingRows.push(index + 2);
+        if (normalizeBusinessDate_(row[0], sheetTimeZone) === payload.businessDate) matchingRows.push(index + 2);
       });
       if (matchingRows.length > 1) throw new Error('Duplicate Business Date integrity conflict.');
       var action = 'INSERTED';
       var syncedAt = new Date();
       if (!matchingRows.length) {
         sheet.appendRow(values.concat([syncedAt]));
+        applyDsrRowFormats_(sheet, sheet.getLastRow());
       } else {
         var rowNumber = matchingRows[0];
         var existing = sheet.getRange(rowNumber, 1, 1, KLBS_DSR_HEADERS.length).getValues()[0];
@@ -245,6 +290,14 @@ function doPost(event) {
         if (payload.closeSequence === storedSequence) {
           var same = values.every(function(value, index) {
             var existingValue = existing[index];
+            if (index === 1) {
+              return normalizeBusinessDate_(existingValue, sheetTimeZone) === payload.businessDate;
+            }
+            if (index === 5) {
+              var incomingMs = closedAtMillis_(value);
+              var existingMs = closedAtMillis_(existingValue);
+              return incomingMs !== null && existingMs !== null && incomingMs === existingMs;
+            }
             return value instanceof Date
               ? existingValue instanceof Date && value.getTime() === existingValue.getTime()
               : String(value) === String(existingValue);
@@ -255,6 +308,7 @@ function doPost(event) {
         } else {
           sheet.getRange(rowNumber, 1, 1, KLBS_DSR_HEADERS.length)
             .setValues([values.concat([syncedAt])]);
+          applyDsrRowFormats_(sheet, rowNumber);
           action = 'UPDATED';
         }
       }
@@ -279,13 +333,19 @@ function setupKLBSDailyDataSheet() {
   if (!sheet) throw new Error('KLBS_Daily_Data sheet was not found.');
   if (sheet.getLastRow() > 0 || sheet.getLastColumn() > 0) {
     verifyHeaders_(sheet);
-    return;
+  } else {
+    sheet.getRange(1, 1, 1, KLBS_DSR_HEADERS.length).setValues([KLBS_DSR_HEADERS]);
+    sheet.setFrozenRows(1);
   }
-  sheet.getRange(1, 1, 1, KLBS_DSR_HEADERS.length).setValues([KLBS_DSR_HEADERS]);
-  sheet.setFrozenRows(1);
-  sheet.getRange('B:B').setNumberFormat('@');
-  sheet.getRange('F:F').setNumberFormat('yyyy-mm-dd hh:mm:ss');
-  sheet.getRange('AB:AB').setNumberFormat('yyyy-mm-dd hh:mm:ss');
+var businessDateFormat = sheet.getRange('B3').getNumberFormat();
+var closedAtFormat = sheet.getRange('F3').getNumberFormat();
+var syncedAtFormat = sheet.getRange('AB3').getNumberFormat();
+
+var lastRow = Math.max(sheet.getLastRow(), 2);
+
+sheet.getRange(2, 2, lastRow - 1, 1).setNumberFormat(businessDateFormat);
+sheet.getRange(2, 6, lastRow - 1, 1).setNumberFormat(closedAtFormat);
+sheet.getRange(2, 28, lastRow - 1, 1).setNumberFormat(syncedAtFormat);
   ['I:K', 'N:W', 'X:X'].forEach(function(range) {
     sheet.getRange(range).setNumberFormat('₹#,##0.00');
   });

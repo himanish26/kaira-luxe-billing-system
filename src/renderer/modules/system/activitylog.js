@@ -9,22 +9,48 @@ function appendActivityCell(row, value, className = "") {
     row.appendChild(cell);
 }
 
+const ACTIVITY_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function formatActivityBusinessDate(value) {
+    const text = String(value === null || value === undefined ? "" : value).trim();
+    let match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+    if (match) return `${match[3]} ${ACTIVITY_MONTHS[Number(match[2]) - 1] || match[2]}, ${match[1]}`;
+    match = /^(\d{2}) ([A-Za-z]{3})[ ,]+(\d{4})$/.exec(text);
+    return match ? `${match[1]} ${match[2]}, ${match[3]}` : value;
+}
+
+function formatActivityTime(value) {
+    const text = String(value === null || value === undefined ? "" : value).trim();
+    const match = /^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i.exec(text);
+    return match ? `${match[1].padStart(2, "0")}:${match[2]} ${match[3].toUpperCase()}` : value;
+}
+
+function formatActivityValue(value) {
+    if (value === null || value === undefined) return value;
+    return String(value).replace(/\b\d{4}-\d{2}-\d{2}\b/g, date => formatActivityBusinessDate(date));
+}
+
 function renderActivityRows(activities) {
     const body = document.getElementById("activityTableBody");
     body.replaceChildren();
     activities.forEach(activity => {
         const row = document.createElement("tr");
-        const dateTime = [activity.activity_date, activity.activity_time]
-            .filter(Boolean).join("\n");
+        const dateTime = [formatActivityBusinessDate(activity.activity_date), formatActivityTime(activity.activity_time)]
+            .filter(Boolean).join(", ");
         appendActivityCell(row, dateTime, "activity-date-time");
-        appendActivityCell(row, activity.category);
-        appendActivityCell(row, activity.action);
-        appendActivityCell(row, activity.reference_no);
-        appendActivityCell(row, activity.details, "activity-details");
-        appendActivityCell(row, activity.status);
+        appendActivityCell(row, formatActivityValue(activity.category));
+        appendActivityCell(row, formatActivityValue(activity.action));
+        appendActivityCell(row, formatActivityValue(activity.reference_no));
+        appendActivityCell(row, formatActivityValue(activity.details), "activity-details");
+        const statusClass = `activity-status activity-status-${String(activity.status || "").toLowerCase()}`;
+        appendActivityCell(row, formatActivityValue(activity.status), statusClass);
         body.appendChild(row);
     });
 }
+
+if (typeof module !== "undefined") module.exports = {
+    formatActivityBusinessDate, formatActivityTime, formatActivityValue
+};
 
 async function showActivityLogPage() {
     const activities = await window.electronAPI.getActivities();

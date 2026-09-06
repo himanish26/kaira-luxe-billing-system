@@ -50,7 +50,7 @@ function validatePayload(payload) {
         throw new Error("DSR payload Closed At is invalid.");
     }
     if (!["SUCCESS"].includes(payload.backupStatus) ||
-        !["SUCCESS", "FAILED"].includes(payload.emailStatus)) {
+        !["SUCCESS", "FAILED", "PENDING"].includes(payload.emailStatus)) {
         throw new Error("DSR payload operational status is invalid.");
     }
     if (!String(payload.klbsVersion || "").trim()) {
@@ -89,6 +89,13 @@ function safeFailure(error) {
         .slice(0, 500);
 }
 
+function sanitizeServiceError(message) {
+    return String(message || "")
+        .replace(/https?:\/\/\S+/gi, "[ENDPOINT]")
+        .replace(/\b(?:hmac|secret|token|password|credential|authorization|api[_ -]?key)\s*[:=]\s*\S+/gi, "[REDACTED]")
+        .slice(0, 200);
+}
+
 function classifyFailure(error) {
     if (error && error.code === "ECONNABORTED") return "TIMEOUT";
     if (error && error.response) {
@@ -101,8 +108,12 @@ function classifyFailure(error) {
 }
 
 function validateResponse(data, payload) {
-    if (!data || typeof data !== "object" || Array.isArray(data) || data.ok !== true) {
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
         throw new Error("DSR service returned an unsuccessful response.");
+    }
+    if (data.ok !== true) {
+        const safeError = typeof data.error === "string" ? sanitizeServiceError(data.error) : "";
+        throw new Error(safeError || "DSR service returned an unsuccessful response.");
     }
     if (!ACCEPTED_ACTIONS.has(data.action)) {
         throw new Error("DSR service returned an unsupported action.");

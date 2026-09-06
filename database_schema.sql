@@ -124,6 +124,15 @@ ON day_closing_snapshots (business_date)
 WHERE close_status IN ('PREPARING', 'CLOSED');
 CREATE INDEX idx_day_closing_date_sequence
 ON day_closing_snapshots (business_date, close_sequence DESC);
+CREATE TABLE business_day_state (
+    business_date TEXT PRIMARY KEY,
+    state TEXT NOT NULL CHECK (state IN ('OPEN', 'CLOSED')),
+    opened_at TEXT NOT NULL,
+    closed_at TEXT,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_business_day_state_open
+ON business_day_state (state, business_date);
 CREATE TABLE payment_corrections (
 
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -838,3 +847,21 @@ CREATE TABLE activities (
 
 CREATE INDEX idx_activities_category_reference
 ON activities (category, reference_no);
+
+CREATE TABLE IF NOT EXISTS integration_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_date TEXT NOT NULL,
+    closing_id INTEGER NOT NULL,
+    close_sequence INTEGER NOT NULL,
+    delivery_type TEXT NOT NULL CHECK (delivery_type IN ('EMAIL_DAY_CLOSING', 'DSR_DAY_CLOSING')),
+    status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PROCESSING', 'SUCCESS')),
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    last_attempt_at TEXT,
+    completed_at TEXT,
+    last_error TEXT,
+    UNIQUE (closing_id, delivery_type)
+);
+
+CREATE INDEX idx_integration_outbox_pending
+ON integration_outbox (status, business_date, id);

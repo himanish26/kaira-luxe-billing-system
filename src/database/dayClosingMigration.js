@@ -61,6 +61,33 @@ const CREATE_DATE_INDEX_SQL = `
     ON day_closing_snapshots (business_date, close_sequence DESC)
 `;
 
+const CREATE_INTEGRATION_OUTBOX_SQL = `
+    CREATE TABLE IF NOT EXISTS integration_outbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_date TEXT NOT NULL,
+        closing_id INTEGER NOT NULL,
+        close_sequence INTEGER NOT NULL,
+        delivery_type TEXT NOT NULL CHECK (delivery_type IN ('EMAIL_DAY_CLOSING', 'DSR_DAY_CLOSING')),
+        status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PROCESSING', 'SUCCESS')),
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        last_attempt_at TEXT,
+        completed_at TEXT,
+        last_error TEXT,
+        UNIQUE (closing_id, delivery_type)
+    )
+`;
+
+const CREATE_BUSINESS_DAY_STATE_SQL = `
+    CREATE TABLE IF NOT EXISTS business_day_state (
+        business_date TEXT PRIMARY KEY,
+        state TEXT NOT NULL CHECK (state IN ('OPEN', 'CLOSED')),
+        opened_at TEXT NOT NULL,
+        closed_at TEXT,
+        updated_at TEXT NOT NULL
+    )
+`;
+
 function run(db, sql, params = []) {
     return new Promise((resolve, reject) => {
         db.run(sql, params, function (error) {
@@ -104,6 +131,10 @@ async function migrateDayClosingSnapshots(db) {
         }
         await run(db, CREATE_ACTIVE_INDEX_SQL);
         await run(db, CREATE_DATE_INDEX_SQL);
+        await run(db, CREATE_INTEGRATION_OUTBOX_SQL);
+        await run(db, CREATE_BUSINESS_DAY_STATE_SQL);
+        await run(db, "CREATE INDEX IF NOT EXISTS idx_business_day_state_open ON business_day_state(state, business_date)");
+        await run(db, "CREATE INDEX IF NOT EXISTS idx_integration_outbox_pending ON integration_outbox(status, business_date, id)");
 
         const legacyTable = await get(
             db,
@@ -146,6 +177,41 @@ async function migrateDayClosingSnapshots(db) {
             `);
         }
 
+        // Existing transactional/closing evidence proves that KLBS was operational
+        // on those dates; dates without evidence are intentionally not invented.
+        await run(db, `
+            INSERT OR IGNORE INTO business_day_state (business_date, state, opened_at, closed_at, updated_at)
+            SELECT candidate.business_date,
+                   CASE WHEN latest.close_status = 'CLOSED' THEN 'CLOSED' ELSE 'OPEN' END,
+                   COALESCE(latest.created_at, datetime('now')),
+                   CASE WHEN latest.close_status = 'CLOSED' THEN latest.closed_at ELSE NULL END,
+                   COALESCE(latest.updated_at, datetime('now'))
+            FROM (
+                SELECT bill_date AS business_date FROM bills
+                UNION SELECT business_date FROM returns
+                UNION SELECT business_date FROM day_closing_snapshots
+            ) candidate
+            LEFT JOIN day_closing_snapshots latest ON latest.id = (
+                SELECT s.id FROM day_closing_snapshots s
+                WHERE s.business_date = candidate.business_date
+                ORDER BY s.close_sequence DESC LIMIT 1
+            )
+        `);
+
+        // Email FAILED is excluded because legacy versions also used it for disabled or unconfigured email.
+        await run(db, `INSERT OR IGNORE INTO integration_outbox
+            (business_date, closing_id, close_sequence, delivery_type, created_at)
+            SELECT business_date, id, close_sequence, 'EMAIL_DAY_CLOSING', COALESCE(updated_at, closed_at, created_at)
+            FROM day_closing_snapshots
+            WHERE close_status = 'CLOSED' AND backup_status = 'SUCCESS'
+              AND email_status IN ('PENDING', 'UNKNOWN')`);
+        await run(db, `INSERT OR IGNORE INTO integration_outbox
+            (business_date, closing_id, close_sequence, delivery_type, created_at)
+            SELECT business_date, id, close_sequence, 'DSR_DAY_CLOSING', COALESCE(updated_at, closed_at, created_at)
+            FROM day_closing_snapshots
+            WHERE close_status = 'CLOSED' AND backup_status = 'SUCCESS'
+              AND dsr_sync_status IN ('NOT_ATTEMPTED', 'PENDING', 'FAILED')`);
+
         const recoveryTime = new Date().toISOString();
         await run(db, `
             UPDATE day_closing_snapshots
@@ -168,19 +234,7 @@ async function migrateDayClosingSnapshots(db) {
               AND close_status = 'PREPARING'
         `, [recoveryTime, SNAPSHOT_VERSION]);
 
-        await run(db, `
-            UPDATE day_closing_snapshots
-            SET email_status = 'FAILED',
-                remarks = CASE
-                    WHEN remarks IS NULL OR TRIM(remarks) = ''
-                    THEN 'Email outcome was pending when the application restarted.'
-                    ELSE remarks || ' | Email outcome was pending when the application restarted.'
-                END,
-                updated_at = ?
-            WHERE snapshot_version = ?
-              AND close_status = 'CLOSED'
-              AND email_status = 'PENDING'
-        `, [recoveryTime, SNAPSHOT_VERSION]);
+        await run(db, `UPDATE integration_outbox SET status = 'PENDING', last_error = 'Application restarted during delivery.' WHERE status = 'PROCESSING'`);
 
         const table = await get(db, `
             SELECT name FROM sqlite_master
@@ -207,6 +261,10 @@ async function migrateDayClosingSnapshots(db) {
         ) {
             throw new Error("Day Closing snapshot migration verification failed.");
         }
+        const businessDayState = await get(db, `
+            SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'business_day_state'
+        `);
+        if (!businessDayState) throw new Error("Business-day state migration verification failed.");
 
         await run(db, "COMMIT");
         transactionStarted = false;
@@ -225,5 +283,6 @@ module.exports = {
     CREATE_DAY_CLOSING_SNAPSHOTS_SQL,
     CREATE_ACTIVE_INDEX_SQL,
     CREATE_DATE_INDEX_SQL,
+    CREATE_INTEGRATION_OUTBOX_SQL,
     migrateDayClosingSnapshots
 };

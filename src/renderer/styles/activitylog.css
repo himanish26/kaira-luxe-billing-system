@@ -223,7 +223,7 @@
 /* Action */
 #activityTable th:nth-child(3),
 #activityTable td:nth-child(3) {
-    width: 25%;
+    width: 24%;
 }
 
 /* Reference */
@@ -235,13 +235,18 @@
 /* Details */
 #activityTable th:nth-child(5),
 #activityTable td:nth-child(5) {
-    width: 25%;
+    width: 24%;
 }
 
 /* Status */
 #activityTable th:nth-child(6),
 #activityTable td:nth-child(6) {
-    width: 8%;
+    width: 10%;
+}
+
+#activityTable th:nth-child(6),
+#activityTable td:nth-child(6) {
+    white-space: nowrap;
 }
 
 
@@ -326,6 +331,26 @@
     letter-spacing: 0.2px;
 
     color: #333333;
+}
+
+.activity-status {
+    white-space: nowrap;
+}
+
+.activity-status-success {
+    color: #198754 !important;
+}
+
+.activity-status-warning {
+    color: #b26a00 !important;
+}
+
+.activity-status-failed {
+    color: #c62828 !important;
+}
+
+.activity-status-denied {
+    color: #8b1e1e !important;
 }
 
 

@@ -38,7 +38,7 @@ async function readClosedDsrPayload(database, snapshotId, klbsVersion) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(row.business_date || "")) ||
         !row.closed_at || !Number.isFinite(Date.parse(row.closed_at)) ||
         row.backup_status !== "SUCCESS" ||
-        !["SUCCESS", "FAILED"].includes(row.email_status)) {
+        !["SUCCESS", "FAILED", "PENDING"].includes(row.email_status)) {
         throw new Error("DSR snapshot metadata is invalid or incomplete.");
     }
     return {

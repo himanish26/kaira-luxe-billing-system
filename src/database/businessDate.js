@@ -47,8 +47,16 @@ function addBusinessCalendarDays(dateText, days) {
     ].join("-");
 }
 
+function formatBusinessDateDisplay(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+    if (!match) return value || "—";
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${match[3]} ${months[Number(match[2]) - 1] || match[2]}, ${match[1]}`;
+}
+
 module.exports = {
     BUSINESS_TIME_ZONE,
     getBusinessDate,
-    addBusinessCalendarDays
+    addBusinessCalendarDays,
+    formatBusinessDateDisplay
 };

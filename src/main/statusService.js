@@ -199,6 +199,13 @@ async function getStartupCheck(checkName, dependencies = {}) {
         case "businessDay": {
             const status = await dependencies.getBusinessDayState();
             const displayDate = formatBusinessDate(status.businessDate);
+            if (status.pendingPreviousBusinessDate) {
+                return result("failed", `PENDING CLOSE - ${formatBusinessDate(status.pendingPreviousBusinessDate)}`, {
+                    businessDate: status.businessDate,
+                    pendingPreviousBusinessDate: status.pendingPreviousBusinessDate,
+                    action: "closePreviousBusinessDay"
+                });
+            }
             return status.closed
                 ? result("failed", `CLOSED — ${displayDate}`, { businessDate: status.businessDate })
                 : status.closing

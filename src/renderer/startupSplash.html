@@ -52,6 +52,7 @@
         <div id="actions" class="actions" hidden>
             <button id="securitySetupBtn" hidden>COMPLETE SECURITY SETUP</button>
             <button id="reopenBtn" hidden>RE-OPEN BUSINESS DAY</button>
+            <button id="closePreviousBtn" hidden>CLOSE PREVIOUS BUSINESS DAY</button>
             <button id="retryBtn">RETRY CHECKS</button>
             <button id="exitBtn" class="secondary">EXIT APPLICATION</button>
         </div>
@@ -64,6 +65,17 @@
             <div class="actions">
                 <button id="confirmReopenBtn">AUTHORIZE &amp; RE-OPEN</button>
                 <button id="cancelReopenBtn" class="secondary">CANCEL</button>
+            </div>
+        </div>
+        <div id="closePreviousPanel" class="reopen-panel" hidden>
+            <div class="previous-day-heading">PREVIOUS BUSINESS DAY</div>
+            <div id="previousBusinessDate" class="previous-day-date">—</div>
+            <p id="previousBusinessMessage" class="previous-day-message">— was not closed.<br>Complete Day Closing before starting today's billing.</p>
+            <label>Manager PIN<input id="previousDayPin" type="password" inputmode="numeric" maxlength="4"></label>
+            <div id="previousDayError" class="reopen-error"></div>
+            <div class="actions">
+                <button id="confirmPreviousBtn">AUTHORIZE &amp; CLOSE DAY</button>
+                <button id="cancelPreviousBtn" class="secondary">EXIT APPLICATION</button>
             </div>
         </div>
 

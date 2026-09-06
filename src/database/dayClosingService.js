@@ -1,8 +1,9 @@
 const { readClosedDsrPayload } = require("./dayClosingDsrService");
 const { createDsrSyncService } = require("../services/dsrSyncService");
-const { getBusinessDate } = require("./businessDate");
+const { getBusinessDate, formatBusinessDateDisplay: formatHumanBusinessDate } = require("./businessDate");
 const { SNAPSHOT_VERSION } = require("./dayClosingMigration");
 const technicalLogger = require("../services/technicalLogger");
+const { buildDayClosingEmailText } = require("../services/dayClosingEmail");
 
 function toPaise(value) {
     const amount = Number(value || 0);
@@ -27,7 +28,7 @@ function addSafe(current, addition, label) {
 function formatBusinessDateDisplay(value) {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
     if (!match) return value || "—";
-    return `${match[3]}/${match[2]}/${match[1]}`;
+    return formatHumanBusinessDate(value);
 }
 
 function createDayClosingService(options = {}) {
@@ -50,6 +51,7 @@ function createDayClosingService(options = {}) {
     const dsrSyncService = options.dsrSyncService || createDsrSyncService();
     const readDsrPayloadFn = options.readClosedDsrPayload || readClosedDsrPayload;
     const klbsVersion = String(options.klbsVersion || "").trim();
+    const integrationOutbox = options.integrationOutbox || null;
     const getEmailConfiguration = options.getEmailConfiguration || (() => ({
         recipients: options.closingEmail === undefined
             ? String(process.env.DAY_CLOSING_EMAIL || "").split(",").map(value => value.trim()).filter(Boolean)
@@ -83,6 +85,19 @@ function createDayClosingService(options = {}) {
                 else resolve(rows || []);
             });
         });
+    }
+
+    async function hasBusinessDayStateTable() {
+        const row = await get("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'business_day_state'");
+        return !!row;
+    }
+
+    async function ensureOperationalBusinessDay(targetBusinessDate = getBusinessDateFn(now())) {
+        const openedAt = now().toISOString();
+        await run(`INSERT OR IGNORE INTO business_day_state
+            (business_date, state, opened_at, updated_at)
+            VALUES (?, 'OPEN', ?, ?)`, [targetBusinessDate, openedAt, openedAt]);
+        return { businessDate: targetBusinessDate, state: "OPEN" };
     }
 
     async function calculateAccounting(businessDate) {
@@ -359,16 +374,36 @@ function createDayClosingService(options = {}) {
     async function getBusinessDayState() {
         const businessDate = getBusinessDateFn(now());
         const active = await getActiveSnapshot(businessDate);
+        const stateTable = await hasBusinessDayStateTable();
+        const currentState = stateTable
+            ? await get("SELECT state FROM business_day_state WHERE business_date = ?", [businessDate])
+            : null;
+        const pendingPrevious = stateTable ? await get(`
+            SELECT business_date FROM business_day_state
+            WHERE business_date < ? AND state = 'OPEN'
+            ORDER BY business_date LIMIT 1
+        `, [businessDate]) : await get(`
+            SELECT business_date FROM (
+                SELECT bill_date AS business_date FROM bills WHERE bill_date < ?
+                UNION SELECT business_date FROM returns WHERE business_date < ?
+                UNION SELECT business_date FROM day_closing_snapshots WHERE business_date < ?
+            ) candidates
+            WHERE COALESCE((SELECT s.close_status FROM day_closing_snapshots s
+                WHERE s.business_date = candidates.business_date
+                ORDER BY s.close_sequence DESC LIMIT 1), 'OPEN') <> 'CLOSED'
+            ORDER BY business_date LIMIT 1
+        `, [businessDate, businessDate, businessDate]);
         return {
             businessDate,
-            closed: !!active && active.close_status === "CLOSED",
+            closed: currentState ? currentState.state === "CLOSED" : !!active && active.close_status === "CLOSED",
             closing: !!active && active.close_status === "PREPARING",
-            snapshot: active ? snapshotToSummary(active) : null
+            snapshot: active ? snapshotToSummary(active) : null,
+            pendingPreviousBusinessDate: pendingPrevious && pendingPrevious.business_date || null
         };
     }
 
-    async function reserveClose() {
-        const businessDate = getBusinessDateFn(now());
+    async function reserveClose(targetBusinessDate = getBusinessDateFn(now())) {
+        const businessDate = targetBusinessDate;
         let transactionStarted = false;
         try {
             await run("BEGIN IMMEDIATE TRANSACTION");
@@ -447,37 +482,6 @@ function createDayClosingService(options = {}) {
             if (transactionStarted) await run("ROLLBACK").catch(() => {});
             throw error;
         }
-    }
-
-    function buildEmailText(summary) {
-        const money = value => `₹${Number(value || 0).toFixed(2)}`;
-        return [
-            "KAIRA LUXE",
-            "Business Day Closing Report",
-            "",
-            `Business Date: ${formatBusinessDateDisplay(summary.businessDate)}`,
-            `Bills Generated: ${summary.totalBills}`,
-            `Qty Sold: ${summary.qtySold}`,
-            `Gross Sales: ${money(summary.grossSales)}`,
-            `Total Discount: ${money(summary.totalDiscount)}`,
-            `Net Billing: ${money(summary.netBilling)}`,
-            `Credit Notes: ${summary.creditNoteCount}`,
-            `Qty Returned: ${summary.qtyReturned}`,
-            `Return / CN Value: ${money(summary.returnCnValue)}`,
-            `Net Sales After Returns: ${money(summary.netSalesAfterReturns)}`,
-            `Cash: ${money(summary.cash)}`,
-            `UPI: ${money(summary.upi)}`,
-            `Card: ${money(summary.card)}`,
-            `Store Credit Redeemed: ${money(summary.storeCreditRedeemed)}`,
-            `Gift Voucher Redeemed: ${money(summary.giftVoucherRedeemed)}`,
-            `Actual Money Collection: ${money(summary.actualMoneyCollection)}`,
-            `Store Credit Issued: ${money(summary.storeCreditIssued)}`,
-            `Settlement Difference: ${money(summary.settlementDifference)}`,
-            `Backup: ${summary.backupStatus} (${summary.backupReference || "-"})`,
-            "Email outcome: dispatch in progress; final status is persisted after this message.",
-            "",
-            "The accounting snapshot and mandatory backup are complete."
-        ].join("\n");
     }
 
     async function markFailed(snapshotId, message, backupStatus = "FAILED") {
@@ -566,8 +570,8 @@ function createDayClosingService(options = {}) {
         };
     }
 
-    async function executeClose() {
-        const reservation = await reserveClose();
+    async function executeClose(targetBusinessDate) {
+        const reservation = await reserveClose(targetBusinessDate);
         if (reservation.active) {
             const active = snapshotToSummary(reservation.active);
             return active.closeStatus === "CLOSED"
@@ -618,6 +622,13 @@ function createDayClosingService(options = {}) {
             if (update.changes !== 1) {
                 throw new Error("Day Closing reservation changed before completion.");
             }
+            if (await hasBusinessDayStateTable()) {
+                await run(`
+                    UPDATE business_day_state
+                    SET state = 'CLOSED', closed_at = ?, updated_at = ?
+                    WHERE business_date = ?
+                `, [closedAt, closedAt, reservation.businessDate]);
+            }
             await run("COMMIT");
         }
         catch (error) {
@@ -637,9 +648,9 @@ function createDayClosingService(options = {}) {
         }
 
         let summary = await getDayClosingSnapshot(reservation.snapshotId);
-        let emailStatus = "FAILED";
+        let emailStatus = "PENDING";
         let emailWarning = null;
-        try {
+        if (!integrationOutbox) try {
             const emailConfiguration = await getEmailConfiguration();
             if (!emailConfiguration.automaticEmailBackup) {
                 throw new Error("Automatic email backup is disabled.");
@@ -650,7 +661,7 @@ function createDayClosingService(options = {}) {
             await sendEmailFn({
                 to: emailConfiguration.recipients,
                 subject: `KAIRA LUXE - Day Closing - ${formatBusinessDateDisplay(summary.businessDate)}`,
-                text: buildEmailText(summary),
+                text: buildDayClosingEmailText({ ...summary, businessDate: formatBusinessDateDisplay(summary.businessDate) }),
                 attachments: [{
                     filename: backup.backupFileName,
                     path: backup.backupFilePath
@@ -666,7 +677,7 @@ function createDayClosingService(options = {}) {
             });
         }
 
-        await run(`
+        if (!integrationOutbox) await run(`
             UPDATE day_closing_snapshots
             SET email_status = ?,
                 remarks = CASE WHEN ? IS NULL THEN remarks ELSE ? END,
@@ -693,7 +704,12 @@ function createDayClosingService(options = {}) {
         }
 
         summary = await getDayClosingSnapshot(reservation.snapshotId);
-        const dsrResult = await attemptDsrSync(reservation.snapshotId);
+        let dsrResult = { status: "PENDING", warning: null, action: null };
+        if (integrationOutbox) {
+            await integrationOutbox.enqueue(reservation.snapshotId, summary.businessDate, summary.closeSequence);
+        } else {
+            dsrResult = await attemptDsrSync(reservation.snapshotId);
+        }
         summary = await getDayClosingSnapshot(reservation.snapshotId);
         return {
             success: true,
@@ -709,7 +725,7 @@ function createDayClosingService(options = {}) {
         };
     }
 
-    async function closeBusinessDay() {
+    async function closeBusinessDay(targetBusinessDate = getBusinessDateFn(now())) {
         if (closeInFlight) {
             const state = await getBusinessDayState();
             return {
@@ -719,7 +735,7 @@ function createDayClosingService(options = {}) {
                 message: "Business Day closing is already in progress."
             };
         }
-        closeInFlight = executeClose();
+        closeInFlight = executeClose(targetBusinessDate);
         try {
             return await closeInFlight;
         }
@@ -770,6 +786,13 @@ function createDayClosingService(options = {}) {
             if (update.changes !== 1) {
                 throw new Error("Business Day closing changed before Re-open completed.");
             }
+            if (await hasBusinessDayStateTable()) {
+                await run(`
+                    UPDATE business_day_state
+                    SET state = 'OPEN', closed_at = NULL, updated_at = ?
+                    WHERE business_date = ?
+                `, [reopenedAt, businessDate]);
+            }
             await run("COMMIT");
             transactionStarted = false;
         }
@@ -812,6 +835,7 @@ function createDayClosingService(options = {}) {
         getDayClosingSummary,
         getDayClosingSnapshot,
         getBusinessDayState,
+        ensureOperationalBusinessDay,
         isBusinessDayClosed,
         closeBusinessDay,
         reopenBusinessDay,

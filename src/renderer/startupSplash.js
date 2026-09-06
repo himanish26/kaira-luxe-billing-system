@@ -31,6 +31,15 @@ let presentationResolve = null;
 let presentationDone = Promise.resolve();
 const resolvedResults = new Map();
 
+function previousBusinessDateDisplay(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+    if (!match) return value || "—";
+    const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12));
+    const weekday = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", weekday: "short" }).format(date);
+    const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"][Number(match[2]) - 1];
+    return `${weekday}, ${match[3]} ${month}, ${match[1]}`;
+}
+
 function checkRow(id) {
     return document.querySelector(`[data-check="${id}"]`);
 }
@@ -146,8 +155,10 @@ function resetChecks() {
     finalStatus.querySelector("span").textContent = "INITIALIZING";
     document.getElementById("actions").hidden = true;
     document.getElementById("reopenBtn").hidden = true;
+    document.getElementById("closePreviousBtn").hidden = true;
     document.getElementById("securitySetupBtn").hidden = true;
     document.getElementById("reopenPanel").hidden = true;
+    document.getElementById("closePreviousPanel").hidden = true;
     document.getElementById("reopenError").textContent = "";
     startPresentationMotion();
     presentationDone = new Promise(resolve => { presentationResolve = resolve; });
@@ -200,6 +211,14 @@ if (failed) {
         document.getElementById("reopenBtn").hidden = !(
             !securityIncomplete && business && String(business.message || "").startsWith("CLOSED")
         );
+        const previousButton = document.getElementById("closePreviousBtn");
+        previousButton.hidden = !(business && business.action === "closePreviousBusinessDay");
+        if (!previousButton.hidden) {
+            const displayDate = previousBusinessDateDisplay(business.pendingPreviousBusinessDate);
+            document.getElementById("previousBusinessDate").textContent = displayDate;
+            document.getElementById("previousBusinessMessage").innerHTML = `${displayDate} was not closed.<br>Complete Day Closing before starting today's billing.`;
+            previousButton.dataset.businessDate = business.pendingPreviousBusinessDate;
+        }
         document.getElementById("securitySetupBtn").hidden = !securityIncomplete;
         if (securityIncomplete) await openSecuritySetup();
         return;
@@ -273,6 +292,28 @@ window.addEventListener("beforeunload", () => {
 
 window.startupAPI.onSplashShown(() => {
     runChecks();
+});
+document.getElementById("reopenPin").addEventListener("keydown", event => {
+    if (event.key === "Enter") { event.preventDefault(); document.getElementById("confirmReopenBtn").click(); }
+});
+document.getElementById("closePreviousBtn").addEventListener("click", () => {
+    document.getElementById("actions").hidden = true;
+    document.getElementById("closePreviousPanel").hidden = false;
+    document.getElementById("previousDayPin").focus();
+});
+document.getElementById("cancelPreviousBtn").addEventListener("click", () => window.startupAPI.exit());
+async function closePreviousDay() {
+    const pinInput = document.getElementById("previousDayPin");
+    const error = document.getElementById("previousDayError");
+    if (!/^\d{4}$/.test(pinInput.value)) { error.textContent = "Enter a valid 4-digit Manager PIN."; return; }
+    const result = await window.startupAPI.closePreviousDay({ businessDate: document.getElementById("closePreviousBtn").dataset.businessDate, pin: pinInput.value });
+    pinInput.value = "";
+    if (!result.success) { error.textContent = result.error || result.message || "Previous business day could not be closed."; return; }
+    await runChecks();
+}
+document.getElementById("confirmPreviousBtn").addEventListener("click", closePreviousDay);
+document.getElementById("previousDayPin").addEventListener("keydown", event => {
+    if (event.key === "Enter") { event.preventDefault(); closePreviousDay(); }
 });
 
 window.startupAPI.onSecuritySetupCompleted(() => {
