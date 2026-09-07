@@ -3,41 +3,65 @@
 ===================================== */
 
 let autoBackupAuthorizationGrant = null;
+let autoBackupSaveInProgress = false;
+
+function clearAutomaticBackupAuthorization() {
+    autoBackupAuthorizationGrant = null;
+}
+
+async function saveAutomaticBackupSettings(settings, dependencies = {}) {
+    const requestAuthorization = dependencies.requestAuthorization ||
+        (purpose => requestAdminAuthorization(purpose));
+    const saveSettings = dependencies.saveSettings ||
+        ((data, grant) => window.electronAPI.saveSettings(data, grant));
+
+    clearAutomaticBackupAuthorization();
+
+    try {
+        const freshGrant = await requestAuthorization("AUTO_BACKUP_SETTINGS");
+        if (!freshGrant) return null;
+
+        autoBackupAuthorizationGrant = freshGrant;
+        return await saveSettings(settings, freshGrant);
+    }
+    finally {
+        clearAutomaticBackupAuthorization();
+    }
+}
+
+function formatAutomaticBackupCard(settings = {}) {
+    if (Number(settings.auto_backup_enabled) !== 1) return "Off";
+
+    const frequency = String(settings.auto_backup_frequency || "DAILY");
+    const labels = {
+        EVERY_6_HOURS: "Every 6 Hours",
+        EVERY_3_HOURS: "Every 3 Hours",
+        EVERY_1_HOUR: "Every 1 Hour"
+    };
+    if (labels[frequency]) return labels[frequency];
+
+    const backupTime = String(settings.auto_backup_time || "21:30");
+    const match = /^(\d{1,2}):(\d{2})$/.exec(backupTime);
+    if (!match) return `Daily at <strong>${backupTime}</strong>`;
+    const hour24 = Number(match[1]);
+    const hour = String(hour24 % 12 || 12).padStart(2, "0");
+    const meridian = hour24 >= 12 ? "PM" : "AM";
+    return `Daily at <strong>${hour}:${match[2]} ${meridian}</strong>`;
+}
+
+if (typeof module !== "undefined") module.exports = {
+    formatAutomaticBackupCard,
+    saveAutomaticBackupSettings
+};
 
 async function showBackupPage() {
+
+    clearAutomaticBackupAuthorization();
 
     const settings =
         await window.electronAPI.getSettings();
 
-    const backupTime =
-        settings.auto_backup_time || "21:30";
-
-    const [hour24, minute] =
-        backupTime.split(":");
-
-    let hour =
-        parseInt(hour24);
-
-    let meridian =
-        "AM";
-
-    if (hour >= 12) {
-
-        meridian = "PM";
-
-    }
-
-    hour =
-        hour % 12;
-
-    if (hour === 0) {
-
-        hour = 12;
-
-    }
-
-    const formattedBackupTime =
-        `${String(hour).padStart(2, "0")}:${minute} ${meridian}`;
+    const automaticBackupSummary = formatAutomaticBackupCard(settings);
 
     renderSettingsPage({
 
@@ -118,8 +142,7 @@ async function showBackupPage() {
         <h2>Automatic Backup</h2>
 
         <p>
-            Daily at
-            <strong>${formattedBackupTime}</strong>
+            ${automaticBackupSummary}
         </p>
 
     </div>
@@ -154,9 +177,10 @@ async function showBackupPage() {
                         result.message
                     );
 
-                }
+    }
 
-            }
+}
+
         );
 
         document
@@ -291,23 +315,24 @@ alert(
         );
 
     document
-.getElementById("autoBackupCard")
-.addEventListener("click", () => {
+    .getElementById("autoBackupCard")
+    .addEventListener("click", () => {
 
-    requireAdminAuthorization("AUTO_BACKUP_SETTINGS", grant => {
-
-        autoBackupAuthorizationGrant = grant;
-
-        showAutomaticBackupPage();
-
-    });
+    clearAutomaticBackupAuthorization();
+    showAutomaticBackupPage();
 
 });
 
 async function showAutomaticBackupPage() {
 
+    clearAutomaticBackupAuthorization();
+
     const settings =
         await window.electronAPI.getSettings();
+
+    const frequency = ["DAILY", "EVERY_6_HOURS", "EVERY_3_HOURS", "EVERY_1_HOUR"].includes(settings.auto_backup_frequency)
+        ? settings.auto_backup_frequency
+        : "DAILY";
 
     const [hour24, minute] =
     (settings.auto_backup_time || "21:30")
@@ -344,7 +369,7 @@ hour =
 
         icon: "⚙️",
 
-        subtitle: "Configure daily automatic backup.",
+         subtitle: "Configure automatic backup frequency and time.",
 
         backText: "← Backup",
 
@@ -352,9 +377,27 @@ hour =
 
         content: `
 
-<div class="settings-form">
+<div class="settings-form automatic-backup-form">
 
     <div class="settings-field">
+        <label for="autoBackupEnabled">Automatic Backup</label>
+        <select id="autoBackupEnabled">
+            <option value="1">ON</option>
+            <option value="0">OFF</option>
+        </select>
+    </div>
+
+    <div class="settings-field">
+        <label for="autoBackupFrequency">Frequency</label>
+        <select id="autoBackupFrequency">
+            <option value="DAILY">Daily</option>
+            <option value="EVERY_6_HOURS">Every 6 Hours</option>
+            <option value="EVERY_3_HOURS">Every 3 Hours</option>
+            <option value="EVERY_1_HOUR">Every 1 Hour</option>
+        </select>
+    </div>
+
+    <div class="settings-field" id="dailyBackupTimeField">
 
         <label>
 
@@ -418,12 +461,7 @@ hour =
 
     </div>
 
-    <div class="backup-help">
-
-    Database backup will run every day<br>
-    at the selected time.
-
-</div>
+    <div class="backup-help" id="autoBackupDescription"></div>
 
     <button
 
@@ -449,9 +487,30 @@ document
     .getElementById("backupMinute")
     .value = minute;
 
-document
+    document
     .getElementById("backupMeridian")
     .value = meridian;
+
+    document.getElementById("autoBackupEnabled").value = settings.auto_backup_enabled === 0 ? "0" : "1";
+    document.getElementById("autoBackupFrequency").value = frequency;
+
+    const updateDailyTimeVisibility = () => {
+        const daily = document.getElementById("autoBackupFrequency").value === "DAILY";
+        document.getElementById("dailyBackupTimeField").style.display = daily ? "" : "none";
+        const descriptions = {
+            DAILY: "Database backup will run every day at the selected time.",
+            EVERY_6_HOURS: "Database backup will run every 6 hours while KLBS is running.",
+            EVERY_3_HOURS: "Database backup will run every 3 hours while KLBS is running.",
+            EVERY_1_HOUR: "Database backup will run every 1 hour while KLBS is running."
+        };
+        document.getElementById("autoBackupDescription").textContent =
+            document.getElementById("autoBackupEnabled").value === "0"
+                ? "Automatic database backup is OFF."
+                : descriptions[document.getElementById("autoBackupFrequency").value];
+    };
+    document.getElementById("autoBackupFrequency").addEventListener("change", updateDailyTimeVisibility);
+    document.getElementById("autoBackupEnabled").addEventListener("change", updateDailyTimeVisibility);
+    updateDailyTimeVisibility();
 
     document
         .getElementById("saveAutoBackup")
@@ -459,6 +518,10 @@ document
             "click",
             async () => {
 
+                if (autoBackupSaveInProgress) return;
+                autoBackupSaveInProgress = true;
+
+                try {
                 const hour12 =
     parseInt(
         document
@@ -497,9 +560,12 @@ if (
 
 }
 
-settings.auto_backup_time =
+                settings.auto_backup_time =
 
-    `${String(hour24).padStart(2, "0")}:${minute}`;
+                    `${String(hour24).padStart(2, "0")}:${minute}`;
+
+                settings.auto_backup_enabled = Number(document.getElementById("autoBackupEnabled").value);
+                settings.auto_backup_frequency = document.getElementById("autoBackupFrequency").value;
 
                 settings.last_updated =
 
@@ -507,24 +573,33 @@ settings.auto_backup_time =
 
                 const saved =
 
-                    await window.electronAPI.saveSettings({
+                    await saveAutomaticBackupSettings({
+                        auto_backup_enabled: settings.auto_backup_enabled,
+                        auto_backup_frequency: settings.auto_backup_frequency,
                         auto_backup_time: settings.auto_backup_time,
                         last_updated: settings.last_updated
-                    }, autoBackupAuthorizationGrant);
-
-                autoBackupAuthorizationGrant = null;
+                    });
 
                 if (saved) {
 
                     alert(
 
-                        "Automatic backup time updated successfully." +
+                        "Automatic backup settings updated successfully." +
                         (saved.activityWarning
                             ? `\n\nWarning: ${saved.activityWarning}`
                             : "")
 
                     );
 
+                }
+
+                }
+                catch (error) {
+                    alert(error.message || "Automatic backup settings could not be saved.");
+                }
+                finally {
+                    autoBackupAuthorizationGrant = null;
+                    autoBackupSaveInProgress = false;
                 }
 
             }

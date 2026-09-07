@@ -192,14 +192,24 @@ box-shadow:0 2px 8px rgba(0,0,0,.08);
 
 }
 
-.product-master-card h2{
+.product-master-total-inventory{
+    text-align:center;
+    margin:0 0 25px;
+}
 
-    font-size:34px;
+.product-master-total-label{
+    color:#555;
+    font-size:16px;
+    font-weight:700;
+    letter-spacing:1.2px;
+}
 
-    color:var(--primary);
-
-    margin-bottom:25px;
-
+.product-master-total-value{
+    color:#218739;
+    font-size:38px;
+    font-weight:800;
+    line-height:1.2;
+    margin-top:5px;
 }
 
 .master-stats{
@@ -558,3 +568,20 @@ box-shadow:0 2px 8px rgba(0,0,0,.08);
 
     cursor: not-allowed;
 }
+
+.master-stats .master-stat{
+    border-left:4px solid transparent;
+}
+
+.master-stats .master-stat-products{ border-left-color:#7b1e2b; }
+.master-stats .master-stat-products span{ color:#7b1e2b; }
+.master-stats .master-stat-brands{ border-left-color:#2563a6; }
+.master-stats .master-stat-brands span{ color:#2563a6; }
+.master-stats .master-stat-segments{ border-left-color:#7651a9; }
+.master-stats .master-stat-segments span{ color:#7651a9; }
+.master-stats .master-stat-categories{ border-left-color:#c56b1f; }
+.master-stats .master-stat-categories span{ color:#c56b1f; }
+.master-stats .master-stat-seasons{ border-left-color:#16877d; }
+.master-stats .master-stat-seasons span{ color:#16877d; }
+.master-stats .master-stat-collections{ border-left-color:#b33b83; }
+.master-stats .master-stat-collections span{ color:#b33b83; }

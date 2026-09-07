@@ -44,7 +44,7 @@ const prepare = (database, options = {}) => prepareDatabaseSchema({
 });
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 1);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 2);
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-schema-version-"));
     try {
         // 1, 2, 7: fresh initialization, legacy adoption, and data preservation.
@@ -55,13 +55,13 @@ async function main() {
         await run(database, "INSERT INTO inventory_transactions VALUES (9, 3)");
         await run(database, "INSERT INTO day_closing VALUES (10, '2026-09-06')");
         await prepare(database);
-        assert.strictEqual(await readSchemaVersion(database), 1);
+        assert.strictEqual(await readSchemaVersion(database), CURRENT_DB_SCHEMA_VERSION);
         assert.strictEqual((await get(database, "SELECT product_name FROM products WHERE id = 7")).product_name, "Test Product");
         assert.strictEqual((await get(database, "SELECT bill_no FROM bills WHERE id = 8")).bill_no, "TEST-BILL");
         assert.strictEqual((await get(database, "SELECT quantity FROM inventory_transactions WHERE id = 9")).quantity, 3);
         assert.strictEqual((await get(database, "SELECT business_date FROM day_closing WHERE id = 10")).business_date, "2026-09-06");
         await prepare(database);
-        assert.strictEqual((await metadata(database)).schema_version, 1);
+        assert.strictEqual((await metadata(database)).schema_version, CURRENT_DB_SCHEMA_VERSION);
         await close(database);
 
         // 1: fresh disposable database receives the current version.
@@ -76,19 +76,19 @@ async function main() {
         let migrationRuns = 0;
         await prepare(database, { runCurrentMigrations: async () => { migrationRuns += 1; } });
         assert.strictEqual(migrationRuns, 0);
-        assert.strictEqual((await metadata(database)).schema_version, 1);
+        assert.strictEqual((await metadata(database)).schema_version, CURRENT_DB_SCHEMA_VERSION);
         await close(database);
 
         // 4: newer databases are rejected and remain untouched.
         database = await createDatabase(path.join(temporary, "newer.db"));
         await run(database, `CREATE TABLE ${SCHEMA_METADATA_TABLE} (id INTEGER PRIMARY KEY CHECK (id = 1), schema_version INTEGER NOT NULL)`);
-        await run(database, `INSERT INTO ${SCHEMA_METADATA_TABLE} VALUES (1, 2)`);
+        await run(database, `INSERT INTO ${SCHEMA_METADATA_TABLE} VALUES (1, 3)`);
         let normalMigrations = 0;
         await assert.rejects(() => prepare(database, {
             runCurrentMigrations: async () => { normalMigrations += 1; }
         }), error => error instanceof UnsupportedDatabaseSchemaError && error.code === "KLBS_DB_SCHEMA_NEWER");
         assert.strictEqual(normalMigrations, 0);
-        assert.strictEqual((await metadata(database)).schema_version, 2);
+        assert.strictEqual((await metadata(database)).schema_version, 3);
         await close(database);
 
         // 5: a failed forward migration rolls back and leaves the source version.
@@ -119,7 +119,7 @@ async function main() {
         const backupPath = path.join(temporary, "backup.db");
         fs.copyFileSync(path.join(temporary, "legacy.db"), backupPath);
         database = open(backupPath);
-        assert.strictEqual(await readSchemaVersion(database), 1);
+        assert.strictEqual(await readSchemaVersion(database), CURRENT_DB_SCHEMA_VERSION);
         await close(database);
         console.log("PASS V1 schema version compatibility: fresh, legacy, current, newer refusal, failure rollback, repeated startup, preservation, and SQLite copy");
     }

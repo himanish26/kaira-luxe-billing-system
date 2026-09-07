@@ -18,7 +18,10 @@
     "productName": "KAIRA LUXE BILLING SYSTEM",
     "artifactName": "KairaLuxeBillingSetup-${version}.${ext}",
     "files": [
-      "src/**/*"
+      "src/**/*",
+      "!**/*.db",
+      "!**/*.sqlite",
+      "!**/*.sqlite3"
     ],
     "win": {
       "target": [

@@ -146,6 +146,10 @@ async function main() {
             return target;
         },
         verifyChecksum: async () => true,
+        createPreUpgradeBackup: async () => ({
+            success: true,
+            backupFilePath: path.join(tempRoot, "pre-upgrade.zip")
+        }),
         launchInstaller: async installerPath => launched.push(installerPath)
     });
     assert.strictEqual((await pipeline.checkForUpdates()).updateAvailable, true);

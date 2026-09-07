@@ -12,6 +12,9 @@ files:
   - "!updates/**"
   - "!*.log"
   - "!*.zip"
+  - "!**/*.db"
+  - "!**/*.sqlite"
+  - "!**/*.sqlite3"
 
 extraMetadata:
   main: src/main/main.js

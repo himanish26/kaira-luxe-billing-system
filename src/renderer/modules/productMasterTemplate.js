@@ -9,36 +9,44 @@ window.productMasterTemplate = `
 
 <div class="product-master-card">
 
-    <h2>Product Master</h2>
+    <div class="product-master-total-inventory">
+
+        <div class="product-master-total-label">TOTAL INVENTORY</div>
+
+        <div class="product-master-total-value">
+            <span id="inventoryTotalQuantity">0</span> UNITS
+        </div>
+
+    </div>
 
     <div class="master-stats">
 
-        <div>
+        <div class="master-stat master-stat-products">
     Products :
     <span id="inventoryProductCount">0</span>
 </div>
 
-<div>
+<div class="master-stat master-stat-brands">
     Brands :
     <span id="inventoryBrandCount">0</span>
 </div>
 
-<div>
+<div class="master-stat master-stat-segments">
     Segments :
     <span id="inventorySegmentCount">0</span>
 </div>
 
-<div>
+<div class="master-stat master-stat-categories">
     Categories :
     <span id="inventoryCategoryCount">0</span>
 </div>
 
-<div>
+<div class="master-stat master-stat-seasons">
     Seasons :
     <span id="inventorySeasonCount">0</span>
 </div>
 
-<div>
+<div class="master-stat master-stat-collections">
     Collections :
     <span id="inventoryCollectionCount">0</span>
 </div>

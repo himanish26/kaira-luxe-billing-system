@@ -4,6 +4,7 @@ const packageJson = require("../../package.json");
 const { downloadFile } = require("./downloadService");
 const { verifyChecksum } = require("./checksumService");
 const { launchInstaller } = require("./installerService");
+const technicalLogger = require("./technicalLogger");
 
 const UPDATE_URL =
     "https://raw.githubusercontent.com/himanish26/kaira-luxe-billing-system/main/updates/latest.json";
@@ -95,6 +96,9 @@ function createUpdatePipeline(options = {}) {
     const downloadFileFn = options.downloadFile || downloadFile;
     const verifyChecksumFn = options.verifyChecksum || verifyChecksum;
     const launchInstallerFn = options.launchInstaller || launchInstaller;
+    const createPreUpgradeBackupFn = options.createPreUpgradeBackup ||
+        (() => require("./backupService").createPreUpgradeBackup());
+    const technicalLoggerInstance = options.technicalLogger || technicalLogger;
     let acceptedUpdate = null;
     let verifiedArtifact = null;
 
@@ -166,8 +170,33 @@ function createUpdatePipeline(options = {}) {
             verifiedArtifact = null;
             throw new Error("Verified installer checksum is no longer valid.");
         }
-        await launchInstallerFn(verifiedArtifact.filePath);
-        return { success: true, version: acceptedUpdate.version };
+        let preUpgradeBackup;
+        try {
+            preUpgradeBackup = await createPreUpgradeBackupFn();
+            if (!preUpgradeBackup || preUpgradeBackup.success !== true ||
+                !preUpgradeBackup.backupFilePath) {
+                throw new Error("Verified pre-upgrade backup was not created.");
+            }
+            technicalLoggerInstance.info("UPDATE", "Verified pre-upgrade backup created", {
+                operation: "PRE_UPGRADE_BACKUP",
+                purpose: "PRE_UPGRADE"
+            });
+            await launchInstallerFn(verifiedArtifact.filePath);
+            return {
+                success: true,
+                version: acceptedUpdate.version,
+                preUpgradeBackupFilePath: preUpgradeBackup.backupFilePath
+            };
+        }
+        catch (error) {
+            technicalLoggerInstance.error(
+                "UPDATE",
+                "Update installation was not launched",
+                error,
+                { operation: "INSTALL_UPDATE", preUpgradeBackupCreated: Boolean(preUpgradeBackup) }
+            );
+            throw error;
+        }
     }
 
     function getState() {

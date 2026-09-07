@@ -9,6 +9,7 @@ let inventoryProductsRequestId = 0;
 function showInventory() {
 
     console.log("Opening Product Master...");
+    discardStockAuthorization();
 
     const settingsScreen =
         document.getElementById("settingsScreen");
@@ -77,6 +78,9 @@ async function loadInventorySummary() {
 
     const summary =
         await window.electronAPI.getInventorySummary();
+
+    document.getElementById("inventoryTotalQuantity").textContent =
+        Number(summary.total_inventory || 0).toLocaleString("en-IN");
 
     document.getElementById("inventoryProductCount").textContent =
         summary.products;
@@ -383,12 +387,29 @@ Please import a Product Master Excel file before creating new bills.`
 
 let currentStockTransactionType = null;
 let currentStockProduct = null;
+let currentStockAuthorizationGrant = null;
+
+function discardStockAuthorization() {
+    const grant = currentStockAuthorizationGrant;
+    const purpose = currentStockTransactionType === "INWARD"
+        ? "INVENTORY_INWARD"
+        : currentStockTransactionType === "OUTWARD"
+            ? "INVENTORY_OUTWARD"
+            : null;
+    currentStockAuthorizationGrant = null;
+    if (grant && purpose && window.electronAPI.administratorSecurity?.discardGrant) {
+        window.electronAPI.administratorSecurity.discardGrant(grant, purpose).catch(() => {});
+    }
+}
+
+window.discardStockTransactionAuthorization = discardStockAuthorization;
 
 
-function openStockTransaction(type) {
+function openStockTransaction(type, authorizationGrant) {
 
     currentStockTransactionType = type;
     currentStockProduct = null;
+    currentStockAuthorizationGrant = authorizationGrant;
 
     const modal =
         document.getElementById("stockTransactionModal");
@@ -487,6 +508,7 @@ function closeStockTransaction() {
 
     modal.style.display = "none";
 
+    discardStockAuthorization();
     currentStockTransactionType = null;
     currentStockProduct = null;
 
@@ -803,9 +825,9 @@ function initializeInventoryEvents() {
 
     if (stockInwardBtn) {
 
-        stockInwardBtn.onclick = () => {
-
-            openStockTransaction("INWARD");
+        stockInwardBtn.onclick = async () => {
+            const grant = await requestAdminAuthorization("INVENTORY_INWARD");
+            if (grant) openStockTransaction("INWARD", grant);
 
         };
 
@@ -816,9 +838,9 @@ function initializeInventoryEvents() {
 
     if (stockOutwardBtn) {
 
-        stockOutwardBtn.onclick = () => {
-
-            openStockTransaction("OUTWARD");
+        stockOutwardBtn.onclick = async () => {
+            const grant = await requestAdminAuthorization("INVENTORY_OUTWARD");
+            if (grant) openStockTransaction("OUTWARD", grant);
 
         };
 
@@ -965,6 +987,8 @@ confirmStockTransactionBtn.onclick = async () => {
             result =
                 await window.electronAPI.stockInward({
 
+                    authorizationGrant: currentStockAuthorizationGrant,
+
                     productId:
                         currentStockProduct.id,
 
@@ -1019,6 +1043,8 @@ remarks:
             result =
                 await window.electronAPI.stockOutward({
 
+                    authorizationGrant: currentStockAuthorizationGrant,
+
                     productId:
                         currentStockProduct.id,
 
@@ -1066,6 +1092,7 @@ closeStockTransaction();
 
 try {
 
+    await loadInventorySummary();
     await loadProducts();
 
 } catch (refreshError) {

@@ -166,7 +166,7 @@ function logInventoryMovement(type, result, data = {}) {
     if (data.remarks) parts.push(`Remarks: ${data.remarks}`);
     return write(
         "INVENTORY", type === "INWARD" ? "STOCK_INWARD" : "STOCK_OUTWARD",
-        parts.join(" | "), "OPERATOR", "SUCCESS",
+        parts.join(" | "), data.createdBy === "MANAGER" ? "MANAGER" : "OPERATOR", "SUCCESS",
         { entity_type: "INVENTORY_TRANSACTION", reference_no: result.transactionId }
     );
 }
@@ -176,6 +176,19 @@ const logStockOutward = (result, data) => logInventoryMovement("OUTWARD", result
 const logBackupCreated = fileName => write(
     "BACKUP", "BACKUP_CREATED", safeFileName(fileName), "SYSTEM", "SUCCESS",
     { entity_type: "BACKUP", reference_no: safeFileName(fileName) }
+);
+const logAutomaticBackupCreated = (fileName, frequency = "DAILY") => write(
+    "BACKUP", "AUTOMATIC_BACKUP_CREATED",
+    `Scheduled automatic backup created successfully - ${String(frequency || "DAILY")
+        .replace(/^EVERY_1_HOUR$/, "Every 1 Hour")
+        .replace(/^EVERY_3_HOURS$/, "Every 3 Hours")
+        .replace(/^EVERY_6_HOURS$/, "Every 6 Hours")
+        .replace(/^DAILY$/, "Daily")}`,
+    "SYSTEM", "SUCCESS",
+    { entity_type: "BACKUP", reference_no: safeFileName(fileName) }
+);
+const logAutomaticBackupFailed = reason => write(
+    "BACKUP", "AUTOMATIC_BACKUP_FAILED", safeError(reason), "SYSTEM", "FAILED"
 );
 const logBackupFailed = reason => write(
     "BACKUP", "BACKUP_FAILED", safeError(reason), "SYSTEM", "ERROR"
@@ -222,7 +235,8 @@ module.exports = {
     logStoreCreditRedeemed,
     logProductImport, logInventoryReset,
     logStockInward, logStockOutward,
-    logBackupCreated, logBackupFailed, logRestoreCompleted, logRestoreFailed,
+    logBackupCreated, logAutomaticBackupCreated, logAutomaticBackupFailed,
+    logBackupFailed, logRestoreCompleted, logRestoreFailed,
     logBusinessDayOpened, logBusinessDayClosed, logBusinessDayReopened,
     logDsrSyncSucceeded, logDsrSyncFailed,
     safeFileName, safeError

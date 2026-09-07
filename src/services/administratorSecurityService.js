@@ -9,6 +9,8 @@ const AUTHORIZATION_LEVELS = Object.freeze({
 const AUTHORIZATION_POLICY = Object.freeze({
     "FF": AUTHORIZATION_LEVELS.MANAGER,
     "GIFT_VOUCHER": AUTHORIZATION_LEVELS.MANAGER,
+    "INVENTORY_INWARD": AUTHORIZATION_LEVELS.MANAGER,
+    "INVENTORY_OUTWARD": AUTHORIZATION_LEVELS.MANAGER,
     "DAY_REOPEN": AUTHORIZATION_LEVELS.MANAGER,
     "PAYMENT_CORRECTION": AUTHORIZATION_LEVELS.ADMINISTRATOR,
     "CUSTOMER_REPORT_EXPORT": AUTHORIZATION_LEVELS.ADMINISTRATOR,
@@ -33,6 +35,8 @@ const AUTHORIZATION_PURPOSES = new Set(Object.keys(AUTHORIZATION_POLICY));
 const ADMIN_PIN_AUDIT_POLICY = Object.freeze({
     FF: { classification: "BUSINESS_OPERATION", action: "FAMILY_FRIENDS_DISCOUNT_APPLIED" },
     GIFT_VOUCHER: { classification: "BUSINESS_OPERATION", action: "GIFT_VOUCHER_APPLIED" },
+    INVENTORY_INWARD: { classification: "BUSINESS_OPERATION", action: "STOCK_INWARD_AUTHORIZED" },
+    INVENTORY_OUTWARD: { classification: "BUSINESS_OPERATION", action: "STOCK_OUTWARD_AUTHORIZED" },
     RECEIPT_SETTINGS: { classification: "BUSINESS_OPERATION", action: "RECEIPT_FOOTER_UPDATED" },
     PAYMENT_CORRECTION: { classification: "BUSINESS_OPERATION", action: "PAYMENT_CORRECTED" },
     PRODUCT_IMPORT: { classification: "BUSINESS_OPERATION", action: "PRODUCT_IMPORT_COMPLETED" },
@@ -165,6 +169,14 @@ function createAdministratorSecurityService(database, options = {}) {
         const expectedLevel = AUTHORIZATION_POLICY[purpose];
         return Boolean(expectedLevel && grant && grant.purpose === purpose &&
             grant.level === expectedLevel && grant.expiresAt >= now());
+    }
+
+    function discardGrant(token, purpose) {
+        const normalizedToken = String(token || "");
+        const grant = grants.get(normalizedToken);
+        if (!grant || !AUTHORIZATION_POLICY[purpose] || grant.purpose !== purpose) return false;
+        grants.delete(normalizedToken);
+        return true;
     }
 
     function consumeGrants(requirements) {
@@ -478,7 +490,7 @@ function createAdministratorSecurityService(database, options = {}) {
             configureMissingPinWithStartupSetup(data || {}, AUTHORIZATION_LEVELS.ADMINISTRATOR),
         configureMissingManagerPin: data =>
             configureMissingPinWithStartupSetup(data || {}, AUTHORIZATION_LEVELS.MANAGER),
-        consumeGrant, consumeGrants, validateGrant,
+        consumeGrant, consumeGrants, validateGrant, discardGrant,
         clearGrants: () => grants.clear(),
         clearStartupSetupSessions: () => startupSetupSessions.clear()
     };

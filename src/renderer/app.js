@@ -490,26 +490,35 @@ async function showAdministratorSecurityPage() {
         : "";
     const workflow = startupMasterVerification ? "" : status.initialized
         ? `
-            <section class="security-card">
-                <h2>CHANGE ADMINISTRATOR PIN</h2>
-                <div class="security-form-grid">
-                    <label>Current Administrator PIN
-                        <input id="securityCurrentPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
-                    </label>
-                    <label>New Administrator PIN
-                        <input id="securityNewPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
-                    </label>
-                    <label>Confirm Administrator PIN
-                        <input id="securityConfirmPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
-                    </label>
+            <section class="security-card security-admin-card">
+                <h2>ADMINISTRATOR PIN</h2>
+                <div class="security-status-card"><span>Status</span><strong class="security-status-value security-status-success">Configured</strong></div>
+                <div id="securityChangeStatusMessage" class="security-message" aria-live="polite"></div>
+                <button id="securityOpenChangePinBtn" type="button" class="dashboard-btn security-action-btn">Change Administrator PIN</button>
+                <div id="securityChangePinPanel" class="security-recovery-panel" hidden>
+                    <h2>CHANGE ADMINISTRATOR PIN</h2>
+                    <div class="security-form-grid">
+                        <label>Current Administrator PIN
+                            <input id="securityCurrentPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
+                        </label>
+                        <label>New Administrator PIN
+                            <input id="securityNewPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
+                        </label>
+                        <label>Confirm Administrator PIN
+                            <input id="securityConfirmPin" class="security-pin-input" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off">
+                        </label>
+                    </div>
+                    <div id="securityChangeMessage" class="security-message" aria-live="polite"></div>
+                    <div class="security-button-row">
+                        <button id="securityChangePinBtn" type="button" class="dashboard-btn security-action-btn">Save New PIN</button>
+                        <button id="securityCancelChangePinBtn" type="button" class="security-secondary-btn">Cancel</button>
+                    </div>
                 </div>
-                <div id="securityChangeMessage" class="security-message"></div>
-                <button id="securityChangePinBtn" class="dashboard-btn security-action-btn">Change PIN</button>
             </section>
-            <section class="security-card">
+            <section class="security-card security-manager-card">
                 <h2>MANAGER PIN</h2>
-                <p>Manager authorization is limited to Family & Friends Discount, Gift Voucher, and Day Re-open.</p>
-                <div class="security-status-card"><span>Status</span><strong>${status.managerPinConfigured ? "Configured" : "Not Configured"}</strong></div>
+                <p>Manager authorization is used for operational approvals including Family & Friends Discount, Gift Voucher, Stock Inward, Stock Outward, Day Re-open, and Previous Business Day Closing.</p>
+                <div class="security-status-card"><span>Status</span><strong class="security-status-value ${status.managerPinConfigured ? "security-status-success" : "security-status-pending"}">${status.managerPinConfigured ? "Configured" : "Not Configured"}</strong></div>
                 <button id="securityOpenManagerPinBtn" class="dashboard-btn security-action-btn">${status.managerPinConfigured ? "Change Manager PIN" : "Set Manager PIN"}</button>
                 <div id="securityManagerPinPanel" class="security-recovery-panel" hidden>
                     <div class="security-form-grid">
@@ -524,7 +533,7 @@ async function showAdministratorSecurityPage() {
                     <button id="securitySaveManagerPinBtn" class="dashboard-btn security-action-btn">Save Manager PIN</button>
                 </div>
             </section>
-            <section class="security-recovery-card">
+            <section class="security-recovery-card security-master-recovery-card">
                 <h3>FORGOT ADMINISTRATOR PIN?</h3>
                 <p>Use the Master PIN only to reset the Administrator PIN.</p>
                 <button id="securityOpenRecoveryBtn" class="security-secondary-btn">Reset Using Master PIN</button>
@@ -586,11 +595,13 @@ renderSettingsPage({
                 <p>Configure both the Administrator PIN and Manager PIN before KLBS can continue.</p>
             </section>` : ""}
             ${startupMasterVerification}
-            <div class="security-status-grid">
-                <div class="security-status-card"><span>Status</span><strong>${status.initialized ? "Configured" : "Not Configured"}</strong></div>
-                <div class="security-status-card"><span>Master Recovery</span><strong>${status.masterRecoveryProvisioned ? "Provisioned" : "Provisioning Required"}</strong></div>
-            </div>
-            ${workflow}`
+            <div class="administrator-security-page">
+                <div class="security-status-grid">
+                    <div class="security-status-card"><span>Status</span><strong class="security-status-value ${status.initialized ? "security-status-success" : "security-status-pending"}">${status.initialized ? "Configured" : "Not Configured"}</strong></div>
+                    <div class="security-status-card"><span>Master Recovery</span><strong class="security-status-value ${status.masterRecoveryProvisioned ? "security-status-success" : "security-status-pending"}">${status.masterRecoveryProvisioned ? "Provisioned" : "Provisioning Required"}</strong></div>
+                </div>
+                ${workflow}
+            </div>`
     });
 
     if (startupSecuritySetupActive) {
@@ -602,7 +613,31 @@ renderSettingsPage({
         settingsPageBackBtn.hidden = false;
     }
 
+    const openChangeButton = document.getElementById("securityOpenChangePinBtn");
+    const changePanel = document.getElementById("securityChangePinPanel");
     const changeButton = document.getElementById("securityChangePinBtn");
+    const cancelChangeButton = document.getElementById("securityCancelChangePinBtn");
+    const clearAdministratorChangeFields = () => {
+        ["securityCurrentPin", "securityNewPin", "securityConfirmPin"].forEach(id => {
+            const input = document.getElementById(id);
+            if (input) input.value = "";
+        });
+    };
+    if (openChangeButton) openChangeButton.onclick = () => {
+        changePanel.hidden = false;
+        openChangeButton.hidden = true;
+        document.getElementById("securityChangeStatusMessage").textContent = "";
+        document.getElementById("securityChangeStatusMessage").classList.remove("success");
+        document.getElementById("securityCurrentPin").focus();
+    };
+    if (cancelChangeButton) cancelChangeButton.onclick = () => {
+        clearAdministratorChangeFields();
+        document.getElementById("securityChangeMessage").textContent = "";
+        document.getElementById("securityChangeMessage").classList.remove("success");
+        changePanel.hidden = true;
+        openChangeButton.hidden = false;
+        openChangeButton.focus();
+    };
     const startupVerifyButton = document.getElementById("startupSecurityVerifyBtn");
     if (startupVerifyButton) startupVerifyButton.onclick = async () => {
         const input = document.getElementById("startupSecurityMasterPin");
@@ -646,6 +681,13 @@ if (result.success) {
     document.getElementById(
         "securityConfirmPin"
     ).value = "";
+
+    changePanel.hidden = true;
+    openChangeButton.hidden = false;
+    const statusMessage = document.getElementById("securityChangeStatusMessage");
+    statusMessage.textContent = "✓ Administrator PIN changed successfully.";
+    statusMessage.classList.add("success");
+    openChangeButton.focus();
 
 }
     };
@@ -1217,6 +1259,10 @@ function showAuthorizationGranted({ button, modal, input, resetText, onComplete 
     if (settingsPageBackBtn){
 
     settingsPageBackBtn.addEventListener("click", () => {
+
+        if (window.discardStockTransactionAuthorization) {
+            window.discardStockTransactionAuthorization();
+        }
 
         settingsPage.style.display = "none";
 

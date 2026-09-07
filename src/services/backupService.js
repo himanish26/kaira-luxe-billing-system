@@ -18,6 +18,7 @@ const {
 const {
     CURRENT_DB_SCHEMA_VERSION,
     SCHEMA_METADATA_TABLE,
+    readSchemaVersion,
     assertSupportedSchemaVersion
 } = require("../database/schemaVersion");
 const {
@@ -37,10 +38,17 @@ const DEFAULT_BACKUP_FOLDER = path.join(
     "Kaira Luxe",
     "Backups"
 );
+const PRE_UPGRADE_BACKUP_FOLDER_NAME = "PreUpgrade";
 
 const {
-    getSettings
+    getSettings,
+    recordScheduledBackupSuccess
 } = require("../database/settingsService");
+const { getBusinessDate, addBusinessCalendarDays } = require("../database/businessDate");
+const {
+    isPositivelyIdentifiedScheduledAutomatic,
+    shouldDeleteScheduledAutomaticBackup
+} = require("./scheduledBackupRetentionLogic");
 
 const database = require("../database/database");
 const {
@@ -50,6 +58,8 @@ const {
 const {
 
     logBackupCreated,
+    logAutomaticBackupCreated,
+    logAutomaticBackupFailed,
 
     logBackupFailed,
 
@@ -330,7 +340,7 @@ function removeOwnArtifact(filePath) {
     }
 }
 
-function writeBackupArchive(snapshotPath, inProgressPath) {
+function writeBackupArchive(snapshotPath, inProgressPath, metadataOverrides = {}) {
     return new Promise((resolve, reject) => {
         const output = fs.createWriteStream(inProgressPath, { flags: "wx" });
         const archive = archiver("zip", { zlib: { level: 9 } });
@@ -367,6 +377,7 @@ function writeBackupArchive(snapshotPath, inProgressPath) {
             electron: process.versions.electron,
             node: process.versions.node
         };
+        Object.assign(backupInfo, metadataOverrides);
 
         archive.append(JSON.stringify(backupInfo, null, 4), {
             name: "backup-info.json"
@@ -385,18 +396,21 @@ function writeBackupArchive(snapshotPath, inProgressPath) {
     });
 }
 
-async function createBackupInternal() {
+async function createBackupInternal(options = {}) {
 
-    const backupFolder =
-        await getBackupFolder();
+    const configuredBackupFolder = options.backupFolder || await getBackupFolder();
+    const backupFolder = options.purpose === "PRE_UPGRADE"
+        ? path.join(configuredBackupFolder, PRE_UPGRADE_BACKUP_FOLDER_NAME)
+        : configuredBackupFolder;
 
     ensureDirectory(backupFolder);
 
     const timestamp = getTimestamp();
     const operationId = getBackupOperationId();
 
-    const backupFileName =
-        `KL_Backup_${timestamp}_${operationId}.zip`;
+    const backupFileName = options.purpose === "PRE_UPGRADE"
+        ? `KL_PreUpgrade_${timestamp}_${operationId}.zip`
+        : `KL_Backup_${timestamp}_${operationId}.zip`;
 
     const backupFilePath = path.join(
     backupFolder,
@@ -408,15 +422,31 @@ async function createBackupInternal() {
         `klbs_backup_${timestamp}_${operationId}.db`
     );
     const inProgressPath = `${backupFilePath}.partial`;
+    let finalArtifactCreated = false;
 
     try {
+        if (fs.existsSync(backupFilePath)) {
+            throw new Error("Backup destination already exists; refusing to overwrite it.");
+        }
+        let schemaVersion = null;
+        if (options.purpose === "PRE_UPGRADE") {
+            schemaVersion = await readSchemaVersion(database);
+            if (!Number.isInteger(schemaVersion)) {
+                throw new Error("Current KLBS database schema version is unavailable.");
+            }
+            await assertSupportedSchemaVersion(schemaVersion, CURRENT_DB_SCHEMA_VERSION);
+        }
         await createSQLiteSnapshot(snapshotPath);
         await validateSQLiteDatabase(snapshotPath);
-        const size = await writeBackupArchive(snapshotPath, inProgressPath);
+        const size = await writeBackupArchive(snapshotPath, inProgressPath, {
+            purpose: options.purpose || "BACKUP",
+            ...(schemaVersion === null ? {} : { schemaVersion })
+        });
         if (!fs.existsSync(inProgressPath) || fs.statSync(inProgressPath).size <= 0) {
             throw new Error("Backup archive was not written successfully.");
         }
         fs.renameSync(inProgressPath, backupFilePath);
+        finalArtifactCreated = true;
 
         const verification = await validateBackup(backupFilePath);
         if (!verification || verification.success !== true) {
@@ -426,7 +456,12 @@ async function createBackupInternal() {
         }
 
         try {
-            await logBackupCreated(backupFileName);
+            if (options.purpose === "SCHEDULED_AUTOMATIC") {
+                await logAutomaticBackupCreated(backupFileName, options.frequency);
+            }
+            else {
+                await logBackupCreated(backupFileName);
+            }
         }
         catch (error) {
             console.error(error);
@@ -441,7 +476,7 @@ async function createBackupInternal() {
     }
     catch (error) {
         removeOwnArtifact(inProgressPath);
-        removeOwnArtifact(backupFilePath);
+        if (finalArtifactCreated) removeOwnArtifact(backupFilePath);
         throw error;
     }
     finally {
@@ -468,6 +503,97 @@ async function createBackup() {
             catch (logError) {
                 console.error(logError);
             }
+            throw error;
+        }
+    });
+    backupQueueTail = operation.catch(() => undefined);
+    return operation;
+}
+
+async function createPreUpgradeBackup() {
+    const operation = backupQueueTail.then(async () => {
+        try {
+            return await createBackupInternal({ purpose: "PRE_UPGRADE" });
+        }
+        catch (error) {
+            technicalLogger.error(
+                "BACKUP",
+                "Pre-upgrade backup creation failed",
+                error,
+                { operation: "CREATE_PRE_UPGRADE_BACKUP", purpose: "PRE_UPGRADE" }
+            );
+            throw error;
+        }
+    });
+    backupQueueTail = operation.catch(() => undefined);
+    return operation;
+}
+
+function readBackupMetadata(filePath) {
+    try {
+        const zip = new AdmZip(filePath);
+        const entry = zip.getEntries().find(item => item.entryName === "backup-info.json");
+        if (!entry) return null;
+        const metadata = JSON.parse(entry.getData().toString("utf8"));
+        return metadata && typeof metadata === "object" ? metadata : null;
+    }
+    catch (_) {
+        return null;
+    }
+}
+
+async function retainScheduledAutomaticBackups(now = new Date()) {
+    const backupFolder = await getBackupFolder();
+    if (!fs.existsSync(backupFolder)) return { deleted: 0, preserved: 0 };
+
+    const cutoffDate = addBusinessCalendarDays(getBusinessDate(now), -6);
+    let deleted = 0;
+    let preserved = 0;
+
+    for (const file of fs.readdirSync(backupFolder)) {
+        if (!file.endsWith(".zip")) continue;
+        const filePath = path.join(backupFolder, file);
+        if (!fs.statSync(filePath).isFile()) continue;
+
+        const metadata = readBackupMetadata(filePath);
+        if (!isPositivelyIdentifiedScheduledAutomatic(metadata)) {
+            continue;
+        }
+
+        if (shouldDeleteScheduledAutomaticBackup(metadata, now)) {
+            fs.unlinkSync(filePath);
+            deleted += 1;
+        }
+        else {
+            preserved += 1;
+        }
+    }
+
+    return { deleted, preserved, cutoffDate };
+}
+
+async function createScheduledAutomaticBackup(frequency = "DAILY") {
+    const operation = backupQueueTail.then(async () => {
+        try {
+            const result = await createBackupInternal({
+                purpose: "SCHEDULED_AUTOMATIC",
+                frequency
+            });
+            await recordScheduledBackupSuccess(new Date().toISOString());
+            try {
+                await retainScheduledAutomaticBackups();
+            }
+            catch (retentionError) {
+                technicalLogger.warn("BACKUP", "Scheduled backup retention was not completed", {
+                    operation: "RETAIN_SCHEDULED_AUTOMATIC_BACKUPS",
+                    message: retentionError.message
+                });
+            }
+            return result;
+        }
+        catch (error) {
+            try { await logAutomaticBackupFailed(error.message); }
+            catch (logError) { console.error(logError); }
             throw error;
         }
     });
@@ -816,6 +942,10 @@ module.exports = {
 
     createBackup,
 
+    createScheduledAutomaticBackup,
+
+    createPreUpgradeBackup,
+
     getBackupHistory,
 
     validateBackup,
@@ -824,6 +954,8 @@ module.exports = {
 
     validateSQLiteDatabase,
 
-    validateWritableSQLiteDatabase
+    validateWritableSQLiteDatabase,
+
+    retainScheduledAutomaticBackups
 
 };

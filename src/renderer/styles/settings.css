@@ -321,6 +321,21 @@ transform:translateY(-2px);
     margin:24px 0 0;
 }
 
+.security-button-row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    flex-wrap:wrap;
+}
+
+.security-button-row .security-action-btn{
+    margin-top:24px;
+}
+
+.security-button-row .security-secondary-btn{
+    margin-top:24px;
+}
+
 .security-secondary-btn{
     border:1px solid var(--primary);
     border-radius:12px;
@@ -381,6 +396,111 @@ transform:translateY(-2px);
         grid-template-columns:1fr;
     }
 }
+
+/* Administrator Security page-local refinement. */
+.administrator-security-page .security-card,
+.administrator-security-page .security-recovery-card{
+    padding:28px;
+}
+
+.administrator-security-page .security-card h2,
+.administrator-security-page .security-recovery-panel h2{
+    margin-bottom:16px;
+}
+
+.administrator-security-page .security-card > p{
+    margin:0 0 12px;
+}
+
+.administrator-security-page .security-card > p + .security-status-card{
+    margin-top:0;
+}
+
+.administrator-security-page .security-status-card{
+    padding:14px 18px;
+}
+
+.administrator-security-page .security-status-card strong.security-status-success{
+    color:#237a45;
+}
+
+.administrator-security-page .security-status-card strong.security-status-pending{
+    color:#9a6a00;
+}
+
+.administrator-security-page .security-message:empty{
+    display:none;
+}
+
+.administrator-security-page .security-action-btn{
+    height:50px;
+    margin-top:14px;
+    font-size:17px;
+}
+
+.administrator-security-page .security-secondary-btn{
+    min-height:50px;
+    box-sizing:border-box;
+}
+
+.administrator-security-page .security-admin-card{
+    border-left:4px solid #8B004B;
+}
+
+.administrator-security-page .security-admin-card h2,
+.administrator-security-page .security-admin-card .security-recovery-panel h2{
+    color:#8B004B;
+}
+
+.administrator-security-page .security-admin-card .security-action-btn{
+    background:#8B004B;
+}
+
+.administrator-security-page .security-admin-card .security-action-btn:hover{
+    background:#6D0033;
+}
+
+.administrator-security-page .security-manager-card{
+    border-left:4px solid #B26A00;
+}
+
+.administrator-security-page .security-manager-card h2,
+.administrator-security-page .security-manager-card .security-recovery-panel h2{
+    color:#B26A00;
+}
+
+.administrator-security-page .security-manager-card .security-action-btn{
+    background:#B26A00;
+}
+
+.administrator-security-page .security-manager-card .security-action-btn:hover{
+    background:#8A4F00;
+}
+
+.administrator-security-page .security-master-recovery-card{
+    border-left-color:#1F5D9B;
+}
+
+.administrator-security-page .security-master-recovery-card h3,
+.administrator-security-page .security-master-recovery-card h2{
+    color:#1F5D9B;
+}
+
+.administrator-security-page .security-master-recovery-card .security-secondary-btn{
+    border-color:#1F5D9B;
+    color:#1F5D9B;
+}
+
+.administrator-security-page .security-master-recovery-card .security-secondary-btn:hover,
+.administrator-security-page .security-master-recovery-card .security-action-btn{
+    background:#1F5D9B;
+    color:#fff;
+}
+
+.administrator-security-page .security-master-recovery-card .security-action-btn:hover{
+    background:#174777;
+}
+
 .settings-info-card{
 
 max-width:900px;
@@ -810,6 +930,80 @@ transition:.2s;
 /* =====================================
    AUTOMATIC BACKUP
 ===================================== */
+
+.automatic-backup-form {
+    width: min(100%, 760px);
+    margin: 18px auto 28px;
+    padding: 0;
+    text-align: left;
+}
+
+.automatic-backup-form .settings-field { margin-bottom: 18px; }
+.automatic-backup-form .settings-field label {
+    display: inline-block;
+    min-width: 170px;
+    margin: 0 14px 0 0;
+    color: #4f002a;
+    font-size: 15px;
+}
+.automatic-backup-form .settings-field > select {
+    width: min(100%, 300px);
+    height: 42px;
+    box-sizing: border-box;
+    padding: 8px 12px;
+    color: #302a2d;
+    background: #fff;
+    border: 1px solid #cdb7c2;
+    border-radius: 9px;
+    font: inherit;
+}
+.automatic-backup-form select:hover,
+.automatic-backup-form select:focus {
+    border-color: var(--primary);
+}
+.automatic-backup-form select:focus {
+    outline: 3px solid rgba(122, 0, 60, .14);
+    outline-offset: 1px;
+}
+.automatic-backup-form .backup-time-picker {
+    display: inline-flex;
+    justify-content: flex-start;
+    gap: 8px;
+    vertical-align: middle;
+}
+.automatic-backup-form .backup-time-picker select {
+    width: 82px;
+    height: 42px;
+    padding: 7px 9px;
+    font-size: 15px;
+    font-weight: 650;
+    border: 1px solid #cdb7c2;
+    border-radius: 9px;
+    box-shadow: none;
+}
+.automatic-backup-form .backup-help {
+    margin: 20px 0 22px;
+    padding: 12px 14px;
+    color: #66545b;
+    background: #f8f1f4;
+    border-left: 4px solid var(--primary);
+    border-radius: 9px;
+    font-size: 14px;
+    line-height: 1.45;
+    text-align: left;
+}
+.automatic-backup-form #saveAutoBackup {
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: 11px 20px;
+    border-radius: 9px;
+    font-size: 14px;
+}
+
+@media (max-width: 760px) {
+    .automatic-backup-form .settings-field label { display: block; margin-bottom: 7px; }
+}
 
 .settings-form{
 

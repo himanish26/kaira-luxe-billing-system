@@ -781,6 +781,13 @@ CREATE TABLE settings (
 
                 auto_backup_time TEXT DEFAULT '21:30',
 
+                auto_backup_enabled INTEGER NOT NULL DEFAULT 1
+                    CHECK (auto_backup_enabled IN (0, 1)),
+
+                auto_backup_frequency TEXT NOT NULL DEFAULT 'DAILY',
+
+                auto_backup_last_success_at TEXT,
+
                 smtp_host TEXT DEFAULT 'smtp.gmail.com',
 
                 smtp_port INTEGER DEFAULT 587,

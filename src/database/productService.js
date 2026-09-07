@@ -59,7 +59,16 @@ function getInventorySummary() {
                 COUNT(DISTINCT segment) AS segments,
                 COUNT(DISTINCT category) AS categories,
                 COUNT(DISTINCT season) AS seasons,
-                COUNT(DISTINCT collection) AS collections
+                COUNT(DISTINCT collection) AS collections,
+                COALESCE(
+                    (
+                        SELECT SUM(it.quantity)
+                        FROM inventory_transactions it
+                        INNER JOIN products live_products
+                            ON live_products.id = it.product_id
+                    ),
+                    0
+                ) AS total_inventory
             FROM products
             `,
             [],

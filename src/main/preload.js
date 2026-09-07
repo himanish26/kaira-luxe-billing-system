@@ -474,6 +474,7 @@ connectGoogleDrive: () =>
 administratorSecurity: {
     getStatus: () => ipcRenderer.invoke("security:get-status"),
     authorizePin: (pin, purpose) => ipcRenderer.invoke("security:authorize-pin", pin, purpose),
+    discardGrant: (grant, purpose) => ipcRenderer.invoke("security:discard-grant", grant, purpose),
     changePin: data => ipcRenderer.invoke("security:change-pin", data),
     recover: data => ipcRenderer.invoke("security:recover", data),
     recoverManagerPin: data => ipcRenderer.invoke("security:recover-manager-pin", data),

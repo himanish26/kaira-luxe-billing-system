@@ -674,8 +674,6 @@ app.whenReady().then(async () => {
             );
         }
 
-        startBackupScheduler();
-
         createWindow();
         createSplashWindow();
         startIntegrationOutboxDrain();
@@ -959,6 +957,9 @@ ipcMain.handle("startup:ready", async event => {
         // Security/setup and blocked previous-day screens never reach this point.
         await ensureOperationalBusinessDay();
 
+        // Scheduled backups begin only after database and operational renderer readiness.
+        startBackupScheduler();
+
 /*
  * Keep the splash visible for a minimum of 8 seconds
  * from the moment it was actually shown.
@@ -1011,6 +1012,10 @@ mainWindow.focus();
 ipcMain.handle("security:get-status", () => administratorSecurity.getStatus());
 ipcMain.handle("security:authorize-pin", (event, pin, purpose) =>
     administratorSecurity.authorizePin(pin, purpose));
+ipcMain.handle("security:discard-grant", (event, grant, purpose) =>
+    mainWindow && event.sender === mainWindow.webContents
+        ? administratorSecurity.discardGrant(grant, purpose)
+        : false);
 ipcMain.handle("security:change-pin", (event, data) =>
     administratorSecurity.changePin(data.currentPin, data.newPin, data.confirmPin));
 ipcMain.handle("security:recover", (event, data) =>
@@ -1122,9 +1127,14 @@ ipcMain.handle(
     async (event, data) => {
 
         try {
-
+            if (!mainWindow || event.sender !== mainWindow.webContents) {
+                throw new Error("Stock inward request rejected.");
+            }
+            requireSecurityGrant(data && data.authorizationGrant, "INVENTORY_INWARD");
+            const operationData = { ...(data || {}), createdBy: "MANAGER" };
+            delete operationData.authorizationGrant;
             return await inventoryTransactionService
-                .stockInward(data);
+                .stockInward(operationData);
 
         }
 
@@ -1151,9 +1161,14 @@ ipcMain.handle(
     async (event, data) => {
 
         try {
-
+            if (!mainWindow || event.sender !== mainWindow.webContents) {
+                throw new Error("Stock outward request rejected.");
+            }
+            requireSecurityGrant(data && data.authorizationGrant, "INVENTORY_OUTWARD");
+            const operationData = { ...(data || {}), createdBy: "MANAGER" };
+            delete operationData.authorizationGrant;
             return await inventoryTransactionService
-                .stockOutward(data);
+                .stockOutward(operationData);
 
         }
 
@@ -1949,7 +1964,11 @@ ipcMain.handle(
         else if (Object.prototype.hasOwnProperty.call(settings, "backup_location")) {
             requireSecurityGrant(grant, "BACKUP_LOCATION");
         }
-        else if (Object.prototype.hasOwnProperty.call(settings, "auto_backup_time")) {
+        else if (
+            Object.prototype.hasOwnProperty.call(settings, "auto_backup_time") ||
+            Object.prototype.hasOwnProperty.call(settings, "auto_backup_enabled") ||
+            Object.prototype.hasOwnProperty.call(settings, "auto_backup_frequency")
+        ) {
             requireSecurityGrant(grant, "AUTO_BACKUP_SETTINGS");
         }
 

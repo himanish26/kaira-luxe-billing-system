@@ -1,4 +1,4 @@
-const CURRENT_DB_SCHEMA_VERSION = 1;
+const CURRENT_DB_SCHEMA_VERSION = 2;
 const SCHEMA_METADATA_TABLE = "klbs_schema_metadata";
 
 function run(database, sql, params = []) {
@@ -72,6 +72,20 @@ async function assertSupportedSchemaVersion(version, currentVersion = CURRENT_DB
 function findMigration(steps, source, target) {
     return (steps || []).find(step =>
         step && step.from === source && step.to === target && typeof step.up === "function");
+}
+
+function migrateAutomaticBackupSettings(database) {
+    return all(database, "PRAGMA table_info(settings)").then(async columns => {
+        const existing = new Set(columns.map(column => column.name));
+        const additions = [
+            ["auto_backup_enabled", "ALTER TABLE settings ADD COLUMN auto_backup_enabled INTEGER NOT NULL DEFAULT 1 CHECK (auto_backup_enabled IN (0, 1))"],
+            ["auto_backup_frequency", "ALTER TABLE settings ADD COLUMN auto_backup_frequency TEXT NOT NULL DEFAULT 'DAILY'"],
+            ["auto_backup_last_success_at", "ALTER TABLE settings ADD COLUMN auto_backup_last_success_at TEXT"]
+        ];
+        for (const [name, sql] of additions) {
+            if (!existing.has(name)) await run(database, sql);
+        }
+    });
 }
 
 async function runForwardMigrations(database, sourceVersion, targetVersion, steps = [], logger = null) {
@@ -151,7 +165,16 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
             }
             throw error;
         }
-        await runForwardMigrations(database, detectedVersion, currentVersion, migrations, logger);
+        const defaultMigrations = [
+            { from: 1, to: 2, name: "automatic_backup_settings", up: migrateAutomaticBackupSettings }
+        ];
+        await runForwardMigrations(
+            database,
+            detectedVersion,
+            currentVersion,
+            [...defaultMigrations, ...migrations],
+            logger
+        );
     }
 
     if (detectedVersion === null || detectedVersion < currentVersion) {

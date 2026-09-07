@@ -50,9 +50,18 @@ let databaseReadyResolve;
 
 let databaseReadyReject;
 
+let databaseInitializationResolve;
+
+let databaseInitializationReject;
+
 const databaseReady = new Promise((resolve, reject) => {
     databaseReadyResolve = resolve;
     databaseReadyReject = reject;
+});
+
+const databaseInitialization = new Promise((resolve, reject) => {
+    databaseInitializationResolve = resolve;
+    databaseInitializationReject = reject;
 });
 
 const db = new sqlite3.Database(startupRestoreRecoveryError ? ":memory:" : dbPath, async (err) => {
@@ -106,7 +115,10 @@ const db = new sqlite3.Database(startupRestoreRecoveryError ? ":memory:" : dbPat
                             return;
                         }
 
-                        createTables();
+                        createTables().then(
+                            databaseInitializationResolve,
+                            databaseInitializationReject
+                        );
 
                     }
                 );
@@ -118,7 +130,7 @@ const db = new sqlite3.Database(startupRestoreRecoveryError ? ":memory:" : dbPat
 
 function createTables() {
 
-    db.serialize(() => {
+    return new Promise((resolve, reject) => db.serialize(() => {
 
         db.run(`
             CREATE TABLE IF NOT EXISTS products (
@@ -321,6 +333,13 @@ function createTables() {
 
                 auto_backup_time TEXT DEFAULT '21:30',
 
+                auto_backup_enabled INTEGER NOT NULL DEFAULT 1
+                    CHECK (auto_backup_enabled IN (0, 1)),
+
+                auto_backup_frequency TEXT NOT NULL DEFAULT 'DAILY',
+
+                auto_backup_last_success_at TEXT,
+
                 smtp_host TEXT DEFAULT 'smtp.gmail.com',
 
                 smtp_port INTEGER DEFAULT 587,
@@ -436,9 +455,9 @@ Berhampur-760001',
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 schema_version INTEGER NOT NULL CHECK (schema_version >= 0)
             )
-        `);
+        `, error => error ? reject(error) : resolve());
         console.log("All Tables Created Successfully");
-    });
+    }));
 
 }
 
@@ -467,6 +486,18 @@ function runDatabaseMigrations() {
                     {
                         name: "auto_backup_time",
                         sql: `ALTER TABLE settings ADD COLUMN auto_backup_time TEXT DEFAULT '21:30'`
+                    },
+                    {
+                        name: "auto_backup_enabled",
+                        sql: `ALTER TABLE settings ADD COLUMN auto_backup_enabled INTEGER NOT NULL DEFAULT 1 CHECK (auto_backup_enabled IN (0, 1))`
+                    },
+                    {
+                        name: "auto_backup_frequency",
+                        sql: `ALTER TABLE settings ADD COLUMN auto_backup_frequency TEXT NOT NULL DEFAULT 'DAILY'`
+                    },
+                    {
+                        name: "auto_backup_last_success_at",
+                        sql: `ALTER TABLE settings ADD COLUMN auto_backup_last_success_at TEXT`
                     },
                     {
                         name: "default_printer",
@@ -2903,6 +2934,7 @@ db.serialize(() => {
             }
 
 try {
+        await databaseInitialization;
 
         const runNamedMigration = async (name, operation) => {
             try {
