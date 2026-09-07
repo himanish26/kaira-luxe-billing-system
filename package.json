@@ -35,7 +35,8 @@
       "icon": "src/renderer/Assets/icons/icon.ico"
     },
     "nsis": {
-      "installerIcon": "src/renderer/Assets/icons/installer.ico"
+      "installerIcon": "src/renderer/Assets/icons/installer.ico",
+      "license": "EULA.txt"
     }
   },
   "type": "commonjs",
