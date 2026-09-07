@@ -118,7 +118,9 @@ margin-bottom:50px;
 .integration-outbox-date>strong { color:#1f2937; font-size:16px; }
 .integration-outbox-date>div { display:flex; align-items:center; gap:10px; color:#6b7280; font-size:12px; font-weight:700; }
 .integration-outbox-date small { color:#7b6d50; font-weight:500; }
-.integration-outbox-status { font-size:12px; }
+.integration-outbox-status { font-size:12px; background:transparent; }
+.integration-outbox-status.success { color:#23753f; background:transparent !important; }
+.integration-outbox-status.pending { color:#9a6a00; background:transparent; }
 .integration-outbox-empty { display:flex; flex-direction:column; gap:5px; padding:18px 4px 4px; color:#23753f; }
 .integration-outbox-empty span { color:#4b5563; font-size:14px; }
 .integration-summary-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; margin:16px auto; }
