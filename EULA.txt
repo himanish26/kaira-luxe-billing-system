@@ -4,7 +4,7 @@ END USER LICENSE AGREEMENT (EULA)
 Version 1.0.0
 Effective: September 2026
 
-Copyright © 2026 Himanish Patnaik
+Copyright (c) 2026 Himanish Patnaik
 All Rights Reserved.
 
 PLEASE READ THIS END USER LICENSE AGREEMENT CAREFULLY BEFORE INSTALLING OR
@@ -172,7 +172,7 @@ this Agreement or the Software.
 
 22. COPYRIGHT NOTICE
 
-Copyright © 2026 Himanish Patnaik
+Copyright (c) 2026 Himanish Patnaik
 All Rights Reserved.
 
 23. ACCEPTANCE
