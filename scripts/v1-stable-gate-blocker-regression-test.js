@@ -43,7 +43,7 @@ function appsScriptRegressionTests() {
     assert.strictEqual(context.normalize(new Date("2026-09-02T12:00:00Z"), "Asia/Kolkata"), "2026-09-02");
     assert.notStrictEqual(context.closedAtMs("2026-09-02T12:00:01.000Z"), row[5].getTime());
     assert(source.includes("new Date(payload.closedAt)"));
-    assert(source.includes("sheet.appendRow([\n    new Date(),"));
+    assert(source.includes("sheet.appendRow(values.concat([syncedAt]));"));
     assert(source.includes("setNumberFormat('dd-mmm-yyyy hh:mm:ss AM/PM')"));
 }
 

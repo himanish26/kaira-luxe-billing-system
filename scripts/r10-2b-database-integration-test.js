@@ -29,6 +29,7 @@ function close(database) {
 
 async function integrationChild(tempRoot, phase) {
     const { app } = require("electron");
+    app.setPath("userData", path.join(tempRoot, "user data"));
     const sqlite3 = require("sqlite3").verbose();
     const database = require("../src/database/database");
     const {
@@ -91,7 +92,7 @@ async function integrationChild(tempRoot, phase) {
 }
 
 function runElectronPhase(electronBinary, scriptPath, tempRoot, phase) {
-    const result = spawnSync(electronBinary, [scriptPath, "--integration-child", tempRoot, phase], {
+    const result = spawnSync(electronBinary, ["--disable-gpu", "--in-process-gpu", scriptPath, "--integration-child", tempRoot, phase], {
         cwd: path.resolve(__dirname, ".."),
         env: {
             ...process.env,

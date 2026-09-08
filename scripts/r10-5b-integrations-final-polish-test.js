@@ -69,7 +69,7 @@ async function main() {
     const context = { Intl, Date, Number, String };
     vm.createContext(context);
     vm.runInContext(uiSource, context);
-    assert(/^01 Sep(?:t)? 2026  09:50 PM$/.test(context.integrationTime(instant.toISOString())));
+    assert(/^01 Sep(?:t)?, 2026, 09:50 PM$/.test(context.integrationTime(instant.toISOString())));
     assert.strictEqual(context.integrationLabel("SUCCESS"), "Successful");
     assert(uiSource.includes("integration-button-primary\">SAVE CHANGES"));
     assert(uiSource.includes("integration-button-neutral\">CANCEL"));

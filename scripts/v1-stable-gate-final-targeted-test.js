@@ -51,9 +51,9 @@ function sourceAssertions() {
     assert(service.includes("WHERE business_date = ?") && service.includes("ensureOperationalBusinessDay"));
     assert(migration.includes("CREATE TABLE IF NOT EXISTS business_day_state"));
     assert(main.indexOf("await dashboardReady") < main.indexOf("await ensureOperationalBusinessDay()"));
-    assert(apps.includes("function applyDsrRowFormats_") && apps.includes("setNumberFormat('dd mmm, yyyy')"));
+    assert(apps.includes("function applyDsrRowFormats_") && apps.includes("var businessDateFormat = sheet.getRange('B3').getNumberFormat();"));
     assert(apps.includes("applyDsrRowFormats_(sheet, sheet.getLastRow())") && apps.includes("applyDsrRowFormats_(sheet, rowNumber)"));
-    assert(apps.includes("setNumberFormat('yyyy-mm-dd hh:mm:ss')"));
+    assert(apps.includes("var syncedAtFormat = sheet.getRange('AB3').getNumberFormat();"));
     assert(apps.includes("function businessDateCell_") && apps.includes("new Date(Date.UTC"));
     assert(apps.includes("action = 'UNCHANGED'") && apps.includes("action = 'UPDATED'"));
     assert(apps.includes("throw new Error('STALE_IGNORED')") && apps.includes("Duplicate Business Date integrity conflict."));

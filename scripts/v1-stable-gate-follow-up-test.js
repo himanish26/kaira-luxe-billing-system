@@ -23,7 +23,7 @@ function dsrNormalizationTests() {
     assert.strictEqual(context.normalize("02 Sep, 2026"), "2026-09-02");
     assert.strictEqual(context.normalize(new Date("2026-09-02T12:00:00Z"), "Asia/Kolkata"), "2026-09-02");
     assert(source.includes("getRange(2, 2, sheet.getLastRow() - 1, 1).getValues()"));
-    assert(source.includes("setNumberFormat('dd mmm, yyyy')"));
+    assert(source.includes("var businessDateFormat = sheet.getRange('B3').getNumberFormat();"));
     assert(!source.includes("getDisplayValues()"));
 }
 

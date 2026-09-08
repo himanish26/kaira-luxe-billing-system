@@ -111,7 +111,7 @@ async function main() {
     assert(service.includes("`${backupFilePath}.partial`"));
     assert(service.indexOf("await writeBackupArchive") < service.indexOf("await validateBackup(backupFilePath)"));
     assert(service.indexOf("await validateBackup(backupFilePath)") < service.indexOf("success: true"));
-    assert(scheduler.includes("if (schedulerCheckInFlight) return"));
+    assert(/if\s*\([^;]*schedulerCheckInFlight[^;]*\)\s*return/.test(scheduler));
     assert(scheduler.includes("finally") && scheduler.includes("schedulerCheckInFlight = false"));
     assert(dayClosing.indexOf("backup = await createBackupFn()") < dayClosing.indexOf("await validateBackupFn(backup.backupFilePath)"));
     assert(dayClosing.indexOf("await validateBackupFn(backup.backupFilePath)") < dayClosing.indexOf("SET close_status = 'CLOSED'"));

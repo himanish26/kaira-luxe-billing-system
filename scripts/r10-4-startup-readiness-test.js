@@ -57,7 +57,9 @@ async function main() {
     const zero = await getStartupCheck("productInventory", {});
     assert.strictEqual(zero.state, "warning");
     assert.strictEqual(zero.productCount, 0);
-    assert(zero.message.includes("import products from Inventory to start billing"));
+    assert(zero.critical);
+    assert(zero.message.toLowerCase().includes("inventory"));
+    assert(zero.message.toLowerCase().includes("required"));
 
     productMode = "present";
     const present = await getStartupCheck("productInventory", {});
@@ -170,6 +172,12 @@ async function main() {
     const splashHtml = fs.readFileSync(path.join(root, "src/renderer/startupSplash.html"), "utf8");
     const mainSource = fs.readFileSync(path.join(root, "src/main/main.js"), "utf8");
     const preload = fs.readFileSync(path.join(root, "src/main/startupPreload.js"), "utf8");
+    assert(mainSource.includes('check.critical && check.state !== "ready"'));
+    const startupBlocked = check => check.critical && check.state !== "ready";
+    assert.strictEqual(startupBlocked({ critical: true, state: "warning" }), true);
+    assert.strictEqual(startupBlocked({ critical: true, state: "failed" }), true);
+    assert.strictEqual(startupBlocked({ critical: true, state: "ready" }), false);
+    assert.strictEqual(startupBlocked({ critical: false, state: "warning" }), false);
     assert(splash.includes("securityIncomplete"));
     assert(splash.includes("openSecuritySetup"));
     assert(splash.includes("await runChecks()"));
