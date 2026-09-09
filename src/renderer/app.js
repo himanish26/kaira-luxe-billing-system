@@ -1264,9 +1264,14 @@ function showAuthorizationGranted({ button, modal, input, resetText, onComplete 
             window.discardStockTransactionAuthorization();
         }
 
-        settingsPage.style.display = "none";
+        if (window.invalidateIntegrationConfigureRequests) {
+            window.invalidateIntegrationConfigureRequests();
+        }
 
-        settingsScreen.style.display = "block";
+        if (typeof settingsPageBackBtn.onclick !== "function") {
+            settingsPage.style.display = "none";
+            settingsScreen.style.display = "block";
+        }
 
         resetScrollPosition();
 
@@ -1742,8 +1747,7 @@ if (settingsDashboardBtn){
 
     settingsDashboardBtn.addEventListener("click", async () => {
 
-        settingsScreen.style.display = "none";
-
+        hideAllScreens();
         dashboardScreen.style.display = "block";
 
         resetScrollPosition();
@@ -7325,6 +7329,10 @@ function resetScrollPosition() {
 }
 
 function hideAllScreens() {
+
+    if (window.invalidateIntegrationConfigureRequests) {
+        window.invalidateIntegrationConfigureRequests();
+    }
 
     dashboardScreen.style.display = "none";
 

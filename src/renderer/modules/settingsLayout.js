@@ -69,14 +69,13 @@ backButton.textContent = backText;
 
 backButton.onclick = () => {
 
-    settingsPage.style.display = "none";
-
     if (typeof backAction === "function") {
 
         backAction();
 
     } else {
 
+        settingsPage.style.display = "none";
         settingsScreen.style.display = "block";
 
     }
