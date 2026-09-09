@@ -107,7 +107,58 @@ table{
 
     border-collapse:collapse;
 
+    table-layout:fixed;
+
     overflow-y:auto;
+
+}
+
+/* Keep the four thermal receipt columns stable as values grow. */
+.receipt > table th:first-child,
+.receipt > table td:first-child{
+
+    width:42%;
+
+}
+
+.receipt > table th:nth-child(2),
+.receipt > table td:nth-child(2){
+
+    width:12%;
+
+}
+
+.receipt > table th:nth-child(3),
+.receipt > table td:nth-child(3){
+
+    width:22%;
+
+    padding-left:3px;
+
+}
+
+.receipt > table th:nth-child(4),
+.receipt > table td:nth-child(4){
+
+    width:24%;
+
+    padding-left:3px;
+
+}
+
+/* Fine-tune Rate and Net header position only. */
+.receipt > table th:nth-child(3),
+.receipt > table th:nth-child(4){
+
+    position:relative;
+    left:5px;
+
+}
+
+.receipt > table th:first-child{
+
+    position:relative;
+    left:-5px;
 
 }
 
