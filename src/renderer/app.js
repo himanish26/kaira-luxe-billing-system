@@ -1696,7 +1696,13 @@ newBillBtn.addEventListener("click", async () => {
 
     hideAllScreens();
 
-        clearCurrentBill();
+        if (billItems.length > 0) {
+            newBillScreen.style.display = "block";
+            await revalidateCurrentBillProducts();
+        }
+        else {
+            clearCurrentBill();
+        }
 
         newBillScreen.style.display = "block";
         
@@ -2792,6 +2798,10 @@ paymentBtn.addEventListener("click", async () => {
 
     }
 
+    if (saleType === "SALE" && !(await revalidateCurrentBillProducts())) {
+        return;
+    }
+
 const mobile =
     document.getElementById(
         "customerMobile"
@@ -3137,7 +3147,7 @@ const paymentBackBtn =
 
 if (paymentBackBtn) {
 
-    paymentBackBtn.addEventListener("click", () => {
+    paymentBackBtn.addEventListener("click", async () => {
 
 const currentPayable =
     Math.round(
@@ -3169,6 +3179,8 @@ if (
         paymentScreen.style.display = "none";
 
         newBillScreen.style.display = "block";
+
+        await revalidateCurrentBillProducts();
 
         resetScrollPosition();
 
@@ -3423,6 +3435,91 @@ let productNotFoundOpen = false;
 let saleType = "SALE";
 
 let familyFriendsDiscountActive = false;
+
+let cartProductValidationBlocked = false;
+
+function formatGstRate(value) {
+    const rate = Number(value);
+    return Number.isFinite(rate) ? `${rate}%` : "0%";
+}
+
+function setCartProductValidationBlocked(blocked) {
+    cartProductValidationBlocked = Boolean(blocked);
+    if (paymentBtn) {
+        paymentBtn.disabled = cartProductValidationBlocked || billItems.length === 0;
+    }
+}
+
+async function revalidateCurrentBillProducts() {
+    if (saleType !== "SALE" || billItems.length === 0) {
+        setCartProductValidationBlocked(false);
+        return true;
+    }
+
+    const refreshedItems = [];
+    const problems = [];
+
+    for (const item of billItems) {
+        let product;
+        try {
+            product = await window.electronAPI.getProduct(item.barcode);
+        }
+        catch (error) {
+            console.error("Cart Product Master Revalidation Error:", error);
+            problems.push(`${item.barcode}: Product Master lookup failed. Retry before payment.`);
+            continue;
+        }
+
+        if (!product) {
+            problems.push(`${item.barcode}: Product no longer exists in Product Master.`);
+            continue;
+        }
+
+        if (Number(product.active) !== 1) {
+            problems.push(`${item.barcode}: Product is inactive in Product Master.`);
+            continue;
+        }
+
+        const hasAuthorizedFfDiscount =
+            item.ff_discount !== null && item.ff_discount !== undefined;
+
+        refreshedItems.push({
+            ...item,
+            brand: product.brand,
+            category: product.category,
+            product_name: product.product_name,
+            size: product.size,
+            colour: product.colour,
+            mrp: Number(product.mrp),
+            master_discount: Number(product.discount || 0),
+            gst_rate: Number(product.gst_rate || 0),
+            discount: hasAuthorizedFfDiscount
+                ? Number(item.ff_discount)
+                : Number(product.discount || 0)
+        });
+    }
+
+    if (problems.length > 0) {
+        setCartProductValidationBlocked(true);
+        renderBill();
+        await window.electronAPI.showMessageBox({
+            type: "error",
+            title: "Cart Requires Product Master Attention",
+            message: "Payment is blocked until every cart product is resolved.",
+            detail: problems.join("\n")
+        });
+        return false;
+    }
+
+    billItems = refreshedItems;
+    setCartProductValidationBlocked(false);
+    renderBill();
+    loadPaymentSummary();
+    calculatePayment();
+    return true;
+}
+
+window.revalidateCurrentBillProducts = revalidateCurrentBillProducts;
 
 const barcodeInput =
     document.getElementById(
@@ -5097,6 +5194,17 @@ if (currentBillQty >= availableStock) {
     if (existingItem) {
 
         existingItem.qty++;
+        existingItem.brand = product.brand;
+        existingItem.category = product.category;
+        existingItem.product_name = product.product_name;
+        existingItem.size = product.size;
+        existingItem.colour = product.colour;
+        existingItem.mrp = Number(product.mrp);
+        existingItem.master_discount = Number(product.discount || 0);
+        existingItem.gst_rate = Number(product.gst_rate || 0);
+        if (existingItem.ff_discount === null || existingItem.ff_discount === undefined) {
+            existingItem.discount = Number(product.discount || 0);
+        }
 
     }
 
@@ -5190,6 +5298,7 @@ if (tableHead) {
                 <th>Qty</th>
                 <th>MRP</th>
                 <th>Disc%</th>
+                <th>GST%</th>
                 <th>Net</th>
                 <th>🗑️</th>
             </tr>
@@ -5300,17 +5409,26 @@ onclick="removeItem(${index})">
 
 }
 
+        if (saleType === "SALE") {
+            const cells = row.querySelectorAll("td");
+            const gstCell = document.createElement("td");
+            gstCell.textContent = formatGstRate(item.gst_rate);
+            row.insertBefore(gstCell, cells[cells.length - 2]);
+        }
+
         tbody.appendChild(row);
 
     });
 
     updateSummary();
+    setCartProductValidationBlocked(cartProductValidationBlocked);
 
 }
 
 function clearCurrentBill(){
 
-billItems = [];
+  billItems = [];
+    cartProductValidationBlocked = false;
 
 appliedStoreCredit = null;
 

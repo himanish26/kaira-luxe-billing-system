@@ -196,6 +196,9 @@ function renderInventoryProducts(products) {
             <td>${product.size}</td>
             <td>${product.current_stock ?? product.opening_stock ?? 0}</td>
             <td>₹${Number(product.mrp).toFixed(2)}</td>
+            <td>${Number(product.discount || 0)}%</td>
+            <td>${Number(product.gst_rate || 0)}%</td>
+            <td>₹${Number(product.selling_price || 0).toFixed(2)}</td>
         </tr>
         `;
 

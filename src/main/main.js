@@ -1271,8 +1271,6 @@ ipcMain.handle(
 
         try {
 
-            validateBillSettlement(billData);
-
             const usedFamilyFriendsAuthorization = (billData.items || []).some(item =>
                 item.ff_discount !== null && item.ff_discount !== undefined
             );

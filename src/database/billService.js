@@ -168,6 +168,206 @@ function getNextBillNumber() {
 
 }
 
+function resolveAuthoritativeBillData(billData) {
+
+    return new Promise((resolve, reject) => {
+
+        if (!Array.isArray(billData.items)) {
+            reject(new Error("Bill items are required."));
+            return;
+        }
+
+        const authoritativeItems = [];
+
+        function fail(message, code) {
+            const error = new Error(message);
+            if (code) {
+                error.code = code;
+            }
+            reject(error);
+        }
+
+        function resolveItem(index) {
+
+            if (index >= billData.items.length) {
+
+                const totals = authoritativeItems.reduce((summary, item) => {
+
+                    const gross = item.qty * item.mrp;
+                    const discountAmount = gross * item.discount / 100;
+                    const net = gross - discountAmount;
+                    const taxable = net * 100 / (100 + item.gst_rate);
+                    const gst = net - taxable;
+
+                    summary.gross += gross;
+                    summary.discount += discountAmount;
+                    summary.net += net;
+                    summary.gst += gst;
+
+                    return summary;
+
+                }, {
+                    gross: 0,
+                    discount: 0,
+                    net: 0,
+                    gst: 0
+                });
+
+                if (
+                    !Number.isFinite(totals.gross) ||
+                    !Number.isFinite(totals.discount) ||
+                    !Number.isFinite(totals.net) ||
+                    !Number.isFinite(totals.gst)
+                ) {
+                    fail("Bill calculation produced an invalid amount.", "KLBS_BILL_CALCULATION_INVALID");
+                    return;
+                }
+
+                billData.items = authoritativeItems;
+                billData.total_items = authoritativeItems.length;
+                billData.total_qty = authoritativeItems.reduce(
+                    (total, item) => total + item.qty,
+                    0
+                );
+                billData.gross_amount = Math.round(totals.gross);
+                billData.discount_amount = Math.round(totals.discount);
+                billData.taxable_amount = Math.round(totals.net - totals.gst);
+                billData.cgst_amount = Number((totals.gst / 2).toFixed(2));
+                billData.sgst_amount = Number((totals.gst / 2).toFixed(2));
+                billData.gst_amount = Number(totals.gst.toFixed(2));
+                billData.net_amount = Math.round(totals.net);
+
+                resolve();
+                return;
+
+            }
+
+            const submittedItem = billData.items[index];
+            const barcode = String(submittedItem && submittedItem.barcode || "").trim();
+            const quantity = Number(submittedItem && submittedItem.qty);
+
+            if (!barcode) {
+                fail("A bill item barcode is required.", "KLBS_BILL_PRODUCT_INVALID");
+                return;
+            }
+
+            if (!Number.isInteger(quantity) || quantity <= 0) {
+                fail(`Invalid sale quantity for barcode: ${barcode}`, "KLBS_BILL_QUANTITY_INVALID");
+                return;
+            }
+
+            db.get(
+                `
+                SELECT
+                    barcode,
+                    product_name,
+                    brand,
+                    category,
+                    size,
+                    colour,
+                    mrp,
+                    discount,
+                    gst_rate,
+                    active
+                FROM products
+                WHERE barcode = ?
+                `,
+                [barcode],
+                (error, product) => {
+
+                    if (error) {
+                        reject(error);
+                        return;
+                    }
+
+                    if (!product) {
+                        fail(`Product not found for barcode: ${barcode}`, "KLBS_BILL_PRODUCT_NOT_FOUND");
+                        return;
+                    }
+
+                    if (Number(product.active) !== 1) {
+                        fail(`Product is inactive and cannot be billed: ${barcode}`, "KLBS_BILL_PRODUCT_INACTIVE");
+                        return;
+                    }
+
+                    const mrp = Number(product.mrp);
+                    const gstRate = Number(product.gst_rate);
+                    const normalDiscount = Number(product.discount ?? 0);
+                    const hasFamilyFriendsOverride =
+                        submittedItem.ff_discount !== null &&
+                        submittedItem.ff_discount !== undefined;
+                    const effectiveDiscount = hasFamilyFriendsOverride
+                        ? Number(submittedItem.ff_discount)
+                        : normalDiscount;
+
+                    if (!Number.isFinite(mrp) || mrp < 0) {
+                        fail(`Invalid Product Master MRP for barcode: ${barcode}`, "KLBS_BILL_PRODUCT_DATA_INVALID");
+                        return;
+                    }
+
+                    if (!Number.isFinite(gstRate) || gstRate < 0) {
+                        fail(`Invalid Product Master GST rate for barcode: ${barcode}`, "KLBS_BILL_PRODUCT_DATA_INVALID");
+                        return;
+                    }
+
+                    if (
+                        !Number.isFinite(normalDiscount) ||
+                        normalDiscount < 0 ||
+                        normalDiscount > 100
+                    ) {
+                        fail(`Invalid Product Master discount for barcode: ${barcode}`, "KLBS_BILL_PRODUCT_DATA_INVALID");
+                        return;
+                    }
+
+                    if (
+                        !Number.isFinite(effectiveDiscount) ||
+                        effectiveDiscount < 0 ||
+                        (
+                            hasFamilyFriendsOverride &&
+                            effectiveDiscount > 30
+                        ) ||
+                        (
+                            !hasFamilyFriendsOverride &&
+                            effectiveDiscount > 100
+                        )
+                    ) {
+                        fail(
+                            hasFamilyFriendsOverride
+                                ? `Invalid Family & Friends discount for barcode: ${barcode}`
+                                : `Invalid Product Master discount for barcode: ${barcode}`,
+                            "KLBS_BILL_DISCOUNT_INVALID"
+                        );
+                        return;
+                    }
+
+                    authoritativeItems.push({
+                        ...submittedItem,
+                        barcode: product.barcode,
+                        product_name: product.product_name,
+                        brand: product.brand || "",
+                        category: product.category || "",
+                        size: product.size || "",
+                        colour: product.colour || "",
+                        qty: quantity,
+                        mrp,
+                        master_discount: normalDiscount,
+                        discount: effectiveDiscount,
+                        gst_rate: gstRate
+                    });
+
+                    resolveItem(index + 1);
+
+                }
+            );
+
+        }
+
+        resolveItem(0);
+
+    });
+
+}
+
 function saveBill(billData) {
 
     return new Promise((resolve, reject) => {
@@ -185,8 +385,19 @@ function saveBill(billData) {
                         return;
                     }
 
-                    try {
-                        const settlement = validateBillSettlement(billData);
+                    resolveAuthoritativeBillData(billData)
+                    .then(() => {
+
+                        let settlement;
+
+                        try {
+                            settlement = validateBillSettlement(billData);
+                        }
+                        catch (error) {
+                            db.run("ROLLBACK", () => reject(error));
+                            return;
+                        }
+
                         billData.net_amount = settlement.netPaise / 100;
                         billData.cash_amount = settlement.cashPaise / 100;
                         billData.upi_amount = settlement.upiPaise / 100;
@@ -197,13 +408,12 @@ function saveBill(billData) {
                             billData.store_credit.amount =
                                 settlement.storeCreditPaise / 100;
                         }
-                    }
-                    catch (error) {
-                        db.run("ROLLBACK", () => reject(error));
-                        return;
-                    }
+                        verifyBusinessDayOpen();
 
-                    verifyBusinessDayOpen();
+                    })
+                    .catch(error => {
+                        db.run("ROLLBACK", () => reject(error));
+                    });
 
                 }
             );
