@@ -1298,6 +1298,22 @@ function updatePaymentAllocation(data) {
 
                     }
 
+                    try {
+
+                        billAmountToPaise(data.cash_amount, "Cash");
+                        billAmountToPaise(data.upi_amount, "UPI");
+                        billAmountToPaise(data.card_amount, "Card");
+
+                    }
+                    catch (validationError) {
+
+                        db.run("ROLLBACK");
+                        reject(validationError);
+
+                        return;
+
+                    }
+
                     if (
 
     Number(bill.cash_amount) === Number(data.cash_amount) &&
