@@ -15,6 +15,11 @@ function integrationEvent(event) { return event ? `${integrationTime(event.at)} 
 
 let integrationConfigureGeneration = 0;
 let activeIntegrationConfigureRequest = null;
+let systemHealthGeneration = 0;
+
+function invalidateSystemHealthRequests() {
+    systemHealthGeneration += 1;
+}
 
 function invalidateIntegrationConfigureRequests() {
     integrationConfigureGeneration += 1;
@@ -23,6 +28,7 @@ function invalidateIntegrationConfigureRequests() {
 
 if (typeof window !== "undefined") {
     window.invalidateIntegrationConfigureRequests = invalidateIntegrationConfigureRequests;
+    window.invalidateSystemHealthRequests = invalidateSystemHealthRequests;
 }
 
 function leaveIntegrationConfiguration() {
@@ -32,15 +38,17 @@ function leaveIntegrationConfiguration() {
 
 async function showSystemHealthPage() {
     invalidateIntegrationConfigureRequests();
+    const requestGeneration = ++systemHealthGeneration;
     const config = await window.electronAPI.getIntegrationConfig();
     const outbox = await window.electronAPI.getIntegrationOutboxStatus();
+    if (requestGeneration !== systemHealthGeneration) return;
     const source = item => item.source === "ENVIRONMENT" ? '<p class="integration-source">Using Windows system configuration</p>' : "";
     const displayDate = value => { const parts = String(value || "").split("-"); return parts.length === 3 ? `${parts[2]} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][Number(parts[1]) - 1]}, ${parts[0]}` : value; };
     const state = value => value === "SUCCESS" ? "SENT" : "PENDING";
     const checkedAt = integrationTime(new Date().toISOString());
     const outboxRows = outbox.deliveries.map(item => `<article class="integration-outbox-date"><strong>${integrationEscape(displayDate(item.businessDate))}</strong><div><span>EMAIL &amp; BACKUP</span><b class="integration-outbox-status ${item.emailStatus === "SUCCESS" ? "success" : "pending"}">${state(item.emailStatus)}</b></div><div><span>DAILY SALES REPORT</span><b class="integration-outbox-status ${item.dsrStatus === "SUCCESS" ? "success" : "pending"}">${item.dsrStatus === "SUCCESS" ? "SYNCED" : "PENDING"}</b>${item.dsrStatus !== "SUCCESS" ? "<small>Will retry automatically</small>" : ""}</div></article>`).join("");
     const outboxSection = `<section class="integration-section integration-outbox"><div class="integration-outbox-header"><div><h2>INTEGRATION OUTBOX</h2><p>Automatic delivery of Day Closing reports</p></div><button id="refreshIntegrationStatus" class="integration-button integration-button-secondary">REFRESH STATUS</button></div><div class="integration-outbox-summary"><div><span>INTERNET</span><strong style="color:${outbox.online ? "#198754" : "#c62828"}; background:transparent;">${outbox.online ? "ONLINE" : "OFFLINE"}</strong></div><div><span>PENDING DELIVERIES</span><strong>${outbox.pendingCount}</strong></div><div><span>LAST CHECKED</span><strong>${checkedAt}</strong></div></div>${outbox.pendingCount === 0 ? "<div class=\"integration-outbox-empty\"><strong>ALL REPORTS UP TO DATE</strong><span>No pending Day Closing deliveries.</span></div>" : `<div class="integration-outbox-list">${outboxRows}</div>`}</section>`;
-    renderSettingsPage({ title:"SYSTEM HEALTH", icon:"&#129658;", subtitle:"Application integrations and operational status.", backText:"← System", backAction:showSystemPage,
+    renderSettingsPage({ title:"SYSTEM HEALTH", icon:"&#129658;", subtitle:"Application integrations and operational status.", backText:"← System", backAction:() => { invalidateSystemHealthRequests(); showSystemPage(); },
         content:`${outboxSection}<section class="integration-section"><h2>INTEGRATIONS</h2><div class="integration-summary-grid">
         <article class="integration-card"><h3>EMAIL &amp; BACKUP</h3><strong>${config.email.configured ? "CONFIGURED" : "NOT CONFIGURED"}</strong>${source(config.email)}
         <dl><div><dt>SMTP Email Service</dt><dd>${config.email.configured ? "Configured" : "Not Configured"}</dd></div><div><dt>Email After Day Closing</dt><dd class="integration-enabled">ENABLED</dd></div><div><dt>Last Email Backup</dt><dd>${integrationEscape(integrationEvent(config.email.lastEmailBackup))}</dd></div><div><dt>Last Connection Test</dt><dd>${integrationEscape(config.email.lastTestAt ? integrationTime(config.email.lastTestAt) + " · " + integrationLabel(config.email.lastTestResult) : "Never")}</dd></div></dl><button id="configureEmailIntegration" class="dashboard-btn">CONFIGURE</button></article>

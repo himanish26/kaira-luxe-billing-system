@@ -7451,6 +7451,9 @@ function hideAllScreens() {
     if (window.invalidateIntegrationConfigureRequests) {
         window.invalidateIntegrationConfigureRequests();
     }
+    if (window.invalidateSystemHealthRequests) {
+        window.invalidateSystemHealthRequests();
+    }
 
     dashboardScreen.style.display = "none";
 
