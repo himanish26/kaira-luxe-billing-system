@@ -20,7 +20,7 @@ extraMetadata:
   main: src/main/main.js
 
 win:
-  icon: assets/icons/icon.ico
+  icon: src/renderer/Assets/icons/icon.ico
 
   target:
     - target: nsis
