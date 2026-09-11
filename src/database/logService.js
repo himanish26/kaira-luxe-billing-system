@@ -7,7 +7,15 @@ const safeError = value => String(value || "Operation failed")
     .slice(0, 1000);
 
 const write = (category, action, details, actor, status, extra = {}) => logActivity({
-    category, action, details, user_name: actor, status, ...extra
+    category,
+    action,
+    details:
+        category === "RETURN" && action === "RETURN_COMPLETED" && extra.return_reason
+            ? `${details} | Return Reason: ${extra.return_reason}`
+            : details,
+    user_name: actor,
+    status,
+    ...extra
 });
 
 const logApplicationStarted = () => write(
@@ -50,7 +58,8 @@ const logReturnCompleted = (
     returnNo,
     originalBillNo,
     amount,
-    actor = "OPERATOR"
+    actor = "OPERATOR",
+    returnReason = ""
 ) => write(
     "RETURN",
     "RETURN_COMPLETED",
@@ -59,7 +68,19 @@ const logReturnCompleted = (
     "SUCCESS",
     {
         entity_type: "RETURN",
-        reference_no: returnNo
+        reference_no: returnNo,
+        return_reason: returnReason,
+        change_data: returnReason
+            ? {
+                version: 1,
+                changes: [{
+                    field: "reason",
+                    label: "Return Reason",
+                    old: null,
+                    new: returnReason
+                }]
+            }
+            : null
     }
 );
 
@@ -145,6 +166,15 @@ const logProductImport = (fileName, counts = {}) => {
         { entity_type: "PRODUCT_IMPORT", reference_no: safeFileName(fileName) }
     );
 };
+
+const logProductImportFailed = (fileName, reason) => write(
+    "INVENTORY",
+    "PRODUCT_MASTER_IMPORT_FAILED",
+    `Product Master import failed | ${String(reason || "Unexpected import error").slice(0, 500)}`,
+    "ADMINISTRATOR",
+    "FAILED",
+    { entity_type: "PRODUCT_IMPORT", reference_no: safeFileName(fileName) }
+);
 
 const logInventoryReset = () => write(
     "INVENTORY", "INVENTORY_RESET", "Inventory reset completed", "ADMINISTRATOR", "SUCCESS"
@@ -233,7 +263,7 @@ module.exports = {
     logReturnCompleted, logCreditNoteGenerated,
     logStoreCreditIssued, logStoreCreditUpdated,
     logStoreCreditRedeemed,
-    logProductImport, logInventoryReset,
+    logProductImport, logProductImportFailed, logInventoryReset,
     logStockInward, logStockOutward,
     logBackupCreated, logAutomaticBackupCreated, logAutomaticBackupFailed,
     logBackupFailed, logRestoreCompleted, logRestoreFailed,

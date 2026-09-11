@@ -76,7 +76,6 @@ const db = new sqlite3.Database(startupRestoreRecoveryError ? ":memory:" : dbPat
         console.error('Database Connection Error:', err.message);
         databaseReadyReject(err);
     } else {
-        console.log('Database Connected Successfully');
 
         try {
             await assertAuthoritativeDatabaseConnection(db);
@@ -456,7 +455,6 @@ Berhampur-760001',
                 schema_version INTEGER NOT NULL CHECK (schema_version >= 0)
             )
         `, error => error ? reject(error) : resolve());
-        console.log("All Tables Created Successfully");
     }));
 
 }
@@ -1203,7 +1201,6 @@ db.serialize(() => {
         ON customers(mobile)
     `);
 
-        console.log("✓ RC5 Database Foundation Ready");
 
 });
 
@@ -2889,7 +2886,6 @@ function migrateCreditNoteAccounting() {
 
             await run("COMMIT");
             transactionStarted = false;
-            console.log("✓ Credit Note accounting schema ready.");
         }
         catch (error) {
             if (transactionStarted) {
@@ -2961,7 +2957,6 @@ try {
 
         await runNamedMigration("activity_log", () => migrateActivityLogSchema(db));
 
-        console.log("✓ Activity Log schema ready.");
 
         await runNamedMigration("administrator_security", () => migrateAdministratorSecurity());
 

@@ -12,6 +12,13 @@ const {
     logStoreCreditUpdated
 } = require("./logService");
 
+const ALLOWED_RETURN_REASONS = new Set([
+    "Size / Fit Issue",
+    "Colour / Preference Issue",
+    "Gift / Unwanted Item",
+    "Product Defect / Damage"
+]);
+
 function normalizeOriginalBillNo(value) {
 
     return String(value || "")
@@ -1016,6 +1023,11 @@ function getNextStoreCreditNumber() {
 
 async function saveReturn(returnData) {
 
+    const returnReason = String(returnData?.return_reason || "").trim();
+    if (!ALLOWED_RETURN_REASONS.has(returnReason)) {
+        throw new Error("A valid Return Reason is required.");
+    }
+
     const canonicalBillNo = normalizeOriginalBillNo(
         returnData.original_bill_no
     );
@@ -1200,7 +1212,7 @@ async function saveReturn(returnData) {
                 returnData.customer_id || null,
                 returnData.customer_name,
                 returnData.customer_mobile,
-                returnData.return_reason,
+                returnReason,
                 returnData.remarks || "",
                 fromPaise(totals.net),
                 fromPaise(totals.gross),
@@ -1302,7 +1314,8 @@ try {
         returnNo,
         authoritativeBillNo,
         fromPaise(totals.net),
-        createdBy
+        createdBy,
+        returnReason
     );
 }
 catch (logError) {

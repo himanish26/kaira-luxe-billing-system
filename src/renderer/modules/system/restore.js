@@ -29,7 +29,7 @@ function showRestorePage() {
 
     subtitle: "Restore a previously created database backup.",
 
-    backText: "← System",
+    backText: "← Backup",
 
     backAction: showBackupPage,
 

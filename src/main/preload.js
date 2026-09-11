@@ -1,7 +1,5 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-console.log("PRELOAD LOADED");
-
 contextBridge.exposeInMainWorld(
     "electronAPI",
     {
@@ -11,9 +9,10 @@ contextBridge.exposeInMainWorld(
         "get-inventory-summary"
     ),
 
-        getProducts: () =>
+        getProducts: (options) =>
             ipcRenderer.invoke(
-                "get-products"
+                "get-products",
+                options
             ),
 
             getAppInfo: () =>
@@ -21,10 +20,11 @@ contextBridge.exposeInMainWorld(
                     "get-app-info"
                 ),
 
-            searchProducts: (keyword) =>
+            searchProducts: (keyword, options) =>
     ipcRenderer.invoke(
         "search-products",
-        keyword
+        keyword,
+        options
     ),
 
     getLastImport: () =>
@@ -68,6 +68,12 @@ contextBridge.exposeInMainWorld(
     ipcRenderer.invoke(
         "get-transaction-history"
     ),
+
+    getTransactionHistoryPage: (options) =>
+        ipcRenderer.invoke(
+            "get-transaction-history-page",
+            options
+        ),
 
 getStoreCreditDetails: (storeCreditNo) =>
 ipcRenderer.invoke(
@@ -310,9 +316,10 @@ getBackupHistory: () =>
         "backup:getHistory"
     ),
 
-    getActivities: () =>
+    getActivities: (options) =>
     ipcRenderer.invoke(
-        "activity:get"
+        "activity:get",
+        options
     ),
 
     exportActivityLog: (grant) =>

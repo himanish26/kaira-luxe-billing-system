@@ -10,6 +10,12 @@ function appendActivityCell(row, value, className = "") {
 }
 
 const ACTIVITY_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const ACTIVITY_PAGE_SIZE = 100;
+let activityPage = 1;
+let activityKeyword = "";
+let activityTotalCount = 0;
+let activityTotalPages = 1;
+let activityRequestId = 0;
 
 function formatActivityBusinessDate(value) {
     const text = String(value === null || value === undefined ? "" : value).trim();
@@ -48,12 +54,77 @@ function renderActivityRows(activities) {
     });
 }
 
+function updateActivityPagination() {
+    const pagination = document.getElementById("activityPagination");
+    const previous = document.getElementById("activityPreviousPage");
+    const next = document.getElementById("activityNextPage");
+    const pageLabel = document.getElementById("activityPageLabel");
+    const rangeLabel = document.getElementById("activityRangeLabel");
+    const jumpInput = document.getElementById("activityPageJump");
+
+    if (!pagination || !previous || !next || !pageLabel || !rangeLabel) return;
+
+    const first = activityTotalCount === 0
+        ? 0
+        : ((activityPage - 1) * ACTIVITY_PAGE_SIZE) + 1;
+    const last = Math.min(activityPage * ACTIVITY_PAGE_SIZE, activityTotalCount);
+    pagination.style.display = activityTotalCount === 0 ? "none" : "flex";
+    previous.disabled = activityPage <= 1;
+    next.disabled = activityPage >= activityTotalPages;
+    pageLabel.textContent =
+        `Page ${activityPage.toLocaleString("en-US")} of ${activityTotalPages.toLocaleString("en-US")}`;
+    if (jumpInput) {
+        jumpInput.value = String(activityPage);
+        jumpInput.max = String(activityTotalPages);
+    }
+    rangeLabel.textContent =
+        `Showing ${first.toLocaleString("en-US")}\u2013${last.toLocaleString("en-US")} of ${activityTotalCount.toLocaleString("en-US")} activities`;
+}
+
+async function loadActivityPage() {
+    const requestId = ++activityRequestId;
+    const result = await window.electronAPI.getActivities({
+        page: activityPage,
+        pageSize: ACTIVITY_PAGE_SIZE,
+        keyword: activityKeyword
+    });
+    if (requestId !== activityRequestId) return;
+    activityPage = result.page;
+    activityTotalCount = result.totalCount;
+    activityTotalPages = result.totalPages;
+    renderActivityRows(result.activities);
+    updateActivityPagination();
+}
+
+async function goToActivityPage(page) {
+    const targetPage = Number.parseInt(page, 10);
+    if (!Number.isFinite(targetPage)) return;
+    activityPage = Math.min(Math.max(targetPage, 1), activityTotalPages);
+    await loadActivityPage();
+}
+
+function handleActivityPageJump() {
+    const input = document.getElementById("activityPageJump");
+    const rawValue = input?.value.trim() || "";
+    if (!/^\d+$/.test(rawValue)) {
+        if (input) input.value = String(activityPage);
+        return;
+    }
+    const targetPage = Number(rawValue);
+    if (!Number.isSafeInteger(targetPage) || targetPage < 1 || targetPage > activityTotalPages) {
+        if (input) input.value = String(activityPage);
+        return;
+    }
+    goToActivityPage(targetPage);
+}
+
 if (typeof module !== "undefined") module.exports = {
     formatActivityBusinessDate, formatActivityTime, formatActivityValue
 };
 
 async function showActivityLogPage() {
-    const activities = await window.electronAPI.getActivities();
+    activityPage = 1;
+    activityKeyword = "";
 
     renderSettingsPage({
         title: "ACTIVITY LOG",
@@ -81,6 +152,16 @@ async function showActivityLogPage() {
                     <tbody id="activityTableBody"></tbody>
                 </table>
             </div>
+            <div id="activityPagination" class="activity-pagination" style="display:none;">
+                <div class="pagination-controls">
+                <button id="activityPreviousPage" class="pagination-nav-btn" type="button">Previous</button>
+                <span id="activityPageLabel">Page 1 of 1</span>
+                <label for="activityPageJump">Jump to page:</label>
+                <input id="activityPageJump" type="number" min="1" step="1" inputmode="numeric" value="1" aria-label="Jump to activity page">
+                <button id="activityNextPage" class="pagination-nav-btn" type="button">Next</button>
+                </div>
+                <span id="activityRangeLabel">Showing 0-0 of 0 activities</span>
+            </div>
             <div class="activity-actions">
                 <button id="exportActivityBtn" class="export-report-btn">
                     📤 Export to Excel
@@ -89,7 +170,7 @@ async function showActivityLogPage() {
         `
     });
 
-    renderActivityRows(activities);
+    await loadActivityPage();
 
     document.getElementById("exportActivityBtn").addEventListener("click", async () => {
         const grant = await requestAdminAuthorization("ACTIVITY_EXPORT");
@@ -112,9 +193,21 @@ async function showActivityLogPage() {
     });
 
     document.getElementById("activitySearch").addEventListener("input", event => {
-        const keyword = event.target.value.trim().toLowerCase();
-        document.querySelectorAll("#activityTableBody tr").forEach(row => {
-            row.style.display = row.textContent.toLowerCase().includes(keyword) ? "" : "none";
-        });
+        activityKeyword = event.target.value.trim();
+        activityPage = 1;
+        loadActivityPage();
+    });
+
+    document.getElementById("activityPreviousPage").addEventListener("click", () => {
+        goToActivityPage(activityPage - 1);
+    });
+    document.getElementById("activityNextPage").addEventListener("click", () => {
+        goToActivityPage(activityPage + 1);
+    });
+    document.getElementById("activityPageJump").addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            handleActivityPageJump();
+        }
     });
 }

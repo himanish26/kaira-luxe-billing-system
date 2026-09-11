@@ -1189,6 +1189,122 @@ ORDER BY
 
 }
 
+function getTransactionHistoryPage(options = {}) {
+
+    const requestedPage = Number.parseInt(options.page, 10);
+    const requestedPageSize = Number.parseInt(options.pageSize, 10);
+    const pageSize = Number.isFinite(requestedPageSize)
+        ? Math.min(Math.max(requestedPageSize, 1), 100)
+        : 100;
+    const keyword = String(options.keyword || "").trim().toLowerCase();
+    const searchSql = keyword
+        ? "WHERE LOWER(history.reference_no) LIKE ? OR LOWER(history.customer_mobile) LIKE ?"
+        : "";
+    const searchParams = keyword
+        ? [`%${keyword}%`, `%${keyword}%`]
+        : [];
+    const sourceSql = `
+        SELECT *
+        FROM (
+            SELECT
+                'BILL' AS category,
+                b.bill_no AS reference_no,
+                b.bill_date AS transaction_date,
+                b.bill_time AS transaction_time,
+                b.customer_name,
+                b.customer_mobile,
+                b.net_amount AS amount,
+                b.payment_status AS status,
+                EXISTS (
+                    SELECT 1 FROM payment_corrections pc
+                    WHERE pc.bill_no = b.bill_no
+                ) AS payment_corrected,
+                b.created_at AS sort_timestamp,
+                b.id AS sort_id
+            FROM bills b
+            UNION ALL
+            SELECT
+                'RETURN' AS category,
+                r.return_no AS reference_no,
+                date(r.created_at, 'localtime') AS transaction_date,
+                time(r.created_at, 'localtime') AS transaction_time,
+                r.customer_name,
+                r.customer_mobile,
+                r.return_amount AS amount,
+                'COMPLETED' AS status,
+                0 AS payment_corrected,
+                r.created_at AS sort_timestamp,
+                r.id AS sort_id
+            FROM returns r
+            UNION ALL
+            SELECT
+                'STORE CREDIT' AS category,
+                sc.store_credit_no AS reference_no,
+                date(sc.created_at, 'localtime') AS transaction_date,
+                time(sc.created_at, 'localtime') AS transaction_time,
+                sc.customer_name,
+                sc.customer_mobile,
+                sc.original_amount AS amount,
+                sc.status,
+                0 AS payment_corrected,
+                sc.created_at AS sort_timestamp,
+                sc.id AS sort_id
+            FROM store_credits sc
+        ) history
+    `;
+
+    return new Promise((resolve, reject) => {
+
+        db.get(
+            `SELECT COUNT(*) AS total_count FROM (${sourceSql}) history ${searchSql}`,
+            searchParams,
+            (countError, countRow) => {
+
+                if (countError) {
+                    reject(countError);
+                    return;
+                }
+
+                const totalCount = Number(countRow?.total_count || 0);
+                const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+                const page = Number.isFinite(requestedPage)
+                    ? Math.min(Math.max(requestedPage, 1), totalPages)
+                    : 1;
+                const offset = (page - 1) * pageSize;
+
+                db.all(
+                    `
+                    SELECT * FROM (${sourceSql}) history
+                    ${searchSql}
+                    ORDER BY sort_timestamp DESC, sort_id DESC
+                    LIMIT ? OFFSET ?
+                    `,
+                    [...searchParams, pageSize, offset],
+                    (pageError, rows) => {
+
+                        if (pageError) {
+                            reject(pageError);
+                            return;
+                        }
+
+                        resolve({
+                            bills: rows,
+                            totalCount,
+                            page,
+                            pageSize,
+                            totalPages
+                        });
+
+                    }
+                );
+
+            }
+        );
+
+    });
+
+}
+
 function getBillDetails(billNo) {
 
     return new Promise((resolve, reject) => {
@@ -1751,6 +1867,7 @@ module.exports = {
     getNextBillNumber,
     getBills,
     getTransactionHistory,
+    getTransactionHistoryPage,
     getBillDetails,
     updatePaymentAllocation,
     getPaymentCorrections,

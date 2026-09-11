@@ -1,5 +1,3 @@
-console.log("Kaira Luxe Dashboard Loaded");
-
 const klbsBusinessDateFormatter = new Intl.DateTimeFormat(
     "en-CA",
     {
@@ -792,6 +790,8 @@ if (storeCard){
 
     settingsPage.style.display = "block";
 
+    setSettingsPageBackToSettings();
+
     resetScrollPosition();
         
     settingsPageContent.innerHTML = `
@@ -1351,6 +1351,37 @@ function hideProcessingDialog(){
     document.getElementById("processingDialog").style.display =
         "none";
 
+}
+
+function showReturnReasonDialog() {
+    return new Promise(resolve => {
+        const dialog = document.getElementById("returnReasonDialog");
+        const error = document.getElementById("returnReasonError");
+        const cancel = document.getElementById("returnReasonCancelBtn");
+        const confirm = document.getElementById("returnReasonConfirmBtn");
+        const choices = Array.from(document.querySelectorAll('input[name="returnReason"]'));
+
+        choices.forEach(choice => { choice.checked = false; });
+        error.textContent = "";
+        dialog.style.display = "flex";
+
+        const finish = value => {
+            dialog.style.display = "none";
+            cancel.onclick = null;
+            confirm.onclick = null;
+            resolve(value);
+        };
+
+        cancel.onclick = () => finish(null);
+        confirm.onclick = () => {
+            const selected = choices.find(choice => choice.checked)?.value || "";
+            if (!selected) {
+                error.textContent = "Select one reason before confirming the return.";
+                return;
+            }
+            finish(selected);
+        };
+    });
 }
 
 function showProductNotFoundDialog(barcode) {
@@ -2890,6 +2921,13 @@ if (saleType === "RETURN") {
 
         }
 
+paymentBtn.disabled = true;
+const returnReason = await showReturnReasonDialog();
+if (!returnReason) {
+    paymentBtn.disabled = false;
+    return;
+}
+
 const proceed =
     await showNativeConfirm(
         "RETURN CONFIRMATION\n\n" +
@@ -2899,9 +2937,8 @@ const proceed =
     );
 
 if (!proceed) {
-
+    paymentBtn.disabled = false;
     return;
-
 }
 
         try {
@@ -2953,7 +2990,7 @@ const returnAmount =
                         mobile,
 
                     return_reason:
-                        "Customer Return",
+                        returnReason,
 
                     remarks:
                         "",
@@ -3204,7 +3241,9 @@ if (historyBackBtn) {
         "click",
         () => {
 
-            document.getElementById("billSearch").value = "";
+        document.getElementById("billSearch").value = "";
+        billHistoryKeyword = "";
+        billHistoryPage = 1;
 
 renderBillHistory(allBills);
 
@@ -3309,6 +3348,10 @@ if (billHistoryBtn) {
         hideAllScreens();
 
         billHistoryScreen.style.display = "block";
+
+        billHistoryKeyword = "";
+        billHistoryPage = 1;
+        document.getElementById("billSearch").value = "";
 
         await loadBills();
 
@@ -3418,6 +3461,11 @@ function formatTime(time){
 let billItems = [];
 
 let allBills = [];
+const BILL_HISTORY_PAGE_SIZE = 100;
+let billHistoryPage = 1;
+let billHistoryKeyword = "";
+let billHistoryTotalCount = 0;
+let billHistoryTotalPages = 1;
 
 let currentViewedBill = null;
 
@@ -6004,14 +6052,97 @@ ${actionPrint}
 
 }
 
+function updateBillHistoryPagination() {
+
+    const pagination = document.getElementById("billHistoryPagination");
+    const previous = document.getElementById("billHistoryPreviousPage");
+    const next = document.getElementById("billHistoryNextPage");
+    const pageLabel = document.getElementById("billHistoryPageLabel");
+    const rangeLabel = document.getElementById("billHistoryRangeLabel");
+    const jumpInput = document.getElementById("billHistoryPageJump");
+
+    if (!pagination || !previous || !next || !pageLabel || !rangeLabel) {
+        return;
+    }
+
+    const first = billHistoryTotalCount === 0
+        ? 0
+        : ((billHistoryPage - 1) * BILL_HISTORY_PAGE_SIZE) + 1;
+    const last = Math.min(
+        billHistoryPage * BILL_HISTORY_PAGE_SIZE,
+        billHistoryTotalCount
+    );
+
+    pagination.style.display = billHistoryTotalCount === 0 ? "none" : "flex";
+    previous.disabled = billHistoryPage <= 1;
+    next.disabled = billHistoryPage >= billHistoryTotalPages;
+    pageLabel.textContent =
+        `Page ${billHistoryPage.toLocaleString("en-US")} of ${billHistoryTotalPages.toLocaleString("en-US")}`;
+    if (jumpInput) {
+        jumpInput.value = String(billHistoryPage);
+        jumpInput.max = String(billHistoryTotalPages);
+    }
+    rangeLabel.textContent =
+        `Showing ${first.toLocaleString("en-US")}\u2013${last.toLocaleString("en-US")} of ${billHistoryTotalCount.toLocaleString("en-US")} bills`;
+
+}
+
+async function goToBillHistoryPage(page) {
+
+    const targetPage = Number.parseInt(page, 10);
+
+    if (!Number.isFinite(targetPage)) return;
+
+    billHistoryPage = Math.min(
+        Math.max(targetPage, 1),
+        billHistoryTotalPages
+    );
+    await loadBills();
+
+}
+
+function handleBillHistoryPageJump() {
+
+    const input = document.getElementById("billHistoryPageJump");
+    const rawValue = input?.value.trim() || "";
+
+    if (!/^\d+$/.test(rawValue)) {
+        if (input) input.value = String(billHistoryPage);
+        return;
+    }
+
+    const targetPage = Number(rawValue);
+    if (
+        !Number.isSafeInteger(targetPage) ||
+        targetPage < 1 ||
+        targetPage > billHistoryTotalPages
+    ) {
+        if (input) input.value = String(billHistoryPage);
+        return;
+    }
+
+    goToBillHistoryPage(targetPage);
+
+}
+
 async function loadBills(){
 
     try{
 
-allBills =
-    await window.electronAPI.getTransactionHistory();
+    const result =
+        await window.electronAPI.getTransactionHistoryPage({
+            page: billHistoryPage,
+            pageSize: BILL_HISTORY_PAGE_SIZE,
+            keyword: billHistoryKeyword
+        });
+
+    billHistoryPage = result.page;
+    billHistoryTotalCount = result.totalCount;
+    billHistoryTotalPages = result.totalPages;
+    allBills = result.bills;
 
         renderBillHistory(allBills);
+        updateBillHistoryPagination();
 
     }
 
@@ -6225,12 +6356,6 @@ async function viewReturn(returnNo) {
             "viewReturnReason"
         ).innerText =
             details.return_reason || "-";
-
-
-        document.getElementById(
-            "viewReturnRemarks"
-        ).innerText =
-            details.remarks || "-";
 
 
         document.getElementById(
@@ -6940,36 +7065,46 @@ else{
 const billSearch =
     document.getElementById("billSearch");
 
+const billHistoryPreviousPage =
+    document.getElementById("billHistoryPreviousPage");
+
+const billHistoryNextPage =
+    document.getElementById("billHistoryNextPage");
+
+const billHistoryPageJump =
+    document.getElementById("billHistoryPageJump");
+
 if (billSearch){
 
     billSearch.addEventListener("input", () => {
 
-        const text =
-            billSearch.value
-            .toLowerCase()
-            .trim();
-
-        const filtered =
-    allBills.filter(transaction =>
-
-        String(
-            transaction.reference_no || ""
-        )
-            .toLowerCase()
-            .includes(text)
-
-        ||
-
-        String(
-            transaction.customer_mobile || ""
-        ).includes(text)
-
-    );
-
-        renderBillHistory(filtered);
+        billHistoryKeyword = billSearch.value.trim();
+        billHistoryPage = 1;
+        loadBills();
 
     });
 
+}
+
+if (billHistoryPreviousPage) {
+    billHistoryPreviousPage.addEventListener("click", () => {
+        goToBillHistoryPage(billHistoryPage - 1);
+    });
+}
+
+if (billHistoryNextPage) {
+    billHistoryNextPage.addEventListener("click", () => {
+        goToBillHistoryPage(billHistoryPage + 1);
+    });
+}
+
+if (billHistoryPageJump) {
+    billHistoryPageJump.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            handleBillHistoryPageJump();
+        }
+    });
 }
 
 window.reprintBill = reprintBill;

@@ -197,7 +197,6 @@ let lastAuthorizedReportType = null;
 
 function initializeReports() {
 
-    console.log("Reports Module Loaded");
 
     setupReportSelection();
 
@@ -366,7 +365,6 @@ function setupExportButton() {
 
 async function startReportExport() {
 
-    console.log("Starting Report Export...");
 
     const request = validateReportRequest();
 

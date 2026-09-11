@@ -1,8 +1,6 @@
 /* =====================================
    SYSTEM
 ===================================== */
-console.log("system.js loaded");
-
 function showComingSoon(featureName) {
 
     const modal = document.createElement("div");

@@ -626,6 +626,74 @@
 
 }
 
+.history-pagination{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-wrap:wrap;
+    gap:12px 24px;
+    width:100%;
+    padding:18px 12px;
+    text-align:center;
+}
+
+.history-pagination .pagination-controls{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-wrap:wrap;
+    gap:12px 18px;
+    width:100%;
+}
+
+.history-pagination .pagination-nav-btn{
+    width:130px;
+    height:50px;
+    padding:0 12px;
+    background:var(--primary);
+    color:#fff;
+    border:1px solid var(--primary);
+    border-radius:6px;
+    font-size:18px;
+    font-weight:600;
+    cursor:pointer;
+}
+
+.history-pagination .pagination-nav-btn:hover:not(:disabled){
+    filter:brightness(.92);
+}
+
+.history-pagination .pagination-nav-btn:disabled,
+.history-pagination .pagination-nav-btn:disabled:hover{
+    background:#c7c7c7;
+    border-color:#c7c7c7;
+    color:#777;
+    cursor:not-allowed;
+    opacity:.75;
+    filter:none;
+    box-shadow:none;
+}
+
+.history-pagination span,
+.history-pagination label{
+    white-space:nowrap;
+    font-size:18px;
+}
+
+.history-pagination #billHistoryRangeLabel{
+    flex-basis:100%;
+}
+
+#billHistoryPageJump{
+    width:70px;
+    height:48px;
+    padding:4px 6px;
+    text-align:center;
+    font-size:18px;
+    border:1px solid #ccc;
+    border-radius:6px;
+}
+
 
 
 .discount-input{
@@ -1981,4 +2049,97 @@
     font-size: 16px;
 
     cursor: pointer;
+}
+#returnReasonDialog .return-reason-dialog-content {
+    width: min(560px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    padding: 24px;
+    border-radius: 12px;
+    text-align: left;
+}
+
+#returnReasonDialog .return-reason-dialog-content h2 {
+    margin: 0 0 6px;
+    font-size: 24px;
+    text-align: center;
+}
+
+#returnReasonDialog .return-reason-description {
+    margin: 0 0 14px;
+    font-size: 15px;
+    text-align: center;
+}
+
+#returnReasonDialog .return-reason-options {
+    display: grid;
+    gap: 10px;
+}
+
+#returnReasonDialog .return-reason-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    box-sizing: border-box;
+    padding: 8px 12px;
+    border: 1px solid rgba(128, 0, 32, 0.28);
+    border-radius: 7px;
+    cursor: pointer;
+    text-align: left;
+    font-size: 17px;
+}
+
+#returnReasonDialog .return-reason-option:has(input:checked) {
+    border-color: #800020;
+    background: rgba(128, 0, 32, 0.08);
+}
+
+#returnReasonDialog .return-reason-option input {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    margin: 0;
+    padding: 0;
+    flex: 0 0 20px;
+    accent-color: #800020;
+    cursor: pointer;
+}
+
+#returnReasonDialog .return-reason-error {
+    min-height: 20px;
+    margin: 10px 0 0;
+    color: #a00020;
+    font-weight: 600;
+    text-align: center;
+}
+
+#returnReasonDialog .return-reason-actions {
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 14px;
+}
+
+#returnReasonDialog .return-reason-actions button {
+    min-width: 132px;
+    height: 46px;
+    flex: 0 1 auto;
+    font-size: 16px;
+}
+
+@media (max-width: 560px) {
+    #returnReasonDialog .return-reason-dialog-content {
+        width: calc(100vw - 24px);
+        padding: 18px;
+    }
+
+    #returnReasonDialog .return-reason-option {
+        min-height: 48px;
+        font-size: 16px;
+    }
+
+    #returnReasonDialog .return-reason-actions button {
+        min-width: 0;
+        flex: 1 1 0;
+    }
 }

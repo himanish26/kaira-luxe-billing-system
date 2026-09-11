@@ -478,6 +478,28 @@ style="display:none;">
 </div>
 
 <!-- =====================================
+     RETURN REASON DIALOG
+===================================== -->
+
+<div id="returnReasonDialog" class="modal" style="display:none;">
+    <div class="modal-content return-reason-dialog-content">
+        <h2>Reason for Return</h2>
+        <p class="return-reason-description">Select the reason for this return.</p>
+        <div class="return-reason-options">
+            <label class="return-reason-option"><input type="radio" name="returnReason" value="Size / Fit Issue"><span>Size / Fit Issue</span></label>
+            <label class="return-reason-option"><input type="radio" name="returnReason" value="Colour / Preference Issue"><span>Colour / Preference Issue</span></label>
+            <label class="return-reason-option"><input type="radio" name="returnReason" value="Gift / Unwanted Item"><span>Gift / Unwanted Item</span></label>
+            <label class="return-reason-option"><input type="radio" name="returnReason" value="Product Defect / Damage"><span>Product Defect / Damage</span></label>
+        </div>
+        <p id="returnReasonError" class="return-reason-error" role="alert"></p>
+        <div class="modal-buttons return-reason-actions">
+            <button id="returnReasonCancelBtn" class="klbs-cancel-btn">Cancel</button>
+            <button id="returnReasonConfirmBtn" class="klbs-primary-btn">Continue</button>
+        </div>
+    </div>
+</div>
+
+<!-- =====================================
      ADMIN LOGIN DIALOG
 ===================================== -->
 
@@ -607,6 +629,17 @@ maxlength="4">
 
         </table>
 
+    </div>
+
+    <div id="billHistoryPagination" class="history-pagination" style="display:none;">
+        <div class="pagination-controls">
+        <button id="billHistoryPreviousPage" class="pagination-nav-btn" type="button">Previous</button>
+        <span id="billHistoryPageLabel">Page 1 of 1</span>
+        <label for="billHistoryPageJump">Jump to page:</label>
+        <input id="billHistoryPageJump" type="number" min="1" step="1" inputmode="numeric" value="1" aria-label="Jump to bill history page">
+        <button id="billHistoryNextPage" class="pagination-nav-btn" type="button">Next</button>
+        </div>
+        <span id="billHistoryRangeLabel">Showing 0-0 of 0 bills</span>
     </div>
 
 </div>
@@ -1672,18 +1705,6 @@ returned after purchase.
                 <b>Processed By</b><br>
 
                 <span id="viewReturnCreatedBy"></span>
-            </div>
-
-        </div>
-
-        <hr>
-
-        <div class="invoice-row">
-
-            <div>
-                <b>Remarks</b><br>
-
-                <span id="viewReturnRemarks"></span>
             </div>
 
         </div>

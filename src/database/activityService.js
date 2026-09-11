@@ -177,6 +177,57 @@ async function searchActivities(searchText) {
     });
 }
 
+async function getActivityPage(options = {}) {
+
+    const requestedPage = Number.parseInt(options.page, 10);
+    const requestedPageSize = Number.parseInt(options.pageSize, 10);
+    const pageSize = Number.isFinite(requestedPageSize)
+        ? Math.min(Math.max(requestedPageSize, 1), 100)
+        : 100;
+    const keyword = String(options.keyword || "").trim().toLowerCase();
+    const searchSql = keyword
+        ? `WHERE LOWER(activity_date) LIKE ? OR LOWER(activity_time) LIKE ?
+            OR LOWER(category) LIKE ? OR LOWER(action) LIKE ?
+            OR LOWER(details) LIKE ? OR LOWER(entity_type) LIKE ?
+            OR LOWER(reference_no) LIKE ? OR LOWER(user_name) LIKE ?
+            OR LOWER(status) LIKE ?`
+        : "";
+    const searchParams = keyword
+        ? Array(9).fill(`%${keyword}%`)
+        : [];
+
+    const countRow = await new Promise((resolve, reject) => {
+        db.get(
+            `SELECT COUNT(*) AS total_count FROM activities ${searchSql}`,
+            searchParams,
+            (error, row) => error ? reject(error) : resolve(row)
+        );
+    });
+    const totalCount = Number(countRow?.total_count || 0);
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    const page = Number.isFinite(requestedPage)
+        ? Math.min(Math.max(requestedPage, 1), totalPages)
+        : 1;
+    const offset = (page - 1) * pageSize;
+    const activities = await new Promise((resolve, reject) => {
+        db.all(
+            `SELECT * FROM activities ${searchSql}
+             ORDER BY id DESC LIMIT ? OFFSET ?`,
+            [...searchParams, pageSize, offset],
+            (error, rows) => error ? reject(error) : resolve(rows)
+        );
+    });
+
+    return {
+        activities,
+        totalCount,
+        page,
+        pageSize,
+        totalPages
+    };
+
+}
+
 async function archiveActivities(expectedCount) {
     const run = (sql, params = []) => new Promise((resolve, reject) => {
         db.run(sql, params, function(error) {
@@ -209,6 +260,7 @@ module.exports = {
     logActivity,
     getActivities,
     searchActivities,
+    getActivityPage,
     archiveActivities,
     normalizeActivity,
     serializeChangeData,

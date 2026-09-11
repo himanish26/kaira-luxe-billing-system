@@ -148,6 +148,49 @@ window.productMasterTemplate = `
 </div>
 
 <div
+    id="inventoryPagination"
+    class="inventory-pagination"
+    style="display:none;">
+
+    <div class="pagination-controls">
+    <button
+        id="inventoryPreviousPage"
+        class="pagination-nav-btn"
+        type="button">
+        Previous
+    </button>
+
+    <span id="inventoryPageLabel">Page 1 of 1</span>
+
+    <label
+        class="inventory-page-jump-label"
+        for="inventoryPageJump">
+        Jump to page:
+    </label>
+
+    <input
+        id="inventoryPageJump"
+        class="inventory-page-jump-input"
+        type="number"
+        min="1"
+        step="1"
+        inputmode="numeric"
+        value="1"
+        aria-label="Jump to page">
+
+    <button
+        id="inventoryNextPage"
+        class="pagination-nav-btn"
+        type="button">
+        Next
+    </button>
+    </div>
+
+    <span id="inventoryRangeLabel">Showing 0-0 of 0 products</span>
+
+</div>
+
+<div
     id="inventoryEmptyState"
     class="inventory-empty-state"
     style="display:none;">

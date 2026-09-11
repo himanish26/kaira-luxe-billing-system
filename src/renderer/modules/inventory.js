@@ -1,6 +1,9 @@
-console.log("Inventory Module Loaded");
-
 let inventoryProductsRequestId = 0;
+const INVENTORY_PAGE_SIZE = 100;
+let inventoryPage = 1;
+let inventoryKeyword = "";
+let inventoryTotalCount = 0;
+let inventoryTotalPages = 1;
 
 /* ===========================================
    OPEN PRODUCT MASTER
@@ -8,7 +11,6 @@ let inventoryProductsRequestId = 0;
 
 function showInventory() {
 
-    console.log("Opening Product Master...");
     discardStockAuthorization();
 
     const settingsScreen =
@@ -23,6 +25,8 @@ function showInventory() {
     settingsScreen.style.display = "none";
 
     settingsPage.style.display = "block";
+
+    setSettingsPageBackToSettings();
 
     settingsPageContent.innerHTML =
         window.productMasterTemplate;
@@ -112,14 +116,22 @@ async function loadProducts() {
     const requestId =
         ++inventoryProductsRequestId;
 
-    const products =
-        await window.electronAPI.getProducts();
+    const result =
+        await window.electronAPI.getProducts({
+            page: inventoryPage,
+            pageSize: INVENTORY_PAGE_SIZE,
+            keyword: inventoryKeyword
+        });
 
     if (requestId !== inventoryProductsRequestId) {
         return;
     }
 
-    renderInventoryProducts(products);
+    inventoryPage = result.page;
+    inventoryTotalCount = result.totalCount;
+    inventoryTotalPages = result.totalPages;
+    renderInventoryProducts(result.products);
+    updateInventoryPagination();
 
 }
 
@@ -140,17 +152,88 @@ Please import a Product Master Excel file before creating new billing.`
 
 async function searchProducts(keyword) {
 
-    const requestId =
-        ++inventoryProductsRequestId;
+    inventoryKeyword = keyword;
+    inventoryPage = 1;
+    await loadProducts();
 
-    const products =
-        await window.electronAPI.searchProducts(keyword);
+}
 
-    if (requestId !== inventoryProductsRequestId) {
+function updateInventoryPagination() {
+
+    const pagination = document.getElementById("inventoryPagination");
+    const previous = document.getElementById("inventoryPreviousPage");
+    const next = document.getElementById("inventoryNextPage");
+    const pageLabel = document.getElementById("inventoryPageLabel");
+    const rangeLabel = document.getElementById("inventoryRangeLabel");
+    const pageJumpInput = document.getElementById("inventoryPageJump");
+
+    if (!pagination || !previous || !next || !pageLabel || !rangeLabel) {
         return;
     }
 
-    renderInventoryProducts(products);
+    const first = inventoryTotalCount === 0
+        ? 0
+        : ((inventoryPage - 1) * INVENTORY_PAGE_SIZE) + 1;
+    const last = Math.min(
+        inventoryPage * INVENTORY_PAGE_SIZE,
+        inventoryTotalCount
+    );
+
+    pagination.style.display = inventoryTotalCount === 0
+        ? "none"
+        : "flex";
+    previous.disabled = inventoryPage <= 1;
+    next.disabled = inventoryPage >= inventoryTotalPages;
+    pageLabel.textContent =
+        `Page ${inventoryPage.toLocaleString("en-US")} of ${inventoryTotalPages.toLocaleString("en-US")}`;
+    if (pageJumpInput) {
+        pageJumpInput.value = String(inventoryPage);
+        pageJumpInput.max = String(inventoryTotalPages);
+    }
+    rangeLabel.textContent =
+        `Showing ${first.toLocaleString("en-US")}\u2013${last.toLocaleString("en-US")} of ${inventoryTotalCount.toLocaleString("en-US")} products`;
+
+}
+
+async function goToInventoryPage(page) {
+
+    const targetPage = Number.parseInt(page, 10);
+
+    if (!Number.isFinite(targetPage)) {
+        return;
+    }
+
+    inventoryPage = Math.min(
+        Math.max(targetPage, 1),
+        inventoryTotalPages
+    );
+    await loadProducts();
+
+}
+
+function handleInventoryPageJump() {
+
+    const pageJumpInput =
+        document.getElementById("inventoryPageJump");
+    const rawValue = pageJumpInput?.value.trim() || "";
+
+    if (!/^\d+$/.test(rawValue)) {
+        if (pageJumpInput) pageJumpInput.value = String(inventoryPage);
+        return;
+    }
+
+    const targetPage = Number(rawValue);
+
+    if (
+        !Number.isSafeInteger(targetPage) ||
+        targetPage < 1 ||
+        targetPage > inventoryTotalPages
+    ) {
+        if (pageJumpInput) pageJumpInput.value = String(inventoryPage);
+        return;
+    }
+
+    goToInventoryPage(targetPage);
 
 }
 
@@ -182,9 +265,7 @@ function renderInventoryProducts(products) {
     tableContainer.style.display = "block";
     emptyState.style.display = "none";
 
-    products.forEach(product => {
-
-        tbody.innerHTML += `
+    tbody.innerHTML = products.map(product => `
         <tr>
             <td>${product.barcode}</td>
             <td>${product.brand}</td>
@@ -200,9 +281,8 @@ function renderInventoryProducts(products) {
             <td>${Number(product.gst_rate || 0)}%</td>
             <td>₹${Number(product.selling_price || 0).toFixed(2)}</td>
         </tr>
-        `;
-
-    });
+        `
+    ).join("");
 
 }
 
@@ -212,7 +292,6 @@ function renderInventoryProducts(products) {
 
 async function importProductMaster(grant){
 
-    console.log("Import Product Master");
 
     const importBtn =
     document.getElementById("importBtn");
@@ -281,7 +360,6 @@ Rows Read : ${result.total}`
 
 async function refreshInventory(){
 
-    console.log("Refreshing Inventory...");
 
     await loadInventorySummary();
 
@@ -751,6 +829,15 @@ function initializeInventoryEvents() {
     const searchBox =
         document.getElementById("inventorySearch");
 
+    const previousPageBtn =
+        document.getElementById("inventoryPreviousPage");
+
+    const nextPageBtn =
+        document.getElementById("inventoryNextPage");
+
+    const pageJumpInput =
+        document.getElementById("inventoryPageJump");
+
     if (importBtn)
 
     importBtn.onclick = () => {
@@ -918,6 +1005,9 @@ function initializeInventoryEvents() {
 
     const keyword = e.target.value.trim();
 
+    inventoryKeyword = keyword;
+    inventoryPage = 1;
+
     if (keyword === "") {
 
         loadProducts();
@@ -928,6 +1018,33 @@ function initializeInventoryEvents() {
     searchProducts(keyword);
 
 });
+
+    }
+
+    if (previousPageBtn) {
+
+        previousPageBtn.addEventListener("click", () => {
+            goToInventoryPage(inventoryPage - 1);
+        });
+
+    }
+
+    if (nextPageBtn) {
+
+        nextPageBtn.addEventListener("click", () => {
+            goToInventoryPage(inventoryPage + 1);
+        });
+
+    }
+
+    if (pageJumpInput) {
+
+        pageJumpInput.addEventListener("keydown", event => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                handleInventoryPageJump();
+            }
+        });
 
     }
 

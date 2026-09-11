@@ -84,6 +84,17 @@ backButton.onclick = () => {
 
 }
 
+function setSettingsPageBackToSettings() {
+    const backButton = document.getElementById("settingsPageBackBtn");
+    if (!backButton) return;
+
+    backButton.textContent = "← Settings";
+    backButton.onclick = () => {
+        settingsPage.style.display = "none";
+        settingsScreen.style.display = "block";
+    };
+}
+
 function showDeviceSettings() {
 
         if (deviceStatusRefreshInterval) {
@@ -101,6 +112,7 @@ function showDeviceSettings() {
     settingsPage.style.display = "block";
     const pageBackButton = document.getElementById("settingsPageBackBtn");
     if (pageBackButton) pageBackButton.hidden = false;
+    setSettingsPageBackToSettings();
 
     settingsPageContent.innerHTML = `
 

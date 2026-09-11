@@ -4,7 +4,8 @@ const db = require("./database");
 
 const {
 
-    logProductImport
+    logProductImport,
+    logProductImportFailed
 
 } = require("./logService");
 
@@ -57,7 +58,7 @@ function normalizeProductMasterRow(row) {
 }
 
 
-function importProducts(filePath) {
+function importProductsAttempt(filePath) {
 
     return new Promise((resolve, reject) => {
 
@@ -1037,6 +1038,35 @@ function importProducts(filePath) {
 
     });
 
+}
+
+function safeImportFailureReason(error) {
+    const raw = String(error?.message || error || "Unexpected import error")
+        .split(/[\r\n]+/)[0]
+        .replace(/(?:[A-Za-z]:\\|\/)[^\s|]+/g, "[PATH]")
+        .replace(/\b(?:SQLITE|Error:).*?(?=\s{2,}|$)/i, "Import transaction failed")
+        .trim();
+    return raw.slice(0, 500) || "Unexpected import error";
+}
+
+function importProducts(filePath) {
+    const fileName = path.basename(String(filePath || ""));
+    const recordFailure = async error => {
+        try {
+            await logProductImportFailed(fileName, safeImportFailureReason(error));
+        } catch (logError) {
+            console.error("Product Import Failure Log Error:", logError);
+        }
+    };
+    return importProductsAttempt(filePath).then(async result => {
+        if (!result || result.success !== true) {
+            await recordFailure(result?.error);
+        }
+        return result;
+    }).catch(async error => {
+        await recordFailure(error);
+        throw error;
+    });
 }
 
 

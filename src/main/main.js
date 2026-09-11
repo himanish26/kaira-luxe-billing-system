@@ -161,6 +161,8 @@ const {
     getProductByBarcode,
     getInventorySummary,
     getAllProducts,
+    getProductPage,
+    searchProductPage,
     searchProducts,
     getLastImport
 
@@ -215,6 +217,7 @@ const {
     getBills,
 
     getTransactionHistory,
+    getTransactionHistoryPage,
 
     getBillDetails,
 
@@ -296,6 +299,7 @@ const {
 
     getActivities,
     searchActivities,
+    getActivityPage,
     archiveActivities,
     logActivity
 
@@ -636,10 +640,6 @@ app.whenReady().then(async () => {
                     process.argv[restoreIndex + 1]
                 )
                 : null;
-
-        console.log(
-            "✓ Kaira Luxe Billing System database ready. Starting application."
-        );
 
         if (restoreFileName) {
 
@@ -1206,9 +1206,9 @@ ipcMain.handle(
 
 ipcMain.handle(
     "get-products",
-    async () => {
+    async (event, options) => {
 
-        return await getAllProducts();
+        return await getProductPage(options);
 
     }
 );
@@ -1220,9 +1220,12 @@ ipcMain.handle(
 
 ipcMain.handle(
     "search-products",
-    async (event, keyword) => {
+    async (event, keyword, options) => {
 
-        return await searchProducts(keyword);
+        return await searchProductPage(
+            keyword,
+            options || {}
+        );
 
     }
 );
@@ -1902,6 +1905,15 @@ ipcMain.handle(
 
     }
 
+);
+
+ipcMain.handle(
+    "get-transaction-history-page",
+    async (event, options) => {
+
+        return await getTransactionHistoryPage(options);
+
+    }
 );
 
 ipcMain.handle("integrations:get-config", async () => {
@@ -2854,11 +2866,11 @@ ipcMain.handle(
 
     "activity:get",
 
-    async () => {
+    async (event, options) => {
 
         try {
 
-            return await getActivities();
+            return await getActivityPage(options);
 
         }
 
@@ -2866,7 +2878,13 @@ ipcMain.handle(
 
             console.error(error);
 
-            return [];
+            return {
+                activities: [],
+                totalCount: 0,
+                page: 1,
+                pageSize: 100,
+                totalPages: 1
+            };
 
         }
 

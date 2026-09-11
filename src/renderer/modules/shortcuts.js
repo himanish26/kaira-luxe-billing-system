@@ -4,10 +4,6 @@
 
 function initializeKeyboardShortcuts() {
 
-    console.log(
-        "Keyboard Shortcuts Loaded"
-    );
-
     document.addEventListener(
         "keydown",
         handleKeyboardShortcut
@@ -108,13 +104,6 @@ function initializeKLBSContextMenu() {
 }
 
 function handleKLBSContextMenu(event) {
-
-    console.log(
-    "RIGHT CLICK:",
-    event.target,
-    event.target.tagName,
-    event.target.className
-);
 
     const target =
         event.target.closest(
@@ -953,8 +942,6 @@ function handleKeyboardShortcut(event) {
         case "F8":
 
             event.preventDefault();
-
-            console.log("F8");
 
             break;
 
