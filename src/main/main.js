@@ -1268,6 +1268,8 @@ ipcMain.handle(
 ipcMain.handle(
     "save-bill",
     async (event, billData) => {
+        let authorizationReserved = false;
+        let authorizationRequirements = [];
 
         try {
 
@@ -1275,7 +1277,6 @@ ipcMain.handle(
                 item.ff_discount !== null && item.ff_discount !== undefined
             );
             const usedGiftVoucherAuthorization = Number(billData.gift_voucher_amount || 0) > 0;
-            const authorizationRequirements = [];
             if (usedFamilyFriendsAuthorization) {
                 authorizationRequirements.push({
                     token: billData.authorization && billData.authorization.ff,
@@ -1290,16 +1291,22 @@ ipcMain.handle(
             }
             if (
                 authorizationRequirements.length &&
-                !administratorSecurity.consumeGrants(authorizationRequirements)
+                !administratorSecurity.reserveGrants(authorizationRequirements)
             ) {
                 throw new Error("Required authorization is missing, invalid, or has expired.");
             }
+            authorizationReserved = authorizationRequirements.length > 0;
             delete billData.authorization;
 
             const dayState =
                 await getBusinessDayState();
 
             if (dayState.pendingPreviousBusinessDate || dayState.closed || dayState.closing) {
+
+                if (authorizationReserved) {
+                    administratorSecurity.releaseGrants(authorizationRequirements);
+                    authorizationReserved = false;
+                }
 
                 return {
 
@@ -1326,6 +1333,16 @@ ipcMain.handle(
 
 
             await saveBill(billData);
+
+            if (authorizationReserved) {
+                // saveBill has committed. Do not let any finalization failure
+                // return this authorization to the available grant pool.
+                authorizationReserved = false;
+                const committed = administratorSecurity.commitGrants(authorizationRequirements);
+                if (!committed) {
+                    console.error("Authorization finalization failed closed after the bill was saved.");
+                }
+            }
 
             const activityWarnings = [];
             if (usedFamilyFriendsAuthorization) {
@@ -1365,6 +1382,10 @@ ipcMain.handle(
         }
 
         catch (error) {
+
+            if (authorizationReserved) {
+                administratorSecurity.releaseGrants(authorizationRequirements);
+            }
 
             if (error.message === "KLBS_BUSINESS_DAY_CLOSING") {
                 return {

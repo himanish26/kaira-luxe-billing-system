@@ -74,8 +74,14 @@ if (
 function createAdministratorSecurityService(database, options = {}) {
     const masterVerifier = options.masterVerifier || null;
     const grantTtlMs = options.grantTtlMs || 60 * 1000;
+    const ffGrantTtlMs = options.ffGrantTtlMs || 600 * 1000;
     const now = options.now || (() => Date.now());
+
+    function grantTtlForPurpose(purpose) {
+        return purpose === "FF" ? ffGrantTtlMs : grantTtlMs;
+    }
     const grants = new Map();
+    const reservedGrants = new Map();
     const startupSetupSessions = new Map();
     let failedMasterAttempts = 0;
 
@@ -150,7 +156,11 @@ function createAdministratorSecurityService(database, options = {}) {
 
     function issueGrant(purpose, level) {
         const token = crypto.randomBytes(32).toString("hex");
-        grants.set(token, { purpose, level, expiresAt: now() + grantTtlMs });
+        grants.set(token, {
+            purpose,
+            level,
+            expiresAt: now() + grantTtlForPurpose(purpose)
+        });
         return token;
     }
 
@@ -193,6 +203,66 @@ function createAdministratorSecurityService(database, options = {}) {
         );
         resolved.forEach(item => grants.delete(item.token));
         return valid;
+    }
+
+    function resolveGrantRequirements(requirements) {
+        return requirements.map(requirement => ({
+            token: String(requirement.token || ""),
+            purpose: requirement.purpose,
+            grant: grants.get(String(requirement.token || ""))
+        }));
+    }
+
+    function areValidGrantRequirements(resolved) {
+        const tokens = new Set();
+        if (resolved.some(item => {
+            if (tokens.has(item.token)) return true;
+            tokens.add(item.token);
+            return false;
+        })) return false;
+        return resolved.every(item =>
+            AUTHORIZATION_POLICY[item.purpose] && item.grant &&
+            item.grant.purpose === item.purpose &&
+            item.grant.level === AUTHORIZATION_POLICY[item.purpose] &&
+            item.grant.expiresAt >= now()
+        );
+    }
+
+    // Reserve grants for an in-flight protected operation. The reservation
+    // prevents concurrent reuse without consuming authorization before the
+    // protected operation has committed.
+    function reserveGrants(requirements) {
+        const resolved = resolveGrantRequirements(requirements);
+        if (!areValidGrantRequirements(resolved)) return false;
+        resolved.forEach(item => {
+            grants.delete(item.token);
+            reservedGrants.set(item.token, item.grant);
+        });
+        return true;
+    }
+
+    function commitGrants(requirements) {
+        const valid = requirements.every(requirement => {
+            const token = String(requirement.token || "");
+            const grant = reservedGrants.get(token);
+            return AUTHORIZATION_POLICY[requirement.purpose] && grant &&
+                grant.purpose === requirement.purpose &&
+                grant.level === AUTHORIZATION_POLICY[requirement.purpose];
+        });
+        requirements.forEach(requirement => {
+            reservedGrants.delete(String(requirement.token || ""));
+        });
+        return valid;
+    }
+
+    function releaseGrants(requirements) {
+        requirements.forEach(requirement => {
+            const token = String(requirement.token || "");
+            const grant = reservedGrants.get(token);
+            if (!grant || grant.purpose !== requirement.purpose) return;
+            reservedGrants.delete(token);
+            if (grant.expiresAt >= now()) grants.set(token, grant);
+        });
     }
 
     async function authorizePin(pin, purpose) {
@@ -490,8 +560,9 @@ function createAdministratorSecurityService(database, options = {}) {
             configureMissingPinWithStartupSetup(data || {}, AUTHORIZATION_LEVELS.ADMINISTRATOR),
         configureMissingManagerPin: data =>
             configureMissingPinWithStartupSetup(data || {}, AUTHORIZATION_LEVELS.MANAGER),
-        consumeGrant, consumeGrants, validateGrant, discardGrant,
-        clearGrants: () => grants.clear(),
+        consumeGrant, consumeGrants, reserveGrants, commitGrants, releaseGrants,
+        validateGrant, discardGrant,
+        clearGrants: () => { grants.clear(); reservedGrants.clear(); },
         clearStartupSetupSessions: () => startupSetupSessions.clear()
     };
 }
