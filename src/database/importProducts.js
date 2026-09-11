@@ -78,7 +78,11 @@ function importProducts(filePath) {
             const products =
                 XLSX.utils
                     .sheet_to_json(sheet)
-                    .map(normalizeProductMasterRow);
+                    .map((row, index) => {
+                        const normalized = normalizeProductMasterRow(row);
+                        normalized.__rowNumber = index + 2;
+                        return normalized;
+                    });
 
 
             /* ===========================================
@@ -95,6 +99,79 @@ function importProducts(filePath) {
 
                 return;
 
+            }
+
+
+            /* ===========================================
+               PRE-MUTATION PRODUCT VALIDATION
+
+               All workbook rows are validated before any
+               duplicate check or database transaction begins.
+            =========================================== */
+
+            const validationErrors = [];
+            const requiredTextFields = [
+                "barcode",
+                "brand",
+                "category",
+                "product_name"
+            ];
+
+            function isBlank(value) {
+                return value === undefined ||
+                    value === null ||
+                    String(value).trim() === "";
+            }
+
+            function validateNonNegativeNumber(value, field, rowNumber) {
+                if (isBlank(value)) {
+                    validationErrors.push(
+                        `Row ${rowNumber}: ${field} is required.`
+                    );
+                    return;
+                }
+
+                const numericValue = Number(value);
+                if (!Number.isFinite(numericValue) || numericValue < 0) {
+                    validationErrors.push(
+                        `Row ${rowNumber}: ${field} must be numeric and >= 0.`
+                    );
+                }
+            }
+
+            products.forEach((product) => {
+                const rowNumber = product.__rowNumber;
+
+                requiredTextFields.forEach((field) => {
+                    if (isBlank(product[field])) {
+                        validationErrors.push(
+                            `Row ${rowNumber}: ${field} is required.`
+                        );
+                    }
+                });
+
+                validateNonNegativeNumber(product.mrp, "mrp", rowNumber);
+                validateNonNegativeNumber(product.gst_rate, "gst_rate", rowNumber);
+
+                if (!isBlank(product.opening_stock)) {
+                    const openingStock = Number(product.opening_stock);
+                    if (!Number.isFinite(openingStock) || openingStock < 0) {
+                        validationErrors.push(
+                            `Row ${rowNumber}: opening_stock must be numeric and >= 0.`
+                        );
+                    }
+                }
+            });
+
+            if (validationErrors.length > 0) {
+                resolve({
+                    success: false,
+                    error:
+                        "Product Master validation failed:\n" +
+                        validationErrors.slice(0, 50).join("\n") +
+                        (validationErrors.length > 50 ? "\n..." : "")
+                });
+                return;
             }
 
 
