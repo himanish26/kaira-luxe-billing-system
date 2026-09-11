@@ -35,7 +35,15 @@
       "icon": "src/renderer/Assets/icons/icon.ico"
     },
     "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "KAIRA LUXE BILLING SYSTEM",
       "installerIcon": "src/renderer/Assets/icons/installer.ico",
+      "uninstallerIcon": "src/renderer/Assets/icons/installer.ico",
+      "installerHeaderIcon": "src/renderer/Assets/icons/installer.ico",
       "license": "EULA.txt"
     }
   },
