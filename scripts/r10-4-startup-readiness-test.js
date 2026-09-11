@@ -8,9 +8,20 @@ const { createAdministratorSecurityService } = require("../src/services/administ
 
 const root = path.resolve(__dirname, "..");
 let productMode = "zero";
+let failureMode = null;
 const startupDb = {
-    get(sql, params, callback) { callback(null, { ok: 1 }); },
+    get(sql, params, callback) {
+        if (failureMode === "database") {
+            callback(new Error("database unavailable"));
+            return;
+        }
+        callback(null, { ok: 1 });
+    },
     all(sql, params, callback) {
+        if (failureMode === "databaseIntegrity" && sql.includes("PRAGMA integrity_check")) {
+            callback(null, [{ integrity_check: "failed" }]);
+            return;
+        }
         if (sql.includes("sqlite_master")) {
             callback(null, productMode === "schemaFailure" ? [{ name: "products" }] : [
                 { name: "products" }, { name: "inventory_transactions" }
@@ -53,6 +64,19 @@ const get = (db, sql) => new Promise((resolve, reject) => {
 });
 
 async function main() {
+    const startupBlocked = check => check.critical && check.state === "failed";
+
+    failureMode = "database";
+    const databaseFailed = await getStartupCheck("database", {});
+    assert.strictEqual(databaseFailed.state, "failed");
+    assert.strictEqual(startupBlocked(databaseFailed), true);
+
+    failureMode = "databaseIntegrity";
+    const databaseIntegrityFailed = await getStartupCheck("databaseIntegrity", {});
+    assert.strictEqual(databaseIntegrityFailed.state, "failed");
+    assert.strictEqual(startupBlocked(databaseIntegrityFailed), true);
+
+    failureMode = null;
     productMode = "zero";
     const zero = await getStartupCheck("productInventory", {});
     assert.strictEqual(zero.state, "warning");
@@ -60,6 +84,7 @@ async function main() {
     assert(zero.critical);
     assert(zero.message.toLowerCase().includes("inventory"));
     assert(zero.message.toLowerCase().includes("required"));
+    assert.strictEqual(startupBlocked(zero), false);
 
     productMode = "present";
     const present = await getStartupCheck("productInventory", {});
@@ -70,6 +95,7 @@ async function main() {
     const failed = await getStartupCheck("productInventory", {});
     assert.strictEqual(failed.state, "failed");
     assert(!failed.message.toLowerCase().includes("no products"));
+    assert.strictEqual(startupBlocked(failed), true);
 
     const openDay = await getStartupCheck("businessDay", {
         getBusinessDayState: async () => ({ closed: false, closing: false, businessDate: "2026-09-01" })
@@ -79,6 +105,7 @@ async function main() {
     });
     assert.strictEqual(openDay.state, "ready");
     assert.strictEqual(closedDay.state, "failed");
+    assert.strictEqual(startupBlocked(closedDay), true);
 
     const database = new sqlite3.Database(":memory:");
     await run(database, `CREATE TABLE settings (
@@ -96,6 +123,7 @@ async function main() {
         getAdministratorSecurityStatus: () => security.getStatus()
     });
     assert.strictEqual(uninitialized.state, "failed");
+    assert.strictEqual(startupBlocked(uninitialized), true);
     assert.strictEqual(uninitialized.action, "completeSecuritySetup");
     assert.strictEqual(uninitialized.administratorPinConfigured, false);
     assert.strictEqual(uninitialized.managerPinConfigured, false);
@@ -127,6 +155,7 @@ async function main() {
         getAdministratorSecurityStatus: () => security.getStatus()
     });
     assert.strictEqual(ready.state, "ready");
+    assert.strictEqual(startupBlocked(ready), false);
     assert(events.some(event => event.action === "MASTER_RECOVERY_FAILED"));
     assert(events.some(event => event.action === "ADMIN_SECURITY_INITIALIZED"));
 
@@ -172,12 +201,16 @@ async function main() {
     const splashHtml = fs.readFileSync(path.join(root, "src/renderer/startupSplash.html"), "utf8");
     const mainSource = fs.readFileSync(path.join(root, "src/main/main.js"), "utf8");
     const preload = fs.readFileSync(path.join(root, "src/main/startupPreload.js"), "utf8");
-    assert(mainSource.includes('check.critical && check.state !== "ready"'));
-    const startupBlocked = check => check.critical && check.state !== "ready";
-    assert.strictEqual(startupBlocked({ critical: true, state: "warning" }), true);
+    assert(mainSource.includes('check.critical && check.state === "failed"'));
+    assert(!mainSource.includes('check.critical && check.state !== "ready"'));
+    assert.strictEqual(startupBlocked({ critical: true, state: "warning" }), false);
     assert.strictEqual(startupBlocked({ critical: true, state: "failed" }), true);
     assert.strictEqual(startupBlocked({ critical: true, state: "ready" }), false);
     assert.strictEqual(startupBlocked({ critical: false, state: "warning" }), false);
+    assert.strictEqual((await getStartupCheck("backup", {})).critical, false);
+    assert.strictEqual(startupBlocked(await getStartupCheck("backup", {})), false);
+    assert.strictEqual((await getStartupCheck("printer", {})).critical, false);
+    assert.strictEqual(startupBlocked(await getStartupCheck("printer", {})), false);
     assert(splash.includes("securityIncomplete"));
     assert(splash.includes("openSecuritySetup"));
     assert(splash.includes("await runChecks()"));

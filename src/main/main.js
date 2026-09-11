@@ -889,7 +889,7 @@ ipcMain.handle("startup:ready", async event => {
         "database", "databaseIntegrity", "productInventory",
         "administratorSecurity", "businessDay"
     ].map(checkName => getStartupCheck(checkName, readinessDependencies)));
-    if (readinessChecks.some(check => check.critical && check.state !== "ready")) {
+    if (readinessChecks.some(check => check.critical && check.state === "failed")) {
         return { success: false, error: "System readiness conditions are not satisfied." };
     }
 
