@@ -7,7 +7,7 @@ function buildDayClosingEmailText(summary) {
         `Net Sales After Returns: ${money(summary.netSalesAfterReturns)}`, `Cash: ${money(summary.cash)}`, `UPI: ${money(summary.upi)}`, `Card: ${money(summary.card)}`,
         `Store Credit Redeemed: ${money(summary.storeCreditRedeemed)}`, `Gift Voucher Redeemed: ${money(summary.giftVoucherRedeemed)}`,
         `Actual Money Collection: ${money(summary.actualMoneyCollection)}`, `Store Credit Issued: ${money(summary.storeCreditIssued)}`,
-        `Settlement Difference: ${money(summary.settlementDifference)}`, `Backup: ${summary.backupStatus} (${summary.backupReference || "-"})`,
+        `Payment Round Off: ${money(summary.settlementDifference)}`, `Backup: ${summary.backupStatus} (${summary.backupReference || "-"})`,
         "Email outcome: dispatch in progress; final status is persisted after this message.", "",
         "The accounting snapshot and mandatory backup are complete."].join("\n");
 }

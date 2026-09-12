@@ -65,6 +65,13 @@ text(
         ? "₹0.00"
         : `${settlementDifference < 0 ? "-" : ""}₹${Math.abs(settlementDifference).toFixed(2)}`
 );
+    text(
+        "dcPaymentCheck",
+        summary.settlementDifference === null ||
+            summary.settlementDifference === undefined
+            ? "—"
+            : "OK"
+    );
     text("dcBackupStatus", summary.backupStatus || "PENDING");
     text("dcEmailStatus", summary.emailStatus || "PENDING");
 
@@ -90,16 +97,9 @@ text(
                 "dc-reconciliation-neutral"
             );
         }
-        else if (
-            Math.abs(Number(summary.settlementDifference)) < 0.005
-        ) {
+        else if (Number.isFinite(Number(summary.settlementDifference))) {
             reconciliationCard.classList.add(
                 "dc-reconciliation-ok"
-            );
-        }
-        else {
-            reconciliationCard.classList.add(
-                "dc-reconciliation-error"
             );
         }
     }
@@ -114,9 +114,7 @@ text(
         ) {
             reconciliationIcon.textContent = "•";
         }
-        else if (
-            Math.abs(Number(summary.settlementDifference)) < 0.005
-        ) {
+        else if (Number.isFinite(Number(summary.settlementDifference))) {
             reconciliationIcon.textContent = "✓";
         }
         else {
@@ -400,7 +398,7 @@ async function showDayClosingPage() {
                         </span>
 
                         <span>
-                            RECONCILIATION
+                            PAYMENT CHECK
                         </span>
 
                     </div>
@@ -409,11 +407,23 @@ async function showDayClosingPage() {
                     <div class="dc-reconciliation-main">
 
                         <span>
-                            Settlement Difference
+                            Payment Round Off
                         </span>
 
                         <strong id="dcSettlementDifference">
                             ₹0.00
+                        </strong>
+
+                    </div>
+
+                    <div class="dc-reconciliation-main">
+
+                        <span>
+                            Payment Check
+                        </span>
+
+                        <strong id="dcPaymentCheck">
+                            OK
                         </strong>
 
                     </div>

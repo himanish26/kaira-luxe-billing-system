@@ -1895,6 +1895,17 @@ let appliedStoreCredit = null;
 
 let availableStoreCredit = null;
 
+function getExactBillPayable() {
+
+    return Number(
+        document
+            .getElementById("netAmount")
+            .innerText
+            .replace(/[^0-9.-]/g, "")
+    );
+
+}
+
 if (storeCreditAppliedAmount) {
 
     storeCreditAppliedAmount.innerText =
@@ -2165,13 +2176,7 @@ if (verifyStoreCreditBtn) {
 
                 const today = getKLBSBusinessDate();
 
-const payable =
-    Number(
-        document
-            .getElementById("paymentNet")
-            .innerText
-            .replace(/[^0-9.-]/g, "")
-    );
+const payable = getExactBillPayable();
 
 const storeCreditAmount =
     Number(
@@ -2217,7 +2222,10 @@ verifiedStoreCreditValidity.innerText =
                     return;
                 }
 
-if (storeCreditAmount > payable + 0.01) {
+if (
+    paymentValueToPaise(storeCreditAmount) >
+    paymentValueToPaise(payable)
+) {
 
     verifiedStoreCreditStatus.innerText =
         "AMOUNT EXCEEDS PAYABLE";
@@ -2276,13 +2284,7 @@ const storeCreditAmount =
             .replace(/[^0-9.-]/g, "")
     );
 
-const payable =
-    Number(
-        document
-            .getElementById("paymentNet")
-            .innerText
-            .replace(/[^0-9.-]/g, "")
-    );
+const payable = getExactBillPayable();
 
 if (!storeCreditNo) {
 
@@ -2293,7 +2295,10 @@ if (!storeCreditNo) {
     return;
 }
 
-if (storeCreditAmount > payable) {
+if (
+    paymentValueToPaise(storeCreditAmount) >
+    paymentValueToPaise(payable)
+) {
 
     alert(
         "Store Credit amount cannot exceed the bill payable amount."
@@ -2634,9 +2639,8 @@ if (storeCreditAppliedAmount) {
 }
 else{
 
-    saveBillBtn.disabled = false;
-    printBillBtn.disabled = false;
     alert(result.error);
+    calculatePayment();
 
     return null;
 
@@ -3187,19 +3191,12 @@ if (paymentBackBtn) {
     paymentBackBtn.addEventListener("click", async () => {
 
 const currentPayable =
-    Math.round(
-        Number(
-            document
-                .getElementById("paymentNet")
-                .innerText
-                .replace(/[^0-9.-]/g, "")
-        )
-    );
+    getExactBillPayable();
 
 if (
     appliedStoreCredit &&
-    Number(appliedStoreCredit.amount) >
-        currentPayable + 0.01
+    paymentValueToPaise(appliedStoreCredit.amount) >
+        paymentValueToPaise(currentPayable)
 ) {
 
     appliedStoreCredit = null;
@@ -5834,6 +5831,50 @@ function formatPaymentPaise(paise) {
 
 }
 
+function formatWholeRupeePaymentPaise(paise) {
+
+    return `₹${Math.round(Math.abs(paise) / 100)}`;
+
+}
+
+function getPaymentSettlementState({
+    roundedPayablePaise,
+    storeCreditPaise,
+    giftVoucherPaise,
+    cashPaise,
+    upiPaise,
+    cardPaise
+}) {
+
+    const values = [
+        roundedPayablePaise,
+        storeCreditPaise,
+        giftVoucherPaise,
+        cashPaise,
+        upiPaise,
+        cardPaise
+    ];
+
+    if (!values.every(Number.isSafeInteger)) return null;
+
+    const storedValuePaise = storeCreditPaise + giftVoucherPaise;
+    const rawResidualPaise = roundedPayablePaise - storedValuePaise;
+    const customerTenderRequiredPaise = rawResidualPaise <= 0
+        ? 0
+        : Math.round(rawResidualPaise / 100) * 100;
+    const customerTenderPaise = cashPaise + upiPaise + cardPaise;
+    const actualSettlementPaise = storedValuePaise + customerTenderPaise;
+
+    return {
+        customerTenderRequiredPaise,
+        customerTenderPaise,
+        actualSettlementPaise,
+        paymentRoundOffPaise:
+            roundedPayablePaise - actualSettlementPaise
+    };
+
+}
+
 function calculatePayment(){
 
     const cash =
@@ -5853,10 +5894,10 @@ function calculatePayment(){
     const giftVoucherAmount =
         Number(giftVoucherAppliedAmount) || 0;
 
-    const paymentNetText =
-        document
-            .getElementById("paymentNet")
-            .innerText;
+    const roundedPayable = document
+        .getElementById("paymentNet")
+        .innerText
+        .replace(/[^0-9.-]/g, "");
 
     const valuesPaise = [
         paymentValueToPaise(cash),
@@ -5866,30 +5907,40 @@ function calculatePayment(){
         paymentValueToPaise(giftVoucherAmount)
     ];
 
-    const payablePaise = paymentValueToPaise(
-        paymentNetText.replace(/[^0-9.-]/g, "")
+    const roundedPayablePaise = paymentValueToPaise(
+        roundedPayable
     );
 
     const validAmounts =
-        payablePaise !== null &&
+        roundedPayablePaise !== null &&
         valuesPaise.every(value => value !== null);
 
-    const settlementPaise = validAmounts
-        ? valuesPaise.reduce((total, value) => total + value, 0)
-        : 0;
+    const settlement = validAmounts
+        ? getPaymentSettlementState({
+            roundedPayablePaise,
+            cashPaise: valuesPaise[0],
+            upiPaise: valuesPaise[1],
+            cardPaise: valuesPaise[2],
+            storeCreditPaise: valuesPaise[3],
+            giftVoucherPaise: valuesPaise[4]
+        })
+        : null;
+
+    const customerTendersWholeRupees = validAmounts &&
+        valuesPaise.slice(0, 3).every(value => value % 100 === 0);
 
     const label =
         document.getElementById("balanceLabel");
 
     document.getElementById("totalReceived").innerText =
-        formatPaymentPaise(settlementPaise);
+        formatPaymentPaise(settlement ? settlement.actualSettlementPaise : 0);
 
-    const differencePaise = validAmounts
-        ? settlementPaise - payablePaise
+    const differencePaise = settlement
+        ? settlement.customerTenderPaise - settlement.customerTenderRequiredPaise
         : 0;
 
     document.getElementById("balanceAmount").innerText =
-        formatPaymentPaise(differencePaise);
+        formatWholeRupeePaymentPaise(differencePaise);
 
     if (differencePaise < 0) {
 
@@ -5911,7 +5962,23 @@ function calculatePayment(){
     }
 
     const enable =
-        validAmounts && differencePaise === 0;
+        Boolean(settlement) &&
+        customerTendersWholeRupees &&
+        differencePaise === 0;
+
+    const paymentRoundOffRow =
+        document.getElementById("paymentRoundOffRow");
+    const paymentRoundOffAmount =
+        document.getElementById("paymentRoundOffAmount");
+
+    if (paymentRoundOffRow && paymentRoundOffAmount) {
+        const showRoundOff = enable && settlement.paymentRoundOffPaise !== 0;
+        paymentRoundOffRow.style.display = showRoundOff ? "flex" : "none";
+        paymentRoundOffAmount.innerText = showRoundOff
+            ? `${settlement.paymentRoundOffPaise > 0 ? "+" : "-"}` +
+                formatPaymentPaise(settlement.paymentRoundOffPaise)
+            : formatPaymentPaise(0);
+    }
 
     document.getElementById("saveBillBtn").disabled =
         !enable;
@@ -7304,7 +7371,7 @@ correctPaymentBtn.onclick = () => {
 
 };
 
-function calculatePaymentTotal(){
+function calculatePaymentTotalLegacy(){
 
 const total =
 
@@ -7355,6 +7422,54 @@ paymentTotal.textContent =
         savePaymentCorrectionBtn.disabled = false;
 
     }
+
+}
+
+function calculatePaymentTotal(){
+
+    const cashPaise = paymentValueToPaise(paymentCash.value);
+    const upiPaise = paymentValueToPaise(paymentUpi.value);
+    const cardPaise = paymentValueToPaise(paymentCard.value);
+    const roundedPayablePaise = paymentValueToPaise(
+        currentViewedBill && currentViewedBill.net_amount
+    );
+    const storeCreditPaise = paymentValueToPaise(
+        currentViewedBill && currentViewedBill.store_credit_amount
+    );
+    const giftVoucherPaise = paymentValueToPaise(
+        currentViewedBill && currentViewedBill.gift_voucher_amount
+    );
+
+    const settlement = [
+        cashPaise,
+        upiPaise,
+        cardPaise,
+        roundedPayablePaise,
+        storeCreditPaise,
+        giftVoucherPaise
+    ].every(value => value !== null)
+        ? getPaymentSettlementState({
+            roundedPayablePaise,
+            storeCreditPaise,
+            giftVoucherPaise,
+            cashPaise,
+            upiPaise,
+            cardPaise
+        })
+        : null;
+
+    if (!paymentTotal) return;
+
+    const wholeRupeeTenders = [cashPaise, upiPaise, cardPaise]
+        .every(value => value !== null && value % 100 === 0);
+    const valid = Boolean(settlement) && wholeRupeeTenders &&
+        settlement.customerTenderPaise === settlement.customerTenderRequiredPaise;
+
+    paymentTotal.textContent = settlement
+        ? `Customer Tender : ${formatPaymentPaise(settlement.customerTenderPaise)}`
+        : "Customer Tender : Invalid";
+    paymentTotal.style.color = valid ? "green" : "red";
+    savePaymentCorrectionBtn.disabled = !valid;
 
 }
 
@@ -7420,13 +7535,30 @@ const upi =
 const card =
     Number(paymentCard.value);
 
-const total =
-    cash + upi + card;
+const correctionPaise = [cash, upi, card].map(paymentValueToPaise);
+const correctionSettlement = correctionPaise.every(value => value !== null)
+    ? getPaymentSettlementState({
+        roundedPayablePaise: paymentValueToPaise(currentViewedBill.net_amount),
+        storeCreditPaise: paymentValueToPaise(
+            currentViewedBill.store_credit_amount
+        ),
+        giftVoucherPaise: paymentValueToPaise(
+            currentViewedBill.gift_voucher_amount
+        ),
+        cashPaise: correctionPaise[0],
+        upiPaise: correctionPaise[1],
+        cardPaise: correctionPaise[2]
+    })
+    : null;
 
-// ADD THIS BLOCK HERE
-if (Math.abs(total - currentViewedBill.net_amount) > 0.01){
+if (
+    !correctionSettlement ||
+    correctionPaise.some(value => value % 100 !== 0) ||
+    correctionSettlement.customerTenderPaise !==
+        correctionSettlement.customerTenderRequiredPaise
+){
 
-    alert("Payment total must equal Net Amount.");
+    alert("Payment total must equal the required whole-rupee customer tender.");
 
     return;
 

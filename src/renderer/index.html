@@ -671,7 +671,7 @@ maxlength="4">
                 id="paymentCash"
                 type="number"
                 min="0"
-                step="0.01">
+                step="1">
 
         </div>
 
@@ -683,7 +683,7 @@ maxlength="4">
                 id="paymentUpi"
                 type="number"
                 min="0"
-                step="0.01">
+                step="1">
 
         </div>
 
@@ -695,7 +695,7 @@ maxlength="4">
                 id="paymentCard"
                 type="number"
                 min="0"
-                step="0.01">
+                step="1">
 
         </div>
 
@@ -1044,7 +1044,7 @@ maxlength="4">
                 id="cashAmount"
                 value="0"
                 min="0"
-                step="0.01"
+                step="1"
             >
 
             <label for="upiAmount"> 📱 UPI 📱 </label>
@@ -1054,7 +1054,7 @@ maxlength="4">
                 id="upiAmount"
                 value="0"
                 min="0"
-                step="0.01"
+                step="1"
                 autocomplete="off"
             >
 
@@ -1065,7 +1065,7 @@ maxlength="4">
                 id="cardAmount"
                 value="0"
                 min="0"
-                step="0.01"
+                step="1"
                 autocomplete="off"
             >
 
@@ -1168,6 +1168,15 @@ maxlength="4">
                     ₹0.00
                 </span>
 
+            </div>
+
+            <div
+                id="paymentRoundOffRow"
+                class="summary-line"
+                style="display:none;"
+            >
+                Payment Round Off
+                <span id="paymentRoundOffAmount">₹0.00</span>
             </div>
 
 <div class="payment-buttons">

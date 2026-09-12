@@ -14,6 +14,10 @@ const {
 
 } = require("./logService");
 
+const {
+    calculatePaymentSettlement
+} = require("../shared/paymentSettlement");
+
 function billAmountToPaise(value, fieldName, optional = false) {
 
     if (optional && (value === null || value === undefined)) {
@@ -48,6 +52,16 @@ function billAmountToPaise(value, fieldName, optional = false) {
 
 }
 
+function requireWholeRupeeTender(paise, fieldName) {
+
+    if (paise % 100 !== 0) {
+        const error = new Error(`${fieldName} amount must be a whole rupee amount.`);
+        error.code = "KLBS_BILL_SETTLEMENT_INVALID_AMOUNT";
+        throw error;
+    }
+
+}
+
 function validateBillSettlement(billData) {
 
     const hasNestedStoreCredit = Boolean(billData.store_credit);
@@ -57,6 +71,10 @@ function validateBillSettlement(billData) {
 
     const amounts = {
         netPaise: billAmountToPaise(billData.net_amount, "Net Amount"),
+        exactNetPaise: billAmountToPaise(
+            billData.exact_net_amount ?? billData.net_amount,
+            "Exact Net Amount"
+        ),
         cashPaise: billAmountToPaise(billData.cash_amount, "Cash"),
         upiPaise: billAmountToPaise(billData.upi_amount, "UPI"),
         cardPaise: billAmountToPaise(billData.card_amount, "Card"),
@@ -74,23 +92,42 @@ function validateBillSettlement(billData) {
         )
     };
 
-    const settlementPaise = [
-        amounts.cashPaise,
-        amounts.upiPaise,
-        amounts.cardPaise,
-        amounts.storeCreditPaise,
-        amounts.giftVoucherPaise
-    ].reduce((total, amount) => {
-        const result = total + amount;
-        if (!Number.isSafeInteger(result)) {
-            const error = new Error("Invalid total payment allocation.");
-            error.code = "KLBS_BILL_SETTLEMENT_INVALID_AMOUNT";
-            throw error;
-        }
-        return result;
-    }, 0);
+    requireWholeRupeeTender(amounts.cashPaise, "Cash");
+    requireWholeRupeeTender(amounts.upiPaise, "UPI");
+    requireWholeRupeeTender(amounts.cardPaise, "Card");
 
-    const differencePaise = amounts.netPaise - settlementPaise;
+    if (
+        hasNestedStoreCredit &&
+        amounts.storeCreditPaise > amounts.exactNetPaise
+    ) {
+        const error = new Error(
+            "Store Credit redemption failed. The full active balance exceeds the bill payable amount."
+        );
+        error.code = "KLBS_STORE_CREDIT_EXCEEDS_PAYABLE";
+        throw error;
+    }
+
+    let settlement;
+
+    try {
+        settlement = calculatePaymentSettlement({
+            roundedPayablePaise: amounts.netPaise,
+            storeCreditPaise: amounts.storeCreditPaise,
+            giftVoucherPaise: amounts.giftVoucherPaise,
+            cashPaise: amounts.cashPaise,
+            upiPaise: amounts.upiPaise,
+            cardPaise: amounts.cardPaise
+        });
+    }
+    catch (_) {
+        const error = new Error("Invalid total payment allocation.");
+        error.code = "KLBS_BILL_SETTLEMENT_INVALID_AMOUNT";
+        throw error;
+    }
+
+    const differencePaise =
+        settlement.customerTenderRequiredPaise - settlement.customerTenderPaise;
+
     if (differencePaise !== 0) {
         const difference = (Math.abs(differencePaise) / 100).toFixed(2);
         const error = new Error(
@@ -105,7 +142,7 @@ function validateBillSettlement(billData) {
 
     return {
         ...amounts,
-        settlementPaise,
+        ...settlement,
         differencePaise
     };
 
@@ -235,6 +272,11 @@ function resolveAuthoritativeBillData(billData) {
                 billData.cgst_amount = Number((totals.gst / 2).toFixed(2));
                 billData.sgst_amount = Number((totals.gst / 2).toFixed(2));
                 billData.gst_amount = Number(totals.gst.toFixed(2));
+                billData.exact_net_amount =
+                    billAmountToPaise(
+                        totals.net,
+                        "Net Amount"
+                    ) / 100;
                 billData.net_amount = Math.round(totals.net);
 
                 resolve();
@@ -399,6 +441,7 @@ function saveBill(billData) {
                         }
 
                         billData.net_amount = settlement.netPaise / 100;
+                        delete billData.exact_net_amount;
                         billData.cash_amount = settlement.cashPaise / 100;
                         billData.upi_amount = settlement.upiPaise / 100;
                         billData.card_amount = settlement.cardPaise / 100;
@@ -1385,7 +1428,9 @@ function updatePaymentAllocation(data) {
                     cash_amount,
                     upi_amount,
                     card_amount,
-                    net_amount
+                    net_amount,
+                    store_credit_amount,
+                    gift_voucher_amount
                 FROM bills
                 WHERE bill_no = ?
                 `,
@@ -1416,9 +1461,17 @@ function updatePaymentAllocation(data) {
 
                     try {
 
-                        billAmountToPaise(data.cash_amount, "Cash");
-                        billAmountToPaise(data.upi_amount, "UPI");
-                        billAmountToPaise(data.card_amount, "Card");
+                        const cashPaise = billAmountToPaise(data.cash_amount, "Cash");
+                        const upiPaise = billAmountToPaise(data.upi_amount, "UPI");
+                        const cardPaise = billAmountToPaise(data.card_amount, "Card");
+
+                        requireWholeRupeeTender(cashPaise, "Cash");
+                        requireWholeRupeeTender(upiPaise, "UPI");
+                        requireWholeRupeeTender(cardPaise, "Card");
+
+                        data.cash_amount = cashPaise / 100;
+                        data.upi_amount = upiPaise / 100;
+                        data.card_amount = cardPaise / 100;
 
                     }
                     catch (validationError) {
@@ -1454,25 +1507,45 @@ function updatePaymentAllocation(data) {
 
 }
 
-                    const total =
+                    let settlement;
 
-                        Number(data.cash_amount) +
-                        Number(data.upi_amount) +
-                        Number(data.card_amount);
+                    try {
+                        settlement = calculatePaymentSettlement({
+                            roundedPayablePaise: billAmountToPaise(
+                                bill.net_amount,
+                                "Net Amount"
+                            ),
+                            storeCreditPaise: billAmountToPaise(
+                                bill.store_credit_amount,
+                                "Store Credit",
+                                true
+                            ),
+                            giftVoucherPaise: billAmountToPaise(
+                                bill.gift_voucher_amount,
+                                "Gift Voucher",
+                                true
+                            ),
+                            cashPaise: billAmountToPaise(data.cash_amount, "Cash"),
+                            upiPaise: billAmountToPaise(data.upi_amount, "UPI"),
+                            cardPaise: billAmountToPaise(data.card_amount, "Card")
+                        });
+                    }
+                    catch (validationError) {
+                        db.run("ROLLBACK");
+                        reject(validationError);
+                        return;
+                    }
 
                     if (
-
-                        Math.abs(
-                            total - Number(bill.net_amount)
-                        ) > 0.01
-
+                        settlement.customerTenderPaise !==
+                        settlement.customerTenderRequiredPaise
                     ) {
 
                         db.run("ROLLBACK");
 
                         reject(
                             new Error(
-                                "Payment total does not match Bill Amount."
+                                "Payment total does not match the required customer tender."
                             )
                         );
 

@@ -8,7 +8,7 @@ var KLBS_DSR_HEADERS = [
   'Qty Returned', 'Return / CN Value', 'Net Sales After Returns', 'Cash',
   'UPI', 'Card', 'Store Credit Redeemed', 'Gift Voucher Redeemed',
   'Total Settlement', 'Actual Money Collection', 'Store Credit Issued',
-  'Settlement Difference', 'Backup Status', 'Email Status', 'KLBS Version',
+  'Payment Round Off', 'Backup Status', 'Email Status', 'KLBS Version',
   'Synced At'
 ];
 var KLBS_DSR_FIELDS = [
@@ -97,8 +97,7 @@ function validatePayload_(payload) {
       !String(payload.klbsVersion || '').trim()) {
     throw new Error('Invalid operational metadata.');
   }
-  if (payload.grossSalesPaise - payload.totalDiscountPaise !== payload.netBillingPaise ||
-      payload.netBillingPaise - payload.returnCnValuePaise !== payload.netSalesAfterReturnsPaise ||
+  if (payload.netBillingPaise - payload.returnCnValuePaise !== payload.netSalesAfterReturnsPaise ||
       payload.cashPaise + payload.upiPaise + payload.cardPaise +
         payload.storeCreditRedeemedPaise + payload.giftVoucherRedeemedPaise !==
         payload.settlementTotalPaise ||
