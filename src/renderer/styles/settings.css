@@ -1633,6 +1633,27 @@ body{
     white-space:nowrap;
 }
 
+/* ---------------------------------------------------------
+   OPERATIONS EMPHASIS
+   --------------------------------------------------------- */
+
+.dc-card-operations .dc-row{
+    min-height:48px;
+    padding:10px 16px;
+}
+
+.dc-card-operations .dc-row span{
+    font-size:16px;
+    line-height:1.5;
+    font-weight:600;
+}
+
+.dc-card-operations .dc-row strong{
+    font-size:18px;
+    line-height:1.5;
+    font-weight:800;
+}
+
 
 /* ---------------------------------------------------------
    IMPORTANT TOTAL ROWS
