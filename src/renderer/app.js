@@ -5319,6 +5319,7 @@ if (tableHead) {
                 <th>Barcode</th>
                 <th>Product</th>
                 <th>Size</th>
+                <th>Colour</th>
                 <th>Brand</th>
                 <th>Original Qty</th>
 <!--
@@ -5339,6 +5340,7 @@ if (tableHead) {
                 <th>Barcode</th>
                 <th>Product</th>
                 <th>Size</th>
+                <th>Colour</th>
                 <th>Brand</th>
                 <th>Qty</th>
                 <th>MRP</th>
@@ -5374,6 +5376,8 @@ if (saleType === "RETURN") {
 <td>${item.product_name}</td>
 
 <td>${item.size}</td>
+
+<td>${item.colour || "-"}</td>
 
 <td>${item.brand}</td>
 
@@ -5415,6 +5419,8 @@ if (saleType === "RETURN") {
 <td>${item.product_name}</td>
 
 <td>${item.size}</td>
+
+<td>${item.colour || "-"}</td>
 
 <td>${item.brand}</td>
 
@@ -6910,6 +6916,8 @@ details.items.forEach(item => {
     <td>${item.product_name}</td>
 
     <td>${item.size}</td>
+
+    <td>${item.colour || "-"}</td>
 
     <td>${item.qty}</td>
 

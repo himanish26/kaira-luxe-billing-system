@@ -275,6 +275,7 @@ function renderInventoryProducts(products) {
             <td>${product.collection || ""}</td>
             <td>${product.product_name}</td>
             <td>${product.size}</td>
+            <td>${product.colour || "-"}</td>
             <td>${product.current_stock ?? product.opening_stock ?? 0}</td>
             <td>₹${Number(product.mrp).toFixed(2)}</td>
             <td>${Number(product.discount || 0)}%</td>

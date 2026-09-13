@@ -1328,6 +1328,28 @@
     background-color: #0b610b !important;
 }
 
+#saveBillBtn:disabled,
+#printBillBtn:disabled {
+    background-color: #c7cbd1 !important;
+    color: #68707a !important;
+    border: 2px solid #b5bbc3 !important;
+    cursor: not-allowed !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+#saveBillBtn:not(:disabled),
+#printBillBtn:not(:disabled) {
+    transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+#saveBillBtn:not(:disabled):hover,
+#printBillBtn:not(:disabled):hover {
+    background-color: #0b610b !important;
+    box-shadow: 0 4px 10px rgba(15, 123, 15, 0.22);
+    transform: translateY(-1px);
+}
+
 /* =====================================
    FAMILY & FRIENDS DISCOUNT POPUP
 ===================================== */
