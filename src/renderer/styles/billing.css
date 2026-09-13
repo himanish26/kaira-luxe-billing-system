@@ -369,6 +369,26 @@
 
 }
 
+.return-qty-input{
+
+    width:90px;
+
+    min-height:46px;
+
+    padding:4px 8px;
+
+    font-size:22px;
+
+    font-weight:700;
+
+    text-align:center;
+
+    border:2px solid var(--primary);
+
+    border-radius:8px;
+
+}
+
 /* MRP */
 
 #billTable th:nth-child(6),

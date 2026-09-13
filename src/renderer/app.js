@@ -2367,6 +2367,7 @@ if (printBillBtn) {
     );
 
 }
+
 async function saveAndPrintBill(){
 
     const billData =
@@ -2378,21 +2379,47 @@ async function saveAndPrintBill(){
 
     }
 
+    const details =
+        await window.electronAPI.getBillDetails(
+            billData.bill_no
+        );
+
+    if(
+        !details ||
+        !details.bill ||
+        !Array.isArray(details.items)
+    ){
+
+        await showNativeAlert(
+            `Bill ${billData.bill_no} was saved successfully, but automatic printing could not be completed.\n\nPlease use Bill History → Reprint.`
+        );
+
+        return;
+
+    }
+
+    const persistedBillData = {
+        ...details.bill,
+        items: details.items
+    };
+
     const result =
-        await window.electronAPI.printBill(billData);
+        await window.electronAPI.printBill(
+            persistedBillData
+        );
 
-        if(result.success){
+    if(result.success){
 
-    await showNativeAlert(
-        `Bill No.: ${billData.bill_no}\n\nPrinted Successfully.`,
-    );
+        await showNativeAlert(
+            `Bill No.: ${billData.bill_no}\n\nPrinted Successfully.`,
+        );
 
-}
-else{
+    }
+    else{
 
-    await showNativeAlert(result.error);
+        await showNativeAlert(result.error);
 
-}
+    }
 
 }
 
@@ -5396,7 +5423,7 @@ if (saleType === "RETURN") {
     min="0"
     max="${Number(item.available_qty || 0)}"
     value="${item.qty}"
-    class="qty-input"
+    class="qty-input return-qty-input"
     onchange="updateQuantity(${index}, this.value)"
 >
 
