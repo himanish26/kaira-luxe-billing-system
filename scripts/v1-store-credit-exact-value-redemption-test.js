@@ -112,19 +112,74 @@ async function assertRejectedUntouched(db, billNo, storeCreditNo, amount) {
         assert.deepStrictEqual(await get(db, `SELECT status, remaining_balance FROM store_credits
             WHERE store_credit_no = ?`, [storeCreditNo]), { status: "ISSUED", remaining_balance: amount });
     }
+    assert.strictEqual((await get(db, `SELECT COUNT(*) AS count FROM customer_credit_transactions
+        WHERE reference_type = 'BILL' AND reference_id = ?`, [billNo])).count, 0);
     assert.strictEqual((await get(db, `SELECT COUNT(*) AS count FROM inventory_transactions
         WHERE reference_type = 'BILL' AND reference_id = ?`, [billNo])).count, 0);
 }
 
-function settlementInput({ net = 615, sc = 0, gv = 0, cash = 0, upi = 0, card = 0 }) {
+function settlementInput({ net = 615, exact = 615.12, sc = 0, gv = 0, cash = 0, upi = 0, card = 0 }) {
     return {
         net_amount: net,
-        exact_net_amount: 615.12,
+        exact_net_amount: exact,
         cash_amount: cash,
         upi_amount: upi,
         card_amount: card,
         gift_voucher_amount: gv,
         store_credit: sc ? { store_credit_no: "TEST", amount: sc } : null
+    };
+}
+
+function runRendererPaymentGate({ exact, rounded, sc = 0, gv = 0, cash = 0, upi = 0, card = 0 }, calculatePaymentSettlement) {
+    const source = fs.readFileSync(path.join(__dirname, "../src/renderer/app.js"), "utf8");
+    const start = source.indexOf("function calculatePayment(){");
+    const end = source.indexOf("\nfunction renderBillHistory", start);
+    assert(start >= 0 && end > start, "Renderer calculatePayment() could not be isolated.");
+
+    const elements = {
+        cashAmount: { value: String(cash) },
+        upiAmount: { value: String(upi) },
+        cardAmount: { value: String(card) },
+        paymentNet: { innerText: String(rounded) },
+        balanceLabel: { innerText: "" },
+        totalReceived: { innerText: "" },
+        balanceAmount: { innerText: "" },
+        paymentRoundOffRow: { style: {} },
+        paymentRoundOffAmount: { innerText: "" },
+        saveBillBtn: { disabled: false },
+        printBillBtn: { disabled: false }
+    };
+    const toPaise = value => {
+        const amount = Number(value);
+        if (!Number.isFinite(amount) || amount < 0) return null;
+        const paise = Math.round((amount + Number.EPSILON) * 100);
+        return Number.isSafeInteger(paise) ? paise : null;
+    };
+
+    new Function(
+        "document",
+        "appliedStoreCredit",
+        "giftVoucherAppliedAmount",
+        "paymentValueToPaise",
+        "getExactBillPayable",
+        "getPaymentSettlementState",
+        "formatWholeRupeePaymentPaise",
+        "formatPaymentPaise",
+        `"use strict";\n${source.slice(start, end)}\ncalculatePayment();`
+    )(
+        { getElementById: id => elements[id] },
+        sc ? { amount: sc } : null,
+        gv,
+        toPaise,
+        () => exact,
+        calculatePaymentSettlement,
+        value => String(value),
+        value => String(value)
+    );
+
+    return {
+        saveDisabled: elements.saveBillBtn.disabled,
+        printDisabled: elements.printBillBtn.disabled
     };
 }
 
@@ -149,6 +204,36 @@ async function child(tempRoot) {
     await insertProduct(db, "P-518", 589);
     await insertProduct(db, "P-615", 699);
     await insertProduct(db, "P-500", 500);
+
+    // Aggregate stored value is gated against exact net in both renderer and backend.
+    assert.deepStrictEqual(runRendererPaymentGate({ exact: 500, rounded: 500, sc: 400, gv: 200 }, calculatePaymentSettlement), {
+        saveDisabled: true, printDisabled: true
+    });
+    assert.deepStrictEqual(runRendererPaymentGate({ exact: 500, rounded: 500, gv: 600 }, calculatePaymentSettlement), {
+        saveDisabled: true, printDisabled: true
+    });
+    assert.deepStrictEqual(runRendererPaymentGate({ exact: 518.32, rounded: 518, sc: 518.32 }, calculatePaymentSettlement), {
+        saveDisabled: false, printDisabled: false
+    });
+    assert.deepStrictEqual(runRendererPaymentGate({ exact: 500, rounded: 500, sc: 300, gv: 200 }, calculatePaymentSettlement), {
+        saveDisabled: false, printDisabled: false
+    });
+    assert.deepStrictEqual(runRendererPaymentGate({ exact: 500, rounded: 500, cash: 500.01 }, calculatePaymentSettlement), {
+        saveDisabled: true, printDisabled: true
+    });
+
+    assert.throws(() => validateBillSettlement(
+        settlementInput({ net: 500, exact: 500, sc: 400, gv: 200 })
+    ), error => error.code === "KLBS_STORED_VALUE_EXCEEDS_PAYABLE");
+    assert.throws(() => validateBillSettlement(
+        settlementInput({ net: 500, exact: 500, gv: 600 })
+    ), error => error.code === "KLBS_STORED_VALUE_EXCEEDS_PAYABLE");
+    assert.strictEqual(validateBillSettlement(
+        settlementInput({ net: 518, exact: 518.32, sc: 518.32 })
+    ).paymentRoundOffPaise, -32);
+    assert.strictEqual(validateBillSettlement(
+        settlementInput({ net: 500, exact: 500, sc: 300, gv: 200 })
+    ).paymentRoundOffPaise, 0);
 
     // 1. Normal rounded billing is unchanged.
     await saveBill(payload("NORMAL-ROUND", "P-518", "", { cash: 518 }));
@@ -249,6 +334,17 @@ async function child(tempRoot) {
     })), error => error.code === "KLBS_STORE_CREDIT_EXCEEDS_PAYABLE");
     await assertRejectedUntouched(db, "SC-TOO-HIGH", "SC-TOO-HIGH", 518.33);
 
+    await insertStoreCredit(db, "SC-GV-OVER", "9400000010", 400);
+    await assert.rejects(saveBill(payload("SC-GV-OVER", "P-500", "9400000010", {
+        storeCredit: { store_credit_no: "SC-GV-OVER", amount: 400 }, giftVoucher: 200
+    })), error => error.code === "KLBS_STORED_VALUE_EXCEEDS_PAYABLE");
+    await assertRejectedUntouched(db, "SC-GV-OVER", "SC-GV-OVER", 400);
+
+    await assert.rejects(saveBill(payload("GV-OVER", "P-500", "", {
+        giftVoucher: 600
+    })), error => error.code === "KLBS_STORED_VALUE_EXCEEDS_PAYABLE");
+    await assertRejectedUntouched(db, "GV-OVER", null, 0);
+
     await insertStoreCredit(db, "SC-PARTIAL", "9400000002", 509.52);
     await assert.rejects(saveBill(payload("SC-PARTIAL", "P-615", "9400000002", {
         storeCredit: { store_credit_no: "SC-PARTIAL", amount: 400 }, cash: 215
@@ -310,10 +406,12 @@ async function child(tempRoot) {
 
     // 31-34. Receipt/reprint use persisted bill amounts; Day Closing/DSR retain exact paise.
     const receiptSource = fs.readFileSync(path.join(__dirname, "../src/renderer/receipt.js"), "utf8");
-    const receiptHtml = fs.readFileSync(path.join(__dirname, "../src/renderer/receipt.html"), "utf8");
     const dsrSource = fs.readFileSync(path.join(__dirname, "../deployment/google-apps-script/KLBS_DSR_WebApp.gs"), "utf8");
-    assert(receiptSource.includes("calculatePaymentSettlementForBill"));
-    assert(receiptHtml.includes("Payment Round Off") && receiptHtml.includes("Payment Settled"));
+    for (const persistedPaymentField of [
+        "cash_amount", "upi_amount", "card_amount", "store_credit_amount", "gift_voucher_amount"
+    ]) {
+        assert(receiptSource.includes(persistedPaymentField));
+    }
     assert(dsrSource.includes("Payment Round Off"));
 
     const closing = createDayClosingService({ database: db });

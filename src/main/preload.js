@@ -225,6 +225,12 @@ reprintStoreCredit: (storeCreditNo) =>
         snapshotId
 
     ),
+    dayClosingHistory: {
+        listDates: () => ipcRenderer.invoke("day-closing-history:list-dates"),
+        listForDate: businessDate => ipcRenderer.invoke("day-closing-history:list-for-date", businessDate),
+        getSnapshot: snapshotId => ipcRenderer.invoke("day-closing-history:get-snapshot", snapshotId),
+        printSnapshot: snapshotId => ipcRenderer.invoke("day-closing-history:print", snapshotId)
+    },
     testPrinter: (printerName) => ipcRenderer.invoke("printer:test", printerName),
 
         saveBillPdf: (billData) =>

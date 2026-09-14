@@ -64,6 +64,23 @@ function createIntegrationOutboxService(options = {}) {
             if (inserted.changes > 0) await recordActivity(type, "PENDING", businessDate);
         }
     }
+    async function recoverStaleProcessing() {
+        const cutoff = now().getTime() - RETRY_COOLDOWN_MS;
+        const processingRows = await all(`
+            SELECT id, last_attempt_at
+            FROM integration_outbox
+            WHERE status = 'PROCESSING' AND last_attempt_at IS NOT NULL
+        `);
+        for (const row of processingRows) {
+            const lastAttemptAt = Date.parse(row.last_attempt_at);
+            if (!Number.isFinite(lastAttemptAt) || lastAttemptAt >= cutoff) continue;
+            await run(`
+                UPDATE integration_outbox
+                SET status = 'PENDING', completed_at = NULL
+                WHERE id = ? AND status = 'PROCESSING' AND last_attempt_at = ?
+            `, [row.id, row.last_attempt_at]);
+        }
+    }
     function snapshotToEmailSummary(row) { const money = key => row[key] == null ? null : Number(row[key]) / 100; return { businessDate: formatBusinessDateDisplay(row.business_date), totalBills: row.total_bills, qtySold: row.qty_sold, grossSales: money("gross_sales_paise"), totalDiscount: money("total_discount_paise"), netBilling: money("net_billing_paise"), creditNoteCount: row.credit_note_count, qtyReturned: row.qty_returned, returnCnValue: money("return_cn_value_paise"), netSalesAfterReturns: money("net_sales_after_returns_paise"), cash: money("cash_paise"), upi: money("upi_paise"), card: money("card_paise"), storeCreditRedeemed: money("store_credit_redeemed_paise"), giftVoucherRedeemed: money("gift_voucher_redeemed_paise"), actualMoneyCollection: money("actual_money_collection_paise"), storeCreditIssued: money("store_credit_issued_paise"), settlementDifference: money("settlement_difference_paise"), backupStatus: row.backup_status, backupReference: row.backup_reference }; }
     async function getStaleReason(item) {
         const snapshot = await get("SELECT * FROM day_closing_snapshots WHERE id=?", [item.closing_id]);
@@ -95,7 +112,7 @@ function createIntegrationOutboxService(options = {}) {
             return true;
         } catch (error) { await run("UPDATE integration_outbox SET status='PENDING', last_error=? WHERE id=?", [String(error.message || "Delivery failed").replace(/https?:\/\/\S+/gi, "[ENDPOINT]").slice(0, 500), item.id]); return false; }
     }
-    async function drain() { if (drainInFlight) return drainInFlight; drainInFlight = (async () => { const blockedIds = new Set(); while (true) { const excluded = [...blockedIds].map(() => "?").join(","); const item = await get(`SELECT * FROM integration_outbox WHERE status='PENDING' ${excluded ? `AND id NOT IN (${excluded})` : ""} ORDER BY business_date, id LIMIT 1`, [...blockedIds]); if (!item) break; const staleReason = await getStaleReason(item); if (staleReason) { await markStale(item, staleReason); continue; } const currentTime = now().getTime(); const lastAttemptTime = item.last_attempt_at ? Date.parse(item.last_attempt_at) : NaN; if (Number.isFinite(lastAttemptTime) && currentTime - lastAttemptTime < RETRY_COOLDOWN_MS) { blockedIds.add(item.id); continue; } if (!(await processOne(item))) blockedIds.add(item.id); } })().finally(() => { drainInFlight = null; }); return drainInFlight; }
+    async function drain() { if (drainInFlight) return drainInFlight; drainInFlight = (async () => { await recoverStaleProcessing(); const blockedIds = new Set(); while (true) { const excluded = [...blockedIds].map(() => "?").join(","); const item = await get(`SELECT * FROM integration_outbox WHERE status='PENDING' ${excluded ? `AND id NOT IN (${excluded})` : ""} ORDER BY business_date, id LIMIT 1`, [...blockedIds]); if (!item) break; const staleReason = await getStaleReason(item); if (staleReason) { await markStale(item, staleReason); continue; } const currentTime = now().getTime(); const lastAttemptTime = item.last_attempt_at ? Date.parse(item.last_attempt_at) : NaN; if (Number.isFinite(lastAttemptTime) && currentTime - lastAttemptTime < RETRY_COOLDOWN_MS) { blockedIds.add(item.id); continue; } if (!(await processOne(item))) blockedIds.add(item.id); } })().finally(() => { drainInFlight = null; }); return drainInFlight; }
     async function getStatusView() { const rows = await all("SELECT business_date, delivery_type, status FROM integration_outbox ORDER BY business_date, delivery_type"); const byDate = new Map(); for (const row of rows) { if (!byDate.has(row.business_date)) byDate.set(row.business_date, { businessDate: row.business_date, emailStatus: "PENDING", dsrStatus: "PENDING" }); const group = byDate.get(row.business_date); const status = row.status === "SUCCESS" ? "SUCCESS" : "PENDING"; if (row.delivery_type === "EMAIL_DAY_CLOSING") group.emailStatus = status; else if (row.delivery_type === "DSR_DAY_CLOSING") group.dsrStatus = status; } const deliveries = [...byDate.values()].filter(item => item.emailStatus !== "SUCCESS" || item.dsrStatus !== "SUCCESS"); return { pendingCount: rows.filter(row => row.status !== "SUCCESS").length, deliveries }; }
     return { enqueue, drain, list: () => all("SELECT * FROM integration_outbox ORDER BY business_date, id"), getStatusView };
 }

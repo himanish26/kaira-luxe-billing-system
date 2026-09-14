@@ -107,6 +107,18 @@ function validateBillSettlement(billData) {
         throw error;
     }
 
+    if (
+        amounts.storeCreditPaise +
+        amounts.giftVoucherPaise >
+        amounts.exactNetPaise
+    ) {
+        const error = new Error(
+            "Store Credit and Gift Voucher total exceeds the bill payable amount."
+        );
+        error.code = "KLBS_STORED_VALUE_EXCEEDS_PAYABLE";
+        throw error;
+    }
+
     let settlement;
 
     try {

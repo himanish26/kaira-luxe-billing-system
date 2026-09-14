@@ -87,12 +87,12 @@ function randomBinary(length) {
 
 function updateTelemetry() {
     document.getElementById("telemetryLine").textContent =
-        `SYS ${randomBinary(8)} ${randomBinary(8)} · ` +
-        `IDX ${randomHex(4)}:${randomHex(4)}:${randomHex(4)} · ` +
-        `BUS ${randomHex(4)} · ` +
-        `MEM ${randomHex(4)} · ` +
-        `IO ${randomHex(2)}:${randomHex(2)} · ` +
-        `DB ${randomHex(4)}`;
+        `SYS ${randomBinary(8)}  ` +
+        `IDX ${randomHex(4)}:${randomHex(4)}:${randomHex(4)}  ` +
+        `BUS ${randomHex(4)}  ` +
+        `MEM ${randomHex(4)}  ` +
+        `IO ${randomHex(2)}:${randomHex(2)}  ` +
+        `DB ${randomHex(3)}`;
 }
 
 function startPresentationMotion() {

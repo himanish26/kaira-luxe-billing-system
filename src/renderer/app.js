@@ -2002,6 +2002,24 @@ if (storeCreditBtn) {
         "click",
         () => {
 
+            if (appliedStoreCredit) {
+                appliedStoreCredit = null;
+
+                storeCreditBtn.textContent =
+                    "💳 STORE CREDIT";
+
+                if (storeCreditAppliedAmount) {
+                    storeCreditAppliedAmount.innerText =
+                        "₹0.00";
+                }
+
+                updateStoreCreditAvailabilityCard();
+                renderBill();
+                loadPaymentSummary();
+                calculatePayment();
+                return;
+            }
+
             storeCreditNumberInput.value =
                 availableStoreCredit
                     ? availableStoreCredit.store_credit_no
@@ -2315,6 +2333,9 @@ if (
             storeCreditAppliedAmount.innerText =
                 "₹" + storeCreditAmount.toFixed(2);
 
+            storeCreditBtn.textContent =
+                "💳 REMOVE STORE CREDIT";
+
             storeCreditModal.style.display =
                 "none";
 
@@ -2611,6 +2632,11 @@ gst_amount:
 appliedStoreCredit = null;
 ffAuthorizationGrant = null;
 
+if (storeCreditBtn) {
+    storeCreditBtn.textContent =
+        "💳 STORE CREDIT";
+}
+
 giftVoucherAppliedAmount = 0;
 giftVoucherAuthorizationGrant = null;
 
@@ -2628,6 +2654,8 @@ if (giftVoucherBtn) {
     giftVoucherBtn.classList.remove(
         "active"
     );
+    giftVoucherBtn.textContent =
+        giftVoucherBtn.dataset.defaultLabel || "GIFT VOUCHER";
 }
 
 availableStoreCredit = null;
@@ -3228,6 +3256,11 @@ if (
 
     appliedStoreCredit = null;
 
+    if (storeCreditBtn) {
+        storeCreditBtn.textContent =
+            "💳 STORE CREDIT";
+    }
+
     if (storeCreditAppliedAmount) {
 
         storeCreditAppliedAmount.innerText =
@@ -3613,6 +3646,10 @@ const familyFriendsBtn =
 const giftVoucherBtn =
     document.getElementById("giftVoucherBtn");
 
+if (giftVoucherBtn && !giftVoucherBtn.dataset.defaultLabel) {
+    giftVoucherBtn.dataset.defaultLabel = giftVoucherBtn.textContent;
+}
+
 function applyBillingMode(mode) {
 
     saleType = mode;
@@ -3654,9 +3691,11 @@ function applyBillingMode(mode) {
 
 
     const billingPageTitle =
-        document.querySelector(
-            ".billing-page-title"
-        );
+        newBillScreen
+            ? newBillScreen.querySelector(
+                ".billing-page-title"
+            )
+            : null;
 
     if (billingPageTitle) {
 
@@ -4088,6 +4127,30 @@ if (giftVoucherBtn) {
         "click",
         () => {
 
+            if (giftVoucherAppliedAmount > 0) {
+                giftVoucherAppliedAmount = 0;
+                giftVoucherAuthorizationGrant = null;
+                pinAuthorizationAction = null;
+
+                const giftVoucherAppliedAmountDisplay =
+                    document.getElementById("giftVoucherAppliedAmount");
+                if (giftVoucherAppliedAmountDisplay) {
+                    giftVoucherAppliedAmountDisplay.textContent = "₹0.00";
+                }
+
+                giftVoucherBtn.classList.remove("active");
+                giftVoucherBtn.textContent =
+                    giftVoucherBtn.dataset.defaultLabel || "GIFT VOUCHER";
+                if (giftVoucherDialog) {
+                    giftVoucherDialog.style.display = "none";
+                }
+
+                renderBill();
+                loadPaymentSummary();
+                calculatePayment();
+                return;
+            }
+
             /*
              * Do not allow Gift Voucher
              * without billed products.
@@ -4456,6 +4519,8 @@ if (giftVoucherCancelBtn) {
         () => {
 
             giftVoucherAmountInput.value = "";
+            giftVoucherAuthorizationGrant = null;
+            pinAuthorizationAction = null;
 
             if (giftVoucherError) {
 
@@ -4591,6 +4656,11 @@ if (giftVoucherApplyBtn) {
                 giftVoucherBtn.classList.add(
                     "active"
                 );
+                giftVoucherBtn.dataset.defaultLabel =
+                    giftVoucherBtn.dataset.defaultLabel ||
+                    giftVoucherBtn.textContent;
+                giftVoucherBtn.textContent =
+                    "REMOVE GIFT VOUCHER";
 
             }
 
@@ -5510,6 +5580,11 @@ function clearCurrentBill(){
 
 appliedStoreCredit = null;
 
+if (storeCreditBtn) {
+    storeCreditBtn.textContent =
+        "💳 STORE CREDIT";
+}
+
 giftVoucherAppliedAmount = 0;
 giftVoucherAuthorizationGrant = null;
 
@@ -5527,6 +5602,8 @@ if (giftVoucherBtn) {
     giftVoucherBtn.classList.remove(
         "active"
     );
+    giftVoucherBtn.textContent =
+        giftVoucherBtn.dataset.defaultLabel || "GIFT VOUCHER";
 }
 
 availableStoreCredit = null;
@@ -5944,6 +6021,10 @@ function calculatePayment(){
         roundedPayable
     );
 
+    const exactPayablePaise = paymentValueToPaise(
+        getExactBillPayable()
+    );
+
     const validAmounts =
         roundedPayablePaise !== null &&
         valuesPaise.every(value => value !== null);
@@ -5961,6 +6042,13 @@ function calculatePayment(){
 
     const customerTendersWholeRupees = validAmounts &&
         valuesPaise.slice(0, 3).every(value => value % 100 === 0);
+
+    const storedValueWithinExactPayable =
+        exactPayablePaise !== null &&
+        (
+            valuesPaise[3] +
+            valuesPaise[4]
+        ) <= exactPayablePaise;
 
     const label =
         document.getElementById("balanceLabel");
@@ -5997,6 +6085,7 @@ function calculatePayment(){
     const enable =
         Boolean(settlement) &&
         customerTendersWholeRupees &&
+        storedValueWithinExactPayable &&
         differencePaise === 0;
 
     const paymentRoundOffRow =
@@ -7772,6 +7861,12 @@ function hideAllScreens() {
     settingsPage.style.display = "none";
 
     document.getElementById("viewBillScreen").style.display = "none";
+
+    document.getElementById("viewStoreCreditScreen").style.display = "none";
+
+    document.getElementById("viewReturnScreen").style.display = "none";
+
+    document.getElementById("viewCreditNoteScreen").style.display = "none";
 
     resetScrollPosition();
 

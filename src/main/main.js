@@ -358,6 +358,7 @@ const {
 const {
     createDayClosingService
 } = require("../database/dayClosingService");
+const { createDayClosingHistoryService } = require("../database/dayClosingHistoryService");
 const { createDsrSyncService } = require("../services/dsrSyncService");
 const dsrSyncService = createDsrSyncService({
     configProvider: () => integrationConfig.resolveDsrRuntime()
@@ -397,6 +398,7 @@ const {
     logDsrSyncSucceeded,
     logDsrSyncFailed
 });
+const dayClosingHistory = createDayClosingHistoryService({ database });
 
 let splashShownAt = 0;
 let startupSecuritySetupInProgress = false;
@@ -3104,6 +3106,20 @@ ipcMain.handle(
 
 );
 
+
+ipcMain.handle("day-closing-history:list-dates", async () => dayClosingHistory.listSnapshotBusinessDates());
+ipcMain.handle("day-closing-history:list-for-date", async (event, businessDate) => dayClosingHistory.listSnapshotsForDate(businessDate));
+ipcMain.handle("day-closing-history:get-snapshot", async (event, snapshotId) => dayClosingHistory.getSnapshot(snapshotId));
+ipcMain.handle("day-closing-history:print", async (event, snapshotId) => {
+    const snapshot = await dayClosingHistory.getSnapshot(snapshotId);
+    if (!snapshot || snapshot.closeStatus !== "CLOSED") return { success: false, error: "A valid closed Day Closing snapshot is required for printing." };
+    const latest = await dayClosingHistory.getLatestSnapshotForDate(snapshot.businessDate);
+    if (!latest || latest.snapshotId !== snapshot.snapshotId || latest.closeSequence !== snapshot.closeSequence) {
+        return { success: false, error: "Only the final Day Closing sequence can be printed." };
+    }
+    await printDayClosingReceipt(snapshot);
+    return { success: true };
+});
 
 ipcMain.handle(
 

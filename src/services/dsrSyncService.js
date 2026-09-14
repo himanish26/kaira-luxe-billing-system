@@ -142,7 +142,7 @@ function createDsrSyncService(options = {}) {
         secret: options.secret === undefined ? process.env.KLBS_DSR_SYNC_SECRET : options.secret,
         automaticSync: true
     }));
-    const timeout = options.timeout || 9000;
+    const timeout = options.timeout || 30000;
 
     async function sync(payload) {
         try {

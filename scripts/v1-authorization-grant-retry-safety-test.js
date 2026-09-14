@@ -35,7 +35,7 @@ async function executeProtectedSave({ security, billData, saveBill }) {
     }
     catch (error) {
         if (authorizationReserved) security.releaseGrants(requirements);
-        return { success: false, error: error.message };
+        return { success: false, error: error.message, code: error.code };
     }
 }
 
@@ -97,10 +97,20 @@ async function main() {
     // F: Store Credit remains settlement-only when combined with F&F.
     assert.deepStrictEqual(billAuthorizationRequirements({ items: [{ ff_discount: 10 }], gift_voucher_amount: 0, store_credit: { store_credit_no: "SC-2", amount: 100 }, authorization: { ff: "ff-token" } }), [{ token: "ff-token", purpose: "FF" }]);
 
-    // G: Gift Voucher has the same retry/one-time lifecycle.
+    // G: aggregate-settlement rejection releases GV authorization for a corrected retry.
     const gift = await security.authorizePin("1357", "GIFT_VOUCHER");
     const giftBill = { items: [], gift_voucher_amount: 10, authorization: { giftVoucher: gift.grant } };
-    assert.strictEqual((await executeProtectedSave({ security, billData: giftBill, saveBill: async () => { throw new Error("downstream failure"); } })).success, false);
+    const rejectedGiftSave = await executeProtectedSave({
+        security,
+        billData: giftBill,
+        saveBill: async () => {
+            const error = new Error("Store Credit and Gift Voucher total exceeds the bill payable amount.");
+            error.code = "KLBS_STORED_VALUE_EXCEEDS_PAYABLE";
+            throw error;
+        }
+    });
+    assert.strictEqual(rejectedGiftSave.success, false);
+    assert.strictEqual(rejectedGiftSave.code, "KLBS_STORED_VALUE_EXCEEDS_PAYABLE");
     assert.strictEqual((await executeProtectedSave({ security, billData: giftBill, saveBill: async () => {} })).success, true);
     assert.strictEqual(security.reserveGrants([{ token: gift.grant, purpose: "GIFT_VOUCHER" }]), false);
 

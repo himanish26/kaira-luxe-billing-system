@@ -491,14 +491,20 @@ async function showDayClosingPage() {
 
                 </button>
 
+                <button id="dayClosingHistoryBtn" class="export-report-btn">
+                    DAY CLOSING HISTORY
+                </button>
+
             </div>
         `
     });
 
     const startButton = document.getElementById("startDayClosingBtn");
     const reopenButton = document.getElementById("reopenDayBtn");
+    const historyButton = document.getElementById("dayClosingHistoryBtn");
     startButton.addEventListener("click", startDayClosing);
     reopenButton.addEventListener("click", reopenBusinessDay);
+    historyButton.addEventListener("click", () => showDayClosingHistoryPage());
 
     try {
         const [summary, status] = await Promise.all([
