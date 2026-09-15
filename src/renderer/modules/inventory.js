@@ -270,6 +270,7 @@ function renderInventoryProducts(products) {
             <td>${product.barcode}</td>
             <td>${product.brand}</td>
             <td>${product.segment || ""}</td>
+            <td>${product.business_segment || ""}</td>
             <td>${product.category}</td>
             <td>${product.season || ""}</td>
             <td>${product.collection || ""}</td>

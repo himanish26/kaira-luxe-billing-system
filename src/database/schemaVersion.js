@@ -1,4 +1,4 @@
-const CURRENT_DB_SCHEMA_VERSION = 2;
+const CURRENT_DB_SCHEMA_VERSION = 3;
 const SCHEMA_METADATA_TABLE = "klbs_schema_metadata";
 
 function run(database, sql, params = []) {
@@ -88,6 +88,28 @@ function migrateAutomaticBackupSettings(database) {
     });
 }
 
+function migrateBusinessSegmentColumns(database) {
+    return Promise.all([
+        all(database, "PRAGMA table_info(products)"),
+        all(database, "PRAGMA table_info(bill_items)")
+    ]).then(async ([productColumns, billItemColumns]) => {
+        if (!productColumns.some(column => column.name === "business_segment")) {
+            await run(database, "ALTER TABLE products ADD COLUMN business_segment TEXT");
+        }
+        if (!billItemColumns.some(column => column.name === "business_segment")) {
+            await run(database, "ALTER TABLE bill_items ADD COLUMN business_segment TEXT");
+        }
+        const [products, billItems] = await Promise.all([
+            all(database, "PRAGMA table_info(products)"),
+            all(database, "PRAGMA table_info(bill_items)")
+        ]);
+        if (!products.some(column => column.name === "business_segment") ||
+            !billItems.some(column => column.name === "business_segment")) {
+            throw new Error("Business Segment schema migration verification failed.");
+        }
+    });
+}
+
 async function runForwardMigrations(database, sourceVersion, targetVersion, steps = [], logger = null) {
     if (sourceVersion === null || sourceVersion === targetVersion) return sourceVersion;
     if (!Number.isInteger(sourceVersion) || sourceVersion > targetVersion) {
@@ -166,7 +188,8 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
             throw error;
         }
         const defaultMigrations = [
-            { from: 1, to: 2, name: "automatic_backup_settings", up: migrateAutomaticBackupSettings }
+            { from: 1, to: 2, name: "automatic_backup_settings", up: migrateAutomaticBackupSettings },
+            { from: 2, to: 3, name: "business_segment_columns", up: migrateBusinessSegmentColumns }
         ];
         await runForwardMigrations(
             database,
@@ -210,5 +233,6 @@ module.exports = {
     runForwardMigrations,
     validateCurrentSchema,
     prepareDatabaseSchema,
+    migrateBusinessSegmentColumns,
     _test: { run, get, all }
 };

@@ -20,7 +20,8 @@ const technicalLogger = require("../services/technicalLogger");
 const {
     CURRENT_DB_SCHEMA_VERSION,
     SCHEMA_METADATA_TABLE,
-    prepareDatabaseSchema
+    prepareDatabaseSchema,
+    migrateBusinessSegmentColumns
 } = require("./schemaVersion");
 const {
     recoverInterruptedRestoreAtStartup,
@@ -176,7 +177,9 @@ function createTables() {
 
     supplier TEXT,
 
-    active INTEGER DEFAULT 1
+    active INTEGER DEFAULT 1,
+
+    business_segment TEXT
 
 )
         `);
@@ -267,7 +270,9 @@ function createTables() {
 
     gst_amount REAL,
 
-    net_amount REAL
+    net_amount REAL,
+
+    business_segment TEXT
 
 )
         `);
@@ -2979,6 +2984,8 @@ try {
         await runNamedMigration("bill_payment", () => migrateBillPaymentColumns());
 
         await runNamedMigration("opening_stock", () => initializeOpeningStock());
+
+        await runNamedMigration("business_segment_columns", () => migrateBusinessSegmentColumns(db));
             }
         });
 

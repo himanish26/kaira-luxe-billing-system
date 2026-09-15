@@ -40,7 +40,9 @@ CREATE TABLE products (
 
     supplier TEXT,
 
-    active INTEGER DEFAULT 1
+    active INTEGER DEFAULT 1,
+
+    business_segment TEXT
 
 );
 CREATE TABLE day_closing (
@@ -752,7 +754,9 @@ CREATE TABLE bill_items (
 
     gst_amount REAL,
 
-    net_amount REAL
+    net_amount REAL,
+
+    business_segment TEXT
 
 );
 CREATE TABLE users (

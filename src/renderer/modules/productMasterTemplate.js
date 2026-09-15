@@ -124,6 +124,7 @@ window.productMasterTemplate = `
                 <th>Barcode</th>
                 <th>Brand</th>
                 <th>Segment</th>
+                <th>Business Segment</th>
                 <th>Category</th>
                 <th>Season</th>
                 <th>Collection</th>

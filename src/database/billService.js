@@ -17,6 +17,7 @@ const {
 const {
     calculatePaymentSettlement
 } = require("../shared/paymentSettlement");
+const { normalizeBusinessSegment } = require("../shared/businessSegment");
 
 function billAmountToPaise(value, fieldName, optional = false) {
 
@@ -322,7 +323,8 @@ function resolveAuthoritativeBillData(billData) {
                     mrp,
                     discount,
                     gst_rate,
-                    active
+                    active,
+                    business_segment
                 FROM products
                 WHERE barcode = ?
                 `,
@@ -373,6 +375,8 @@ function resolveAuthoritativeBillData(billData) {
                         return;
                     }
 
+                    const businessSegment = normalizeBusinessSegment(product.business_segment, { allowLabels: false });
+
                     if (
                         !Number.isFinite(effectiveDiscount) ||
                         effectiveDiscount < 0 ||
@@ -406,7 +410,8 @@ function resolveAuthoritativeBillData(billData) {
                         mrp,
                         master_discount: normalDiscount,
                         discount: effectiveDiscount,
-                        gst_rate: gstRate
+                        gst_rate: gstRate,
+                        business_segment: businessSegment
                     });
 
                     resolveItem(index + 1);
@@ -647,10 +652,11 @@ function saveBill(billData) {
                             taxable_amount,
                             gst_rate,
                             gst_amount,
-                            net_amount
+                            net_amount,
+                            business_segment
                         )
                         VALUES
-                        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         `,
 
                         [
@@ -683,7 +689,8 @@ function saveBill(billData) {
 
                             gst,
 
-                            net
+                            net,
+                            item.business_segment
 
                         ],
 

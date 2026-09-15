@@ -29,8 +29,8 @@ async function child(tempRoot) {
 
     await run(db, `
         INSERT INTO products
-            (barcode, sku, brand, product_name, mrp, discount, selling_price, gst_rate, opening_stock, active)
-        VALUES ('890-H01', 'H01-A', 'H01', 'H-01 Product', 1200, 20, 1100, 12, 10, 1)
+            (barcode, sku, brand, product_name, mrp, discount, selling_price, gst_rate, opening_stock, active, business_segment)
+        VALUES ('890-H01', 'H01-A', 'H01', 'H-01 Product', 1200, 20, 1100, 12, 10, 1, 'KL')
     `);
     await run(db, `
         INSERT INTO inventory_transactions
@@ -87,8 +87,9 @@ async function child(tempRoot) {
     assert.strictEqual(saved.gst_rate, 12);
     assert.strictEqual(saved.discount_percent, 20);
     assert.strictEqual(bill.net_amount, 960);
+    assert.strictEqual(saved.business_segment, "KL");
 
-    await run(db, "UPDATE products SET mrp = 1300, discount = 15, gst_rate = 18 WHERE barcode = '890-H01'");
+    await run(db, "UPDATE products SET mrp = 1300, discount = 15, gst_rate = 18, business_segment = 'MENS' WHERE barcode = '890-H01'");
     await saveBill(payload("H01-003", {
         cash_amount: 1105,
         items: [{
@@ -106,6 +107,8 @@ async function child(tempRoot) {
     assert.strictEqual(updated.gst_rate, 18);
     assert.strictEqual(updated.discount_percent, 15);
     assert.strictEqual((await get(db, "SELECT gst_rate FROM bill_items WHERE bill_no = 'H01-001'")).gst_rate, 12);
+    assert.strictEqual(updated.business_segment, "MENS");
+    assert.strictEqual((await get(db, "SELECT business_segment FROM bill_items WHERE bill_no = 'H01-001'")).business_segment, "KL");
 
     await saveBill(payload("H01-004", {
         cash_amount: 975,
@@ -133,8 +136,8 @@ async function child(tempRoot) {
 
     await run(db, `
         INSERT INTO products
-            (barcode, sku, brand, product_name, mrp, discount, selling_price, gst_rate, opening_stock, active)
-        VALUES ('890-H01-B', 'H01-B', 'H01', 'H-01 Product B', 1000, 0, 900, 5, 1, 1)
+            (barcode, sku, brand, product_name, mrp, discount, selling_price, gst_rate, opening_stock, active, business_segment)
+        VALUES ('890-H01-B', 'H01-B', 'H01', 'H-01 Product B', 1000, 0, 900, 5, 1, 1, 'KIDS')
     `);
     await run(db, `
         INSERT INTO inventory_transactions

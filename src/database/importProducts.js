@@ -8,6 +8,7 @@ const {
     logProductImportFailed
 
 } = require("./logService");
+const { normalizeBusinessSegment } = require("../shared/businessSegment");
 
 
 const PRODUCT_MASTER_FIELDS = new Set([
@@ -15,6 +16,7 @@ const PRODUCT_MASTER_FIELDS = new Set([
     "sku",
     "brand",
     "segment",
+    "business_segment",
     "category",
     "season",
     "collection",
@@ -111,12 +113,12 @@ function importProductsAttempt(filePath) {
             =========================================== */
 
             const validationErrors = [];
-            const requiredTextFields = [
+                const requiredTextFields = [
                 "barcode",
                 "brand",
                 "category",
                 "product_name"
-            ];
+                ];
 
             function isBlank(value) {
                 return value === undefined ||
@@ -140,16 +142,26 @@ function importProductsAttempt(filePath) {
                 }
             }
 
-            products.forEach((product) => {
+                products.forEach((product) => {
                 const rowNumber = product.__rowNumber;
 
-                requiredTextFields.forEach((field) => {
+                    requiredTextFields.forEach((field) => {
                     if (isBlank(product[field])) {
                         validationErrors.push(
                             `Row ${rowNumber}: ${field} is required.`
                         );
                     }
-                });
+                    });
+
+                    const normalizedBusinessSegment = normalizeBusinessSegment(product.business_segment);
+                    if (!normalizedBusinessSegment) {
+                        validationErrors.push(
+                            `Row ${rowNumber}: business_segment must be exactly KL, MENS, or KIDS (friendly labels are also accepted).`
+                        );
+                    }
+                    else {
+                        product.business_segment = normalizedBusinessSegment;
+                    }
 
                 validateNonNegativeNumber(product.mrp, "mrp", rowNumber);
                 validateNonNegativeNumber(product.gst_rate, "gst_rate", rowNumber);
@@ -678,12 +690,13 @@ function importProductsAttempt(filePath) {
                                                     opening_stock,
                                                     reorder_level,
                                                     supplier,
-                                                    active
+                                                    active,
+                                                    business_segment
                                                 )
                                                 VALUES
                                                 (
                                                     ?,?,?,?,?,?,?,?,?,?,
-                                                    ?,?,?,?,?,?,?,?,?,?,?
+                                                    ?,?,?,?,?,?,?,?,?,?,?,?
                                                 )
                                                 `,
                                                 [
@@ -732,7 +745,9 @@ function importProductsAttempt(filePath) {
                                                     product.supplier,
 
                                                     product.active ??
-                                                    1
+                                                    1,
+
+                                                    product.business_segment
                                                 ],
 
                                                 function(
@@ -933,7 +948,9 @@ function importProductsAttempt(filePath) {
 
                                                 supplier = ?,
 
-                                                active = ?
+                                                active = ?,
+
+                                                business_segment = ?
 
                                             WHERE barcode = ?
                                             `,
@@ -980,6 +997,8 @@ function importProductsAttempt(filePath) {
 
                                                 product.active ??
                                                 1,
+
+                                                product.business_segment,
 
                                                 barcode
                                             ],

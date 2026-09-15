@@ -8,6 +8,7 @@ const {
     SCHEMA_METADATA_TABLE,
     UnsupportedDatabaseSchemaError,
     prepareDatabaseSchema,
+    migrateBusinessSegmentColumns,
     readSchemaVersion,
     runForwardMigrations
 } = require("../src/database/schemaVersion");
@@ -24,6 +25,7 @@ const open = filePath => new sqlite3.Database(filePath);
 
 const BASE_SCHEMA = `
     CREATE TABLE products (id INTEGER PRIMARY KEY, product_name TEXT);
+    CREATE TABLE bill_items (id INTEGER PRIMARY KEY, bill_no TEXT);
     CREATE TABLE bills (id INTEGER PRIMARY KEY, bill_no TEXT);
     CREATE TABLE settings (id INTEGER PRIMARY KEY);
     CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, quantity INTEGER);
@@ -39,12 +41,12 @@ const metadata = database => get(database,
 const prepare = (database, options = {}) => prepareDatabaseSchema({
     database,
     currentVersion: CURRENT_DB_SCHEMA_VERSION,
-    runCurrentMigrations: options.runCurrentMigrations || (async () => {}),
+    runCurrentMigrations: options.runCurrentMigrations || (async () => migrateBusinessSegmentColumns(database)),
     migrations: options.migrations || []
 });
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 2);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 3);
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-schema-version-"));
     try {
         // 1, 2, 7: fresh initialization, legacy adoption, and data preservation.
@@ -82,13 +84,13 @@ async function main() {
         // 4: newer databases are rejected and remain untouched.
         database = await createDatabase(path.join(temporary, "newer.db"));
         await run(database, `CREATE TABLE ${SCHEMA_METADATA_TABLE} (id INTEGER PRIMARY KEY CHECK (id = 1), schema_version INTEGER NOT NULL)`);
-        await run(database, `INSERT INTO ${SCHEMA_METADATA_TABLE} VALUES (1, 3)`);
+        await run(database, `INSERT INTO ${SCHEMA_METADATA_TABLE} VALUES (1, ${CURRENT_DB_SCHEMA_VERSION + 1})`);
         let normalMigrations = 0;
         await assert.rejects(() => prepare(database, {
             runCurrentMigrations: async () => { normalMigrations += 1; }
         }), error => error instanceof UnsupportedDatabaseSchemaError && error.code === "KLBS_DB_SCHEMA_NEWER");
         assert.strictEqual(normalMigrations, 0);
-        assert.strictEqual((await metadata(database)).schema_version, 3);
+        assert.strictEqual((await metadata(database)).schema_version, CURRENT_DB_SCHEMA_VERSION + 1);
         await close(database);
 
         // 5: a failed forward migration rolls back and leaves the source version.
@@ -109,10 +111,11 @@ async function main() {
         await run(database, `INSERT INTO ${SCHEMA_METADATA_TABLE} VALUES (1, 0)`);
         const steps = [
             { name: "fixture_0_to_1", from: 0, to: 1, up: async db => run(db, "CREATE TABLE step_one (id INTEGER PRIMARY KEY)") },
-            { name: "fixture_1_to_2", from: 1, to: 2, up: async db => run(db, "CREATE TABLE step_two (id INTEGER PRIMARY KEY)") }
+            { name: "fixture_1_to_2", from: 1, to: 2, up: async db => run(db, "CREATE TABLE step_two (id INTEGER PRIMARY KEY)") },
+            { name: "fixture_2_to_3", from: 2, to: 3, up: async db => run(db, "CREATE TABLE step_three (id INTEGER PRIMARY KEY)") }
         ];
-        await runForwardMigrations(database, 0, 2, steps);
-        assert.strictEqual(await readSchemaVersion(database), 2);
+        await runForwardMigrations(database, 0, 3, steps);
+        assert.strictEqual(await readSchemaVersion(database), 3);
         await close(database);
 
         // 8: an ordinary SQLite file copy preserves the in-database version.

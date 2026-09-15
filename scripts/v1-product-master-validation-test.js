@@ -5,7 +5,7 @@ const path = require("path");
 const XLSX = require("xlsx");
 
 const headers = [
-    "Barcode", "SKU", "Brand", "Segment", "Category", "Season",
+    "Barcode", "SKU", "Brand", "Segment", "Business Segment", "Category", "Season",
     "Collection", "Product Name", "Style Code", "Size", "Colour", "MRP",
     "Discount", "Selling Price", "Cost Price", "GST Rate", "HSN Code",
     "Opening Stock", "Reorder Level", "Supplier", "Active"
@@ -36,7 +36,7 @@ function close(db) {
 
 function baseRow(barcode, overrides = {}) {
     return {
-        Barcode: barcode, SKU: `SKU-${barcode}`, Brand: "Test Brand", Segment: "Women",
+        Barcode: barcode, SKU: `SKU-${barcode}`, Brand: "Test Brand", Segment: "Women", "Business Segment": "KL",
         Category: "Top", Season: "SS26", Collection: "Core", "Product Name": `Product ${barcode}`,
         "Style Code": "STYLE-1", Size: "M", Colour: "Blue", MRP: 100, Discount: 10,
         "Selling Price": 90, "Cost Price": 50, "GST Rate": 5, "HSN Code": "6109",
@@ -74,6 +74,9 @@ async function main() {
         ["nonnumeric GST Rate", { "GST Rate": "abc" }, "gst_rate"],
         ["negative GST Rate", { "GST Rate": -1 }, "gst_rate"],
         ["negative Opening Stock", { "Opening Stock": -1 }, "opening_stock"]
+        , ["missing Business Segment", { "Business Segment": "" }, "business_segment"]
+        , ["invalid Business Segment", { "Business Segment": "Men" }, "business_segment"]
+        , ["SIS Business Segment", { "Business Segment": "SIS" }, "business_segment"]
     ];
     const validationResults = [];
     for (const [name, overrides, field] of invalidCases) {
@@ -99,6 +102,7 @@ async function main() {
     assert.strictEqual(inactive.active, 0);
     assert.strictEqual(active.mrp, 0);
     assert.strictEqual(active.gst_rate, 0);
+    assert.strictEqual(active.business_segment, "KL");
     assert.strictEqual(active.current_stock, 0);
     assert.strictEqual(inactive.current_stock, 4);
     assert.strictEqual(await openingCount(), 1);
@@ -132,6 +136,19 @@ async function main() {
     assert.strictEqual(updated.opening_stock, 5);
     assert.strictEqual(updated.current_stock, 5);
     assert.strictEqual(await openingCount(), openingBeforeUpdate);
+
+    const labelImport = await importRows([
+        baseRow("8909900007", { "Business Segment": "Mens Wear" }),
+        baseRow("8909900008", { "Business Segment": "Kids Wear" })
+    ]);
+    assert.strictEqual(labelImport.success, true);
+    assert.strictEqual((await getProductByBarcode("8909900007")).business_segment, "MENS");
+    assert.strictEqual((await getProductByBarcode("8909900008")).business_segment, "KIDS");
+    const reimported = await importRows([
+        baseRow("8909900007", { "Business Segment": "KL" })
+    ]);
+    assert.strictEqual(reimported.success, true);
+    assert.strictEqual((await getProductByBarcode("8909900007")).business_segment, "KL");
 
     console.log(JSON.stringify({
         result: "PASS",
