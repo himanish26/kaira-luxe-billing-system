@@ -2,6 +2,7 @@ const assert = require("assert");
 const crypto = require("crypto");
 const fs = require("fs");
 const vm = require("vm");
+const { canonicalizePayload } = require("../src/services/businessSegmentDsrSyncService");
 
 class FakeSheet {
     constructor(name) { this.name = name; this.rows = []; this.parent = null; }
@@ -48,12 +49,12 @@ function loadAppsScript() {
 }
 
 function payload(date, sequence = 1) {
-    const segment = (label, sales, qty, bills, atv, upt) => ({ label, sales, qty, bills, atv, upt, detail: { grossSales: Math.abs(sales), discountAmount: 0, taxableValue: Math.abs(sales), gstAmount: 0, netBilling: Math.max(sales, 0), qtySold: Math.max(qty, 0), returnValue: sales < 0 ? Math.abs(sales) : 0, qtyReturned: qty < 0 ? Math.abs(qty) : 0 } });
+    const segment = (label, sales, qty, bills, atv, upt) => ({ label, sales, qty, bills, atv, upt, detail: { grossSales: Math.abs(sales), discountAmount: 0, taxableValue: Math.abs(sales), gstAmount: 0, netBilling: Math.max(sales, 0), qtySold: Math.max(qty, 0), creditNotes: sales < 0 ? 1 : 0, returnValue: sales < 0 ? Math.abs(sales) : 0, qtyReturned: qty < 0 ? Math.abs(qty) : 0 } });
     return { contract: "KLBS_SEGMENT_DSR_V1", businessDate: date, closeSequence: sequence, reportStatus: sequence === 1 ? "FINAL" : "REVISED", segments: { KL: segment("Kaira Luxe", 100, 1, 1, 100, 1), MENS: segment("Mens Wear", 200, 2, 1, 200, 2), KIDS: segment("Kids Wear", 300, 3, 1, 300, 3) }, dataQuality: { complete: true, reconciliationClassified: true, diagnostics: null }, reconciliation: {}, klbsVersion: "1.0.0", generatedAt: new Date().toISOString() };
 }
 
 function request(context, value, timestamp = new Date().toISOString(), secret = "test-secret", signingValue = value) {
-    const canonical = context.segmentDsrCanonicalPayloadJson_(signingValue);
+    const canonical = canonicalizePayload(signingValue);
     const signature = crypto.createHmac("sha256", secret).update(`${timestamp}\n${value.businessDate}\n${canonical}`, "utf8").digest("hex");
     const response = context.doPost({ postData: { type: "application/json", contents: JSON.stringify({ timestamp, payload: value, signature }) } });
     return JSON.parse(response.getContent());
@@ -66,7 +67,13 @@ function main() {
     assert.deepStrictEqual({ ok: result.ok, action: result.action, authoritative: result.authoritative }, { ok: true, action: "INSERTED", authoritative: true });
     const sheet = spreadsheet.getSheetByName("KLBS_Segment_Daily_Data");
     assert.deepStrictEqual(sheet.rows[0].slice(0, 5), ["Received At", "Contract", "Business Date", "Close Sequence", "Report Status"]);
+    assert.strictEqual(sheet.rows[0].length, 54);
+    assert.strictEqual(sheet.rows[0][32], "KL Credit Notes");
+    assert.strictEqual(sheet.rows[0][41], "MENS Credit Notes");
+    assert.strictEqual(sheet.rows[0][50], "KIDS Credit Notes");
     assert.strictEqual(sheet.getLastRow(), 2);
+    assert.strictEqual(sheet.rows[1].length, sheet.rows[0].length);
+    assert.strictEqual(sheet.rows[1][32], 0);
     result = request(context, firstPayload);
     assert.strictEqual(result.action, "UNCHANGED", JSON.stringify(result));
     assert.strictEqual(sheet.getLastRow(), 2);
@@ -79,7 +86,7 @@ function main() {
     assert.strictEqual(outOfOrder.authoritative, true);
     assert.strictEqual(request(context, payload("2026-09-16", 1)).action, "RETAINED");
     const negative = payload("2026-09-17");
-    negative.segments.KL = { label: "Kaira Luxe", sales: -100, qty: -2, bills: 0, atv: 0, upt: 0, detail: { grossSales: 0, discountAmount: 0, taxableValue: 0, gstAmount: 0, netBilling: 0, qtySold: 0, returnValue: 100, qtyReturned: 2 } };
+    negative.segments.KL = { label: "Kaira Luxe", sales: -100, qty: -2, bills: 0, atv: 0, upt: 0, detail: { grossSales: 0, discountAmount: 0, taxableValue: 0, gstAmount: 0, netBilling: 0, qtySold: 0, creditNotes: 1, returnValue: 100, qtyReturned: 2 } };
     assert.strictEqual(request(context, negative).ok, true);
     const badSignature = request(context, payload("2026-09-18"), new Date().toISOString(), "wrong-secret");
     assert(String(badSignature.error).includes("authentication failed"));

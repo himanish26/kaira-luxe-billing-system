@@ -7,12 +7,12 @@ var KLBS_SEGMENT_DSR_HEADERS = [
   'Kids Wear Sales', 'Kids Wear Qty', 'Kids Wear Bills', 'Kids Wear ATV', 'Kids Wear UPT',
   'Data Quality Complete', 'Reconciliation Classified', 'KLBS Version', 'Generated At',
   'Delivery Key', 'Payload JSON',
-  'KL Gross Sales', 'KL Discount Amount', 'KL Taxable Value', 'KL GST Amount', 'KL Net Billing', 'KL Qty Sold', 'KL Return Value', 'KL Qty Returned',
-  'MENS Gross Sales', 'MENS Discount Amount', 'MENS Taxable Value', 'MENS GST Amount', 'MENS Net Billing', 'MENS Qty Sold', 'MENS Return Value', 'MENS Qty Returned',
-  'KIDS Gross Sales', 'KIDS Discount Amount', 'KIDS Taxable Value', 'KIDS GST Amount', 'KIDS Net Billing', 'KIDS Qty Sold', 'KIDS Return Value', 'KIDS Qty Returned',
+  'KL Gross Sales', 'KL Discount Amount', 'KL Taxable Value', 'KL GST Amount', 'KL Net Billing', 'KL Qty Sold', 'KL Credit Notes', 'KL Return Value', 'KL Qty Returned',
+  'MENS Gross Sales', 'MENS Discount Amount', 'MENS Taxable Value', 'MENS GST Amount', 'MENS Net Billing', 'MENS Qty Sold', 'MENS Credit Notes', 'MENS Return Value', 'MENS Qty Returned',
+  'KIDS Gross Sales', 'KIDS Discount Amount', 'KIDS Taxable Value', 'KIDS GST Amount', 'KIDS Net Billing', 'KIDS Qty Sold', 'KIDS Credit Notes', 'KIDS Return Value', 'KIDS Qty Returned',
   'Diagnostics'
 ];
-var KLBS_SEGMENT_DSR_DETAIL_FIELDS = ['grossSales', 'discountAmount', 'taxableValue', 'gstAmount', 'netBilling', 'qtySold', 'returnValue', 'qtyReturned'];
+var KLBS_SEGMENT_DSR_DETAIL_FIELDS = ['grossSales', 'discountAmount', 'taxableValue', 'gstAmount', 'netBilling', 'qtySold', 'creditNotes', 'returnValue', 'qtyReturned'];
 
 function segmentDsrHex_(bytes) {
   return bytes.map(function(value) {
