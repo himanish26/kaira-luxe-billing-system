@@ -88,6 +88,28 @@ const CREATE_BUSINESS_DAY_STATE_SQL = `
     )
 `;
 
+const CREATE_SEGMENT_DSR_OUTBOX_SQL = `
+    CREATE TABLE IF NOT EXISTS segment_dsr_outbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_date TEXT NOT NULL,
+        closing_id INTEGER NOT NULL,
+        close_sequence INTEGER NOT NULL,
+        report_status TEXT NOT NULL CHECK (report_status IN ('FINAL', 'REVISED')),
+        payload_json TEXT,
+        status TEXT NOT NULL DEFAULT 'PENDING'
+            CHECK (status IN ('PENDING', 'PROCESSING', 'SUCCESS', 'FAILED')),
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_attempt_at TEXT,
+        processing_started_at TEXT,
+        completed_at TEXT,
+        last_error TEXT,
+        UNIQUE (closing_id),
+        UNIQUE (business_date, close_sequence)
+    )
+`;
+
 function run(db, sql, params = []) {
     return new Promise((resolve, reject) => {
         db.run(sql, params, function (error) {
@@ -278,11 +300,30 @@ async function migrateDayClosingSnapshots(db) {
     }
 }
 
+async function migrateSegmentDsrOutbox(db) {
+    let transactionStarted = false;
+    try {
+        await run(db, "BEGIN IMMEDIATE TRANSACTION");
+        transactionStarted = true;
+        await run(db, CREATE_SEGMENT_DSR_OUTBOX_SQL);
+        await run(db, "CREATE INDEX IF NOT EXISTS idx_segment_dsr_outbox_pending ON segment_dsr_outbox(status, business_date, id)");
+        const table = await get(db, "SELECT name FROM sqlite_master WHERE type='table' AND name='segment_dsr_outbox'");
+        if (!table) throw new Error("Segment DSR outbox migration verification failed.");
+        await run(db, "COMMIT");
+        transactionStarted = false;
+    }
+    catch (error) {
+        if (transactionStarted) await run(db, "ROLLBACK").catch(() => {});
+        throw error;
+    }
+}
+
 module.exports = {
     SNAPSHOT_VERSION,
     CREATE_DAY_CLOSING_SNAPSHOTS_SQL,
     CREATE_ACTIVE_INDEX_SQL,
     CREATE_DATE_INDEX_SQL,
     CREATE_INTEGRATION_OUTBOX_SQL,
-    migrateDayClosingSnapshots
+    migrateDayClosingSnapshots,
+    migrateSegmentDsrOutbox
 };

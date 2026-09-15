@@ -877,6 +877,29 @@ CREATE TABLE IF NOT EXISTS integration_outbox (
 CREATE INDEX idx_integration_outbox_pending
 ON integration_outbox (status, business_date, id);
 
+CREATE TABLE IF NOT EXISTS segment_dsr_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_date TEXT NOT NULL,
+    closing_id INTEGER NOT NULL,
+    close_sequence INTEGER NOT NULL,
+    report_status TEXT NOT NULL CHECK (report_status IN ('FINAL', 'REVISED')),
+    payload_json TEXT,
+    status TEXT NOT NULL DEFAULT 'PENDING'
+        CHECK (status IN ('PENDING', 'PROCESSING', 'SUCCESS', 'FAILED')),
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    last_attempt_at TEXT,
+    processing_started_at TEXT,
+    completed_at TEXT,
+    last_error TEXT,
+    UNIQUE (closing_id),
+    UNIQUE (business_date, close_sequence)
+);
+
+CREATE INDEX idx_segment_dsr_outbox_pending
+ON segment_dsr_outbox (status, business_date, id);
+
 CREATE TABLE IF NOT EXISTS klbs_schema_metadata (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     schema_version INTEGER NOT NULL CHECK (schema_version >= 0)

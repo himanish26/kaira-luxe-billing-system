@@ -360,6 +360,7 @@ const {
 } = require("../database/dayClosingService");
 const { createDayClosingHistoryService } = require("../database/dayClosingHistoryService");
 const { createDsrSyncService } = require("../services/dsrSyncService");
+const { createBusinessSegmentDsrOutboxService } = require("../services/businessSegmentDsrOutboxService");
 const dsrSyncService = createDsrSyncService({
     configProvider: () => integrationConfig.resolveDsrRuntime()
 });
@@ -379,6 +380,12 @@ const integrationOutbox = createIntegrationOutboxService({
     getEmailConfiguration: () => integrationConfig.resolveEmailRuntime(),
     getBackupPath: async fileName => path.join(await getBackupFolder(), fileName)
 });
+const segmentDsrOutbox = createBusinessSegmentDsrOutboxService({
+    database,
+    sendEmail,
+    getEmailConfiguration: () => integrationConfig.resolveEmailRuntime(),
+    klbsVersion: app.getVersion()
+});
 const {
     getDayClosingSummary,
     getDayClosingSnapshot,
@@ -392,6 +399,7 @@ const {
     getEmailConfiguration: () => integrationConfig.resolveEmailRuntime(),
     dsrSyncService,
     integrationOutbox,
+    segmentDsrOutbox,
     klbsVersion: app.getVersion(),
     logBusinessDayClosed,
     logBusinessDayReopened,
@@ -595,7 +603,12 @@ function startIntegrationOutboxDrain() {
         try {
             const status = await getSystemStatus();
             const online = Boolean(status.internet && status.internet.online);
-            if (online) await integrationOutbox.drain();
+            if (online) {
+                try { await integrationOutbox.drain(); } catch (_) {}
+                try { await segmentDsrOutbox.drain(); } catch (error) {
+                    technicalLogger.warn("SEGMENT_DSR", "Segment DSR startup drain failed", { classification: String(error.message || "").slice(0, 500) });
+                }
+            }
             integrationOutboxOnline = online;
         } catch (_) {}
     };

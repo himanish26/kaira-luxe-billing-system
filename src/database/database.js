@@ -10,7 +10,8 @@ const {
     isCredentialRecord
 } = require("../services/credentialCrypto");
 const {
-    migrateDayClosingSnapshots
+    migrateDayClosingSnapshots,
+    migrateSegmentDsrOutbox
 } = require("./dayClosingMigration");
 const {
     migrateActivityLogSchema
@@ -2986,6 +2987,8 @@ try {
         await runNamedMigration("opening_stock", () => initializeOpeningStock());
 
         await runNamedMigration("business_segment_columns", () => migrateBusinessSegmentColumns(db));
+
+        await runNamedMigration("segment_dsr_outbox", () => migrateSegmentDsrOutbox(db));
             }
         });
 

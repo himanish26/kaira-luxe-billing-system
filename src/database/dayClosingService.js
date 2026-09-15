@@ -52,6 +52,7 @@ function createDayClosingService(options = {}) {
     const readDsrPayloadFn = options.readClosedDsrPayload || readClosedDsrPayload;
     const klbsVersion = String(options.klbsVersion || "").trim();
     const integrationOutbox = options.integrationOutbox || null;
+    const segmentDsrOutbox = options.segmentDsrOutbox || null;
     const getEmailConfiguration = options.getEmailConfiguration || (() => ({
         recipients: options.closingEmail === undefined
             ? String(process.env.DAY_CLOSING_EMAIL || "").split(",").map(value => value.trim()).filter(Boolean)
@@ -704,6 +705,17 @@ function createDayClosingService(options = {}) {
         }
 
         summary = await getDayClosingSnapshot(reservation.snapshotId);
+        if (segmentDsrOutbox) {
+            try {
+                await segmentDsrOutbox.enqueue(reservation.snapshotId);
+            }
+            catch (error) {
+                technicalLogger.warn("SEGMENT_DSR", "Segment DSR enqueue failed after Day Closing", {
+                    snapshotId: reservation.snapshotId,
+                    classification: sanitizeDsrError(error.message)
+                });
+            }
+        }
         let dsrResult = { status: "PENDING", warning: null, action: null };
         if (integrationOutbox) {
             await integrationOutbox.enqueue(reservation.snapshotId, summary.businessDate, summary.closeSequence);
