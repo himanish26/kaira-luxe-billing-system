@@ -893,6 +893,13 @@ CREATE TABLE IF NOT EXISTS segment_dsr_outbox (
     processing_started_at TEXT,
     completed_at TEXT,
     last_error TEXT,
+    sheets_status TEXT NOT NULL DEFAULT 'PENDING'
+        CHECK (sheets_status IN ('PENDING', 'PROCESSING', 'SUCCESS', 'FAILED')),
+    sheets_attempt_count INTEGER NOT NULL DEFAULT 0,
+    sheets_last_attempt_at TEXT,
+    sheets_processing_started_at TEXT,
+    sheets_completed_at TEXT,
+    sheets_last_error TEXT,
     UNIQUE (closing_id),
     UNIQUE (business_date, close_sequence)
 );

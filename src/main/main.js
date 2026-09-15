@@ -361,6 +361,7 @@ const {
 const { createDayClosingHistoryService } = require("../database/dayClosingHistoryService");
 const { createDsrSyncService } = require("../services/dsrSyncService");
 const { createBusinessSegmentDsrOutboxService } = require("../services/businessSegmentDsrOutboxService");
+const { createBusinessSegmentDsrSyncService } = require("../services/businessSegmentDsrSyncService");
 const dsrSyncService = createDsrSyncService({
     configProvider: () => integrationConfig.resolveDsrRuntime()
 });
@@ -380,9 +381,13 @@ const integrationOutbox = createIntegrationOutboxService({
     getEmailConfiguration: () => integrationConfig.resolveEmailRuntime(),
     getBackupPath: async fileName => path.join(await getBackupFolder(), fileName)
 });
+const businessSegmentDsrSyncService = createBusinessSegmentDsrSyncService({
+    configProvider: () => integrationConfig.resolveDsrRuntime()
+});
 const segmentDsrOutbox = createBusinessSegmentDsrOutboxService({
     database,
     sendEmail,
+    syncSheets: payload => businessSegmentDsrSyncService.sync(payload),
     getEmailConfiguration: () => integrationConfig.resolveEmailRuntime(),
     klbsVersion: app.getVersion()
 });

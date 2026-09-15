@@ -241,6 +241,9 @@ function doPost(event) {
       throw new Error('JSON POST is required.');
     }
     var envelope = JSON.parse(event.postData.contents);
+    if (envelope && envelope.payload && envelope.payload.contract === 'KLBS_SEGMENT_DSR_V1') {
+      return handleSegmentDsrPost_(envelope);
+    }
     if (envelope && envelope.action === 'TEST_CONNECTION') {
       verifyTestEnvelope_(envelope);
       var testSpreadsheetId = PropertiesService.getScriptProperties()

@@ -105,6 +105,13 @@ const CREATE_SEGMENT_DSR_OUTBOX_SQL = `
         processing_started_at TEXT,
         completed_at TEXT,
         last_error TEXT,
+        sheets_status TEXT NOT NULL DEFAULT 'PENDING'
+            CHECK (sheets_status IN ('PENDING', 'PROCESSING', 'SUCCESS', 'FAILED')),
+        sheets_attempt_count INTEGER NOT NULL DEFAULT 0,
+        sheets_last_attempt_at TEXT,
+        sheets_processing_started_at TEXT,
+        sheets_completed_at TEXT,
+        sheets_last_error TEXT,
         UNIQUE (closing_id),
         UNIQUE (business_date, close_sequence)
     )
@@ -306,9 +313,26 @@ async function migrateSegmentDsrOutbox(db) {
         await run(db, "BEGIN IMMEDIATE TRANSACTION");
         transactionStarted = true;
         await run(db, CREATE_SEGMENT_DSR_OUTBOX_SQL);
+        const columns = await new Promise((resolve, reject) => {
+            db.all("PRAGMA table_info(segment_dsr_outbox)", [], (error, rows) => error ? reject(error) : resolve(rows || []));
+        });
+        const existing = new Set(columns.map(column => column.name));
+        for (const [name, definition] of [
+            ["sheets_status", "TEXT NOT NULL DEFAULT 'PENDING' CHECK (sheets_status IN ('PENDING', 'PROCESSING', 'SUCCESS', 'FAILED'))"],
+            ["sheets_attempt_count", "INTEGER NOT NULL DEFAULT 0"],
+            ["sheets_last_attempt_at", "TEXT"],
+            ["sheets_processing_started_at", "TEXT"],
+            ["sheets_completed_at", "TEXT"],
+            ["sheets_last_error", "TEXT"]
+        ]) {
+            if (!existing.has(name)) await run(db, `ALTER TABLE segment_dsr_outbox ADD COLUMN ${name} ${definition}`);
+        }
         await run(db, "CREATE INDEX IF NOT EXISTS idx_segment_dsr_outbox_pending ON segment_dsr_outbox(status, business_date, id)");
         const table = await get(db, "SELECT name FROM sqlite_master WHERE type='table' AND name='segment_dsr_outbox'");
-        if (!table) throw new Error("Segment DSR outbox migration verification failed.");
+        const verifiedColumns = await new Promise((resolve, reject) => {
+            db.all("PRAGMA table_info(segment_dsr_outbox)", [], (error, rows) => error ? reject(error) : resolve(new Set((rows || []).map(column => column.name))));
+        });
+        if (!table || !["sheets_status", "sheets_attempt_count", "sheets_last_attempt_at", "sheets_processing_started_at", "sheets_completed_at", "sheets_last_error"].every(name => verifiedColumns.has(name))) throw new Error("Segment DSR outbox migration verification failed.");
         await run(db, "COMMIT");
         transactionStarted = false;
     }

@@ -35,17 +35,26 @@ async function setup() {
 }
 
 async function main() {
+    const legacyDb = new sqlite3.Database(":memory:");
+    await run(legacyDb, "CREATE TABLE segment_dsr_outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, business_date TEXT NOT NULL, closing_id INTEGER NOT NULL, close_sequence INTEGER NOT NULL, report_status TEXT NOT NULL, payload_json TEXT, status TEXT NOT NULL DEFAULT 'PENDING', attempt_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_attempt_at TEXT, processing_started_at TEXT, completed_at TEXT, last_error TEXT, UNIQUE (closing_id), UNIQUE (business_date, close_sequence))");
+    await migrateSegmentDsrOutbox(legacyDb);
+    const legacyColumns = await all(legacyDb, "PRAGMA table_info(segment_dsr_outbox)");
+    assert(legacyColumns.some(column => column.name === "sheets_status"), "pre-Stage-4B schema must gain Sheets state additively");
+    await close(legacyDb);
     const db = await setup();
     let nowValue = new Date("2026-09-15T12:00:00.000Z");
     const sent = [];
     let failEmail = false;
+    let failSheets = false;
+    const sheetsSent = [];
     const service = createBusinessSegmentDsrOutboxService({
         database: db,
         now: () => nowValue,
         klbsVersion: "1.0.0",
         calculateReport: async date => date === "2026-09-18" ? report(true, true) : report(),
         getEmailConfiguration: async () => ({ automaticEmailBackup: true, recipients: ["test@example.invalid"] }),
-        sendEmail: async message => { if (failEmail) throw new Error("temporary email failure"); sent.push(message); }
+        sendEmail: async message => { if (failEmail) throw new Error("temporary email failure"); sent.push(message); },
+        syncSheets: async payload => { if (failSheets) return { success: false, error: "temporary sheets failure" }; sheetsSent.push(payload); return { success: true, action: "INSERTED" }; }
     });
 
     const first = await service.enqueue(1);
@@ -65,6 +74,8 @@ async function main() {
     assert.strictEqual(payload.businessDate, "2026-09-15");
     assert.strictEqual(await service.drain(), undefined);
     assert.strictEqual(sent.length, 1);
+    assert.strictEqual(sheetsSent.length, 1);
+    assert.deepStrictEqual((await all(db, "SELECT status,sheets_status FROM segment_dsr_outbox WHERE closing_id=1"))[0], { status: "SUCCESS", sheets_status: "SUCCESS" });
     assert(sent[0].text.includes("Kaira Luxe") && sent[0].text.includes("Mens Wear") && sent[0].text.includes("Kids Wear"));
     await service.drain();
     assert.strictEqual(sent.length, 1, "SUCCESS must not resend");
@@ -90,6 +101,23 @@ async function main() {
     nowValue = new Date(nowValue.getTime() + 60001);
     await service.drain();
     assert.strictEqual((await all(db, "SELECT status FROM segment_dsr_outbox WHERE closing_id=3"))[0].status, "SUCCESS");
+
+    await run(db, "INSERT INTO day_closing_snapshots VALUES (6,'2026-09-22',1,'CLOSED'),(7,'2026-09-23',1,'CLOSED')");
+    const emailFail = createBusinessSegmentDsrOutboxService({ database: db, calculateReport: async () => report(), sendEmail: async () => { throw new Error("email unavailable"); }, syncSheets: async () => ({ success: true }), getEmailConfiguration: async () => ({ automaticEmailBackup: true, recipients: ["test@example.invalid"] }) });
+    await emailFail.enqueue(6);
+    await emailFail.drain();
+    assert.deepStrictEqual((await all(db, "SELECT status,sheets_status FROM segment_dsr_outbox WHERE closing_id=6"))[0], { status: "PENDING", sheets_status: "SUCCESS" });
+    await run(db, "DELETE FROM segment_dsr_outbox WHERE closing_id=6");
+    failSheets = true;
+    await service.enqueue(7);
+    await service.drain();
+    assert.deepStrictEqual((await all(db, "SELECT status,sheets_status FROM segment_dsr_outbox WHERE closing_id=7"))[0], { status: "SUCCESS", sheets_status: "PENDING" });
+    const sentBeforeSheetRetry = sent.length;
+    failSheets = false;
+    nowValue = new Date(nowValue.getTime() + 60001);
+    await service.drain();
+    assert.strictEqual(sent.length, sentBeforeSheetRetry, "Sheets retry must not resend successful email");
+    assert.strictEqual((await all(db, "SELECT sheets_status FROM segment_dsr_outbox WHERE closing_id=7"))[0].sheets_status, "SUCCESS");
 
     await run(db, "INSERT INTO day_closing_snapshots VALUES (4,'2026-09-19',1,'CLOSED')");
     const blocked = createBusinessSegmentDsrOutboxService({ database: db, calculateReport: async () => report(false), sendEmail: async () => { throw new Error("must not send"); }, getEmailConfiguration: async () => ({ automaticEmailBackup: true, recipients: ["test@example.invalid"] }) });

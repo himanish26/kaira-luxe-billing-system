@@ -10,6 +10,7 @@ function createBusinessSegmentDsrOutboxService(options = {}) {
     const now = options.now || (() => new Date());
     const calculateReport = options.calculateReport || createBusinessSegmentReportService({ database }).calculateBusinessSegmentReport;
     const sendEmail = options.sendEmail;
+    const syncSheets = options.syncSheets;
     const getEmailConfiguration = options.getEmailConfiguration || (async () => ({}));
     const klbsVersion = String(options.klbsVersion || "").trim();
     const run = (sql, params = []) => new Promise((resolve, reject) => database.run(sql, params, function (error) { error ? reject(error) : resolve({ lastID: this.lastID, changes: this.changes }); }));
@@ -83,7 +84,9 @@ function createBusinessSegmentDsrOutboxService(options = {}) {
             lastError = String(error.message || "Segment report calculation failed").slice(0, 500);
         }
         const timestamp = now().toISOString();
-        const inserted = await run(`INSERT OR IGNORE INTO segment_dsr_outbox (business_date, closing_id, close_sequence, report_status, payload_json, status, created_at, updated_at, last_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [snapshot.business_date, closingId, snapshot.close_sequence, revised ? "REVISED" : "FINAL", payload && JSON.stringify(payload), status, timestamp, timestamp, lastError]);
+        const sheetsStatus = payload && (!payload.dataQuality.complete || !payload.dataQuality.reconciliationClassified) ? "FAILED" : "PENDING";
+        const sheetsError = sheetsStatus === "FAILED" ? lastError : null;
+        const inserted = await run(`INSERT OR IGNORE INTO segment_dsr_outbox (business_date, closing_id, close_sequence, report_status, payload_json, status, created_at, updated_at, last_error, sheets_status, sheets_last_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [snapshot.business_date, closingId, snapshot.close_sequence, revised ? "REVISED" : "FINAL", payload && JSON.stringify(payload), status, timestamp, timestamp, lastError, sheetsStatus, sheetsError]);
         return { created: inserted.changes > 0, id: inserted.lastID || (await get("SELECT id FROM segment_dsr_outbox WHERE closing_id=?", [closingId])).id, status };
     }
 
@@ -93,6 +96,11 @@ function createBusinessSegmentDsrOutboxService(options = {}) {
         for (const row of rows) {
             if (Number.isFinite(Date.parse(row.processing_started_at)) && Date.parse(row.processing_started_at) >= cutoff) continue;
             await run("UPDATE segment_dsr_outbox SET status='PENDING', processing_started_at=NULL, updated_at=?, last_error=? WHERE id=? AND status='PROCESSING'", [now().toISOString(), "Application restarted during Segment DSR delivery.", row.id]);
+        }
+        const sheetsRows = await all("SELECT id, sheets_processing_started_at FROM segment_dsr_outbox WHERE sheets_status='PROCESSING'");
+        for (const row of sheetsRows) {
+            if (Number.isFinite(Date.parse(row.sheets_processing_started_at)) && Date.parse(row.sheets_processing_started_at) >= cutoff) continue;
+            await run("UPDATE segment_dsr_outbox SET sheets_status='PENDING', sheets_processing_started_at=NULL, updated_at=?, sheets_last_error=? WHERE id=? AND sheets_status='PROCESSING'", [now().toISOString(), "Application restarted during Segment DSR Sheets delivery.", row.id]);
         }
     }
 
@@ -118,13 +126,36 @@ function createBusinessSegmentDsrOutboxService(options = {}) {
         }
     }
 
+    async function processSheets(item) {
+        if (typeof syncSheets !== "function") return false;
+        const started = now().toISOString();
+        const claimed = await run("UPDATE segment_dsr_outbox SET sheets_status='PROCESSING', sheets_attempt_count=sheets_attempt_count+1, sheets_last_attempt_at=?, sheets_processing_started_at=?, updated_at=? WHERE id=? AND sheets_status='PENDING'", [started, started, started, item.id]);
+        if (claimed.changes !== 1) return false;
+        try {
+            if (!item.payload_json) throw new Error(item.sheets_last_error || "Segment DSR payload is unavailable.");
+            const payload = JSON.parse(item.payload_json);
+            if (!payload.dataQuality.complete || !payload.dataQuality.reconciliationClassified) throw new Error("Segment DSR data quality is incomplete; Sheets delivery remains blocked.");
+            const result = await syncSheets(payload);
+            if (!result || result.success !== true) throw new Error(result && result.error || "Segment DSR Sheets delivery failed.");
+            await run("UPDATE segment_dsr_outbox SET sheets_status='SUCCESS', sheets_completed_at=?, sheets_processing_started_at=NULL, updated_at=?, sheets_last_error=NULL WHERE id=? AND sheets_status='PROCESSING'", [now().toISOString(), now().toISOString(), item.id]);
+            return true;
+        }
+        catch (error) {
+            const message = String(error.message || "Segment DSR Sheets delivery failed").slice(0, 500);
+            const permanent = message.includes("data quality is incomplete") || message.includes("payload is unavailable");
+            await run("UPDATE segment_dsr_outbox SET sheets_status=?, sheets_processing_started_at=NULL, updated_at=?, sheets_last_error=? WHERE id=? AND sheets_status='PROCESSING'", [permanent ? "FAILED" : "PENDING", now().toISOString(), message, item.id]);
+            return false;
+        }
+    }
+
     async function drain() {
         await recoverStaleProcessing();
-        const rows = await all("SELECT * FROM segment_dsr_outbox WHERE status='PENDING' ORDER BY business_date, id");
+        const rows = await all("SELECT * FROM segment_dsr_outbox WHERE status='PENDING' OR sheets_status='PENDING' ORDER BY business_date, id");
         for (const item of rows) {
             const last = Date.parse(item.last_attempt_at);
-            if (Number.isFinite(last) && now().getTime() - last < RETRY_COOLDOWN_MS) continue;
-            await processOne(item);
+            if (item.status === "PENDING" && (!Number.isFinite(last) || now().getTime() - last >= RETRY_COOLDOWN_MS)) await processOne(item);
+            const sheetsLast = Date.parse(item.sheets_last_attempt_at);
+            if (item.sheets_status === "PENDING" && (!Number.isFinite(sheetsLast) || now().getTime() - sheetsLast >= RETRY_COOLDOWN_MS)) await processSheets(item);
         }
     }
 
