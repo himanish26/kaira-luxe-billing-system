@@ -178,6 +178,13 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
         return action === "INSERTED" ? 201 : 200;
     }
 
+    function acceptsSuccessHttpStatus(action, status) {
+        // Google Apps Script ContentService may surface every response as HTTP
+        // 200. The structured response is still validated first; HTTP 200 is
+        // accepted only for a recognized, identity/hash-bound success action.
+        return status === 200 || status === expectedHttpStatus(action);
+    }
+
     async function sendClaimed(claimed) {
         let validated;
         try {
@@ -210,7 +217,14 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
             });
             if (response.status >= 200 && response.status < 300) {
                 const result = validateReceiverResponse(response.data, validated);
-                if (result.code === "DELIVERED" && response.status !== expectedHttpStatus(result.action)) {
+                if (response.status === 200 && result.code !== "DELIVERED" && result.code !== "STALE_SUPERSEDED") {
+                    // Current terminal error bodies do not echo submitted
+                    // identity/hash, so accepting them over HTTP 200 would
+                    // allow an unbound body to terminate a delivery attempt.
+                    return terminal("INVALID_RESPONSE", "HTTP 200 response is not a valid identity-bound success response.");
+                }
+                if ((result.code === "DELIVERED" || result.code === "STALE_SUPERSEDED") &&
+                    result.action && !acceptsSuccessHttpStatus(result.action, response.status)) {
                     return terminal("INVALID_RESPONSE", "Receiver HTTP status does not match the accepted action.");
                 }
                 return result.code === "STALE_SUPERSEDED"

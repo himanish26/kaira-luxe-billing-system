@@ -142,6 +142,47 @@ async function testActions() {
     assert.strictEqual(result.status, "FAILED"); assert.strictEqual(result.code, "STALE_SUPERSEDED"); assert.strictEqual(stored.sheet_delivered_at, null); await close(db);
 }
 
+async function testHttp200CompatibilityAndIdentityValidation() {
+    const db = await setup(); await insertJob(db);
+    const worker = workerFor(db, { post: async (_, envelope) => ({ ...responseFor("INSERTED", envelope), status: 200 }) });
+    const result = await worker.processNext(); const stored = await row(db);
+    assert.strictEqual(result.status, "DELIVERED");
+    assert.strictEqual(stored.sheet_status, "DELIVERED");
+    await close(db);
+
+    for (const mutate of [
+        response => ({ ...response, businessDate: "2026-09-20" }),
+        response => ({ ...response, closingId: "9999" }),
+        response => ({ ...response, closeSequence: "99" }),
+        response => ({ ...response, payloadHash: "0".repeat(64) }),
+        response => ({ ...response, transportVersion: 2 }),
+        response => ({ ...response, action: "UNKNOWN" }),
+        () => ({})
+    ]) {
+        const invalidDb = await setup(); await insertJob(invalidDb);
+        const invalidWorker = workerFor(invalidDb, { post: async (_, envelope) => ({
+            status: 200,
+            data: mutate(responseFor("INSERTED", envelope).data)
+        }) });
+        const invalidResult = await invalidWorker.processNext();
+        assert.strictEqual(invalidResult.code, "INVALID_RESPONSE");
+        assert.strictEqual((await row(invalidDb)).sheet_status, "FAILED");
+        await close(invalidDb);
+    }
+
+    for (const action of ["AUTHENTICATION_FAILED", "CONFLICT", "REJECTED"]) {
+        const errorDb = await setup(); await insertJob(errorDb);
+        const errorWorker = workerFor(errorDb, { post: async () => ({
+            status: 200,
+            data: { ok: false, transportVersion: 1, action, errorCode: action, message: "safe placeholder" }
+        }) });
+        const errorResult = await errorWorker.processNext();
+        assert.strictEqual(errorResult.code, "INVALID_RESPONSE");
+        assert.strictEqual((await row(errorDb)).sheet_status, "FAILED");
+        await close(errorDb);
+    }
+}
+
 async function testTerminalResponses() {
     for (const [status, expectedCode, data] of [
         [409, "CONFLICT", { ok: false, transportVersion: 1, action: "CONFLICT", errorCode: "CONFLICT", message: "placeholder" }],
@@ -220,6 +261,7 @@ async function testNoAccountingOrLiveEndpoint() {
 (async () => {
     await testClaimAndInsertedEnvelope();
     await testActions();
+    await testHttp200CompatibilityAndIdentityValidation();
     await testTerminalResponses();
     await testForbiddenAuthenticationResponse();
     await testRetryableFailures();
