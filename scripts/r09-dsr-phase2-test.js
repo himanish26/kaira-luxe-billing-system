@@ -49,6 +49,20 @@ async function insertSnapshot(values) {
 }
 
 async function main() {
+    await run(`CREATE TABLE bills (
+        id INTEGER PRIMARY KEY, bill_date TEXT, total_qty INTEGER,
+        gross_amount REAL, discount_amount REAL, net_amount REAL,
+        cash_amount REAL, upi_amount REAL, card_amount REAL,
+        store_credit_amount REAL, gift_voucher_amount REAL
+    )`);
+    await run(`CREATE TABLE returns (
+        id INTEGER PRIMARY KEY, net_reversal REAL, accounting_status TEXT,
+        credit_note_no TEXT, accounting_snapshot_version INTEGER, business_date TEXT
+    )`);
+    await run("CREATE TABLE return_items (id INTEGER PRIMARY KEY, return_id INTEGER, quantity INTEGER)");
+    await run(`CREATE TABLE customer_credit_transactions (
+        id INTEGER PRIMARY KEY, transaction_type TEXT, amount REAL, created_at TEXT
+    )`);
     await migrateDayClosingSnapshots(db);
     await migrateDayClosingSnapshots(db);
     const columns = await new Promise((resolve, reject) => db.all(
@@ -130,20 +144,6 @@ async function main() {
     assert.deepStrictEqual(afterSuccess, { dsr_sync_status: "SYNCED", dsr_sync_attempts: 2, dsr_sync_error: null });
     assert.strictEqual(AUTHORIZATION_POLICY.DSR_SYNC_RETRY, "ADMINISTRATOR");
 
-    await run(`CREATE TABLE bills (
-        id INTEGER PRIMARY KEY, bill_date TEXT, total_qty INTEGER,
-        gross_amount REAL, discount_amount REAL, net_amount REAL,
-        cash_amount REAL, upi_amount REAL, card_amount REAL,
-        store_credit_amount REAL, gift_voucher_amount REAL
-    )`);
-    await run(`CREATE TABLE returns (
-        id INTEGER PRIMARY KEY, net_reversal REAL, accounting_status TEXT,
-        credit_note_no TEXT, accounting_snapshot_version INTEGER, business_date TEXT
-    )`);
-    await run("CREATE TABLE return_items (id INTEGER PRIMARY KEY, return_id INTEGER, quantity INTEGER)");
-    await run(`CREATE TABLE customer_credit_transactions (
-        id INTEGER PRIMARY KEY, transaction_type TEXT, amount REAL, created_at TEXT
-    )`);
     await run(`INSERT INTO bills VALUES (1, '2026-09-10', 1, 100, 10, 90, 90, 0, 0, 0, 0)`);
     let observedPayload = null;
     const closeService = createDayClosingService({
@@ -159,12 +159,14 @@ async function main() {
             return { success: false, error: "injected network failure" };
         } },
         logBusinessDayClosed: async () => {}, logBusinessDayReopened: async () => {},
-        logDsrSyncFailed: async () => {}, logDsrSyncSucceeded: async () => {}
+        logDsrSyncFailed: async () => {}, logDsrSyncSucceeded: async () => {},
+        consolidatedReportingPersistence: { createFrozenJobWithinTransaction: async () => ({ jobId: 1, payloadHash: "test", payload: { dataQuality: { status: "COMPLETE" } } }) }
     });
     const closeResult = await closeService.closeBusinessDay();
     assert.strictEqual(closeResult.success, true);
     assert.strictEqual(closeResult.dsrSyncStatus, "FAILED");
-    assert.strictEqual(observedPayload.emailStatus, "FAILED");
+    // Legacy DSR payload captures the snapshot status before the later email bookkeeping update.
+    assert.strictEqual(observedPayload.emailStatus, "PENDING");
     assert.strictEqual(observedPayload.netBillingPaise, 9000);
     const closedRow = await get("SELECT close_status, dsr_sync_status FROM day_closing_snapshots WHERE id = ?", [closeResult.snapshotId]);
     assert.deepStrictEqual(closedRow, { close_status: "CLOSED", dsr_sync_status: "FAILED" });

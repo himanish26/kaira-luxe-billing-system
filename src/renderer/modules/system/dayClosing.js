@@ -652,12 +652,15 @@ function requestDayReopenReason() {
                         This will be preserved in the Day Closing audit history.
                     </div>
 
-                    <textarea
+                    <select
                         id="dayReopenReasonInput"
-                        class="day-reopen-reason-input"
-                        rows="4"
-                        maxlength="250"
-                        placeholder="Enter reason..."></textarea>
+                        class="day-reopen-reason-select"
+                        required>
+                        <option value="">Select Reopen Reason</option>
+                        ${window.KLBS_DAY_REOPEN_REASONS
+                            .map(reason => `<option value="${reason}">${reason}</option>`)
+                            .join("")}
+                    </select>
 
                     <div
                         id="dayReopenReasonError"
@@ -724,10 +727,10 @@ function requestDayReopenReason() {
             const reason =
                 String(input.value || "").trim();
 
-            if (!reason) {
+            if (!window.KLBS_isValidDayReopenReason(reason)) {
 
                 error.textContent =
-                    "Please enter a reason for Day Re-open.";
+                    "Please select a reason for Day Re-open.";
 
                 input.focus();
 

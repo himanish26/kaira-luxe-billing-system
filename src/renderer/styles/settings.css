@@ -2128,17 +2128,15 @@ body{
 }
 
 
-/* Textarea */
+/* Reopen reason select */
 
-.day-reopen-reason-input{
+.day-reopen-reason-select{
     width:100%;
-    min-height:105px;
+    min-height:42px;
 
     box-sizing:border-box;
 
     padding:12px 13px;
-
-    resize:vertical;
 
     color:#1f2937;
     background:#ffffff;
@@ -2153,7 +2151,7 @@ body{
     line-height:1.45;
 }
 
-.day-reopen-reason-input:focus{
+.day-reopen-reason-select:focus{
     border-color:#8B0040;
 
     box-shadow:

@@ -46,6 +46,8 @@ async function getBusinessReport(fromDate, toDate) {
 
                 bi.barcode,
                 bi.brand,
+                p.segment,
+                bi.business_segment,
                 bi.product_name,
 
                 p.style_code,
@@ -234,6 +236,8 @@ async function getCompletedCreditNoteItems(fromDate, toDate) {
                 ri.id AS return_item_id,
                 ri.barcode,
                 obi.brand,
+                p.segment,
+                obi.business_segment,
                 ri.product_name,
                 NULL AS style_code,
                 obi.colour,
@@ -255,6 +259,8 @@ async function getCompletedCreditNoteItems(fromDate, toDate) {
                 ON ri.return_id = r.id
             LEFT JOIN bill_items obi
                 ON obi.id = ri.original_bill_item_id
+            LEFT JOIN products p
+                ON p.barcode = COALESCE(obi.barcode, ri.barcode)
             WHERE r.accounting_status = 'COMPLETED'
               AND r.credit_note_no IS NOT NULL
               AND TRIM(r.credit_note_no) <> ''
@@ -355,6 +361,8 @@ async function getProductBillSideReport(fromDate, toDate) {
                 bi.barcode,
 
                 bi.brand,
+                p.segment,
+                bi.business_segment,
 
                 bi.product_name,
 
@@ -463,6 +471,8 @@ function productKey(row) {
     return JSON.stringify([
         String(row.barcode || "").trim().toUpperCase(),
         String(row.brand || ""),
+        String(row.segment || ""),
+        String(row.business_segment || ""),
         String(row.product_name || ""),
         String(row.style_code || ""),
         String(row.colour || ""),
@@ -475,6 +485,8 @@ function createProductRow(row) {
     return {
         barcode: row.barcode || "",
         brand: row.brand || "",
+        segment: row.segment || "",
+        business_segment: row.business_segment || "",
         product_name: row.product_name || "",
         style_code: row.style_code || "",
         colour: row.colour || "",
@@ -583,6 +595,8 @@ async function getProductSalesReport(fromDate, toDate) {
         SELECT
             COALESCE(obi.barcode, ri.barcode) AS barcode,
             COALESCE(obi.brand, '') AS brand,
+            COALESCE(p.segment, '') AS segment,
+            COALESCE(obi.business_segment, '') AS business_segment,
             COALESCE(obi.product_name, ri.product_name, '') AS product_name,
             p.style_code,
             COALESCE(obi.colour, '') AS colour,

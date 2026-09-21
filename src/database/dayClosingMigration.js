@@ -117,6 +117,36 @@ const CREATE_SEGMENT_DSR_OUTBOX_SQL = `
     )
 `;
 
+const CREATE_CONSOLIDATED_REPORTING_JOBS_SQL = `
+    CREATE TABLE IF NOT EXISTS consolidated_reporting_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        closing_id INTEGER NOT NULL,
+        business_date TEXT NOT NULL,
+        close_sequence INTEGER NOT NULL,
+        contract_version INTEGER NOT NULL,
+        snapshot_version INTEGER NOT NULL,
+        payload_json TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        report_status TEXT NOT NULL
+            CHECK (report_status IN ('FINAL', 'INCOMPLETE', 'UNAVAILABLE')),
+        data_quality_status TEXT NOT NULL
+            CHECK (data_quality_status IN ('COMPLETE', 'INCOMPLETE', 'UNAVAILABLE')),
+        created_at TEXT NOT NULL,
+        sheet_status TEXT NOT NULL DEFAULT 'PENDING'
+            CHECK (sheet_status IN ('PENDING', 'PROCESSING', 'DELIVERED', 'FAILED')),
+        sheet_attempt_count INTEGER NOT NULL DEFAULT 0,
+        sheet_last_error TEXT,
+        sheet_delivered_at TEXT,
+        email_status TEXT NOT NULL DEFAULT 'PENDING'
+            CHECK (email_status IN ('PENDING', 'PROCESSING', 'DELIVERED', 'FAILED')),
+        email_attempt_count INTEGER NOT NULL DEFAULT 0,
+        email_last_error TEXT,
+        email_delivered_at TEXT,
+        UNIQUE (closing_id),
+        UNIQUE (business_date, close_sequence)
+    )
+`;
+
 function run(db, sql, params = []) {
     return new Promise((resolve, reject) => {
         db.run(sql, params, function (error) {
@@ -342,12 +372,41 @@ async function migrateSegmentDsrOutbox(db) {
     }
 }
 
+async function migrateConsolidatedReportingJobs(db) {
+    let transactionStarted = false;
+    try {
+        await run(db, "BEGIN IMMEDIATE TRANSACTION");
+        transactionStarted = true;
+        await run(db, CREATE_CONSOLIDATED_REPORTING_JOBS_SQL);
+        await run(db, "CREATE INDEX IF NOT EXISTS idx_consolidated_reporting_jobs_pending ON consolidated_reporting_jobs(sheet_status, email_status, business_date, id)");
+        const table = await get(db, "SELECT name FROM sqlite_master WHERE type='table' AND name='consolidated_reporting_jobs'");
+        const columns = await new Promise((resolve, reject) => {
+            db.all("PRAGMA table_info(consolidated_reporting_jobs)", [], (error, rows) => error ? reject(error) : resolve(new Set((rows || []).map(row => row.name))));
+        });
+        const required = [
+            "closing_id", "business_date", "close_sequence", "contract_version", "snapshot_version",
+            "payload_json", "payload_hash", "report_status", "data_quality_status", "created_at",
+            "sheet_status", "sheet_attempt_count", "sheet_last_error", "sheet_delivered_at",
+            "email_status", "email_attempt_count", "email_last_error", "email_delivered_at"
+        ];
+        if (!table || !required.every(column => columns.has(column))) throw new Error("Consolidated reporting jobs migration verification failed.");
+        await run(db, "COMMIT");
+        transactionStarted = false;
+    }
+    catch (error) {
+        if (transactionStarted) await run(db, "ROLLBACK").catch(() => {});
+        throw error;
+    }
+}
+
 module.exports = {
     SNAPSHOT_VERSION,
     CREATE_DAY_CLOSING_SNAPSHOTS_SQL,
     CREATE_ACTIVE_INDEX_SQL,
     CREATE_DATE_INDEX_SQL,
     CREATE_INTEGRATION_OUTBOX_SQL,
+    CREATE_CONSOLIDATED_REPORTING_JOBS_SQL,
     migrateDayClosingSnapshots,
-    migrateSegmentDsrOutbox
+    migrateSegmentDsrOutbox,
+    migrateConsolidatedReportingJobs
 };

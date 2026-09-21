@@ -11,6 +11,12 @@ let inventoryTotalPages = 1;
 
 function showInventory() {
 
+    // Inventory navigation is a fresh-entry boundary. Active search and
+    // pagination remain intact while this screen is open, but must not
+    // survive leaving and re-entering Product Master.
+    inventoryKeyword = "";
+    inventoryPage = 1;
+
     discardStockAuthorization();
 
     const settingsScreen =
@@ -103,6 +109,9 @@ async function loadInventorySummary() {
 
     document.getElementById("inventoryCollectionCount").textContent =
         summary.collections;
+
+    document.getElementById("inventoryLatestSku").textContent =
+        summary.latest_sku || "-";
 
 }
 

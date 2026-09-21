@@ -154,7 +154,8 @@ async function main() {
         createBackup: async () => ({ backupFileName: "test.zip", backupFilePath: "test.zip" }),
         validateBackup: async () => ({ success: true }),
         integrationOutbox: { enqueue: async () => {} },
-        segmentDsrOutbox: { enqueue: async () => { throw new Error("segment queue unavailable"); } }
+        segmentDsrOutbox: { enqueue: async () => { throw new Error("segment queue unavailable"); } },
+        consolidatedReportingPersistence: { createFrozenJobWithinTransaction: async () => ({ jobId: 1, payloadHash: "test", payload: { dataQuality: { status: "COMPLETE" } } }) }
     });
     const closeResult = await closeService.closeBusinessDay("2026-09-21");
     assert.strictEqual(closeResult.success, true, "Segment enqueue failure must not fail Day Closing");

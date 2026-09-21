@@ -60,6 +60,13 @@ function getInventorySummary() {
                 COUNT(DISTINCT category) AS categories,
                 COUNT(DISTINCT season) AS seasons,
                 COUNT(DISTINCT collection) AS collections,
+                (
+                    SELECT sku
+                    FROM products latest_products
+                    WHERE TRIM(COALESCE(latest_products.sku, '')) <> ''
+                    ORDER BY latest_products.id DESC
+                    LIMIT 1
+                ) AS latest_sku,
                 COALESCE(
                     (
                         SELECT SUM(it.quantity)

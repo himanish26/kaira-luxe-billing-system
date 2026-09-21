@@ -53,6 +53,7 @@ function createDayClosingService(options = {}) {
     const klbsVersion = String(options.klbsVersion || "").trim();
     const integrationOutbox = options.integrationOutbox || null;
     const segmentDsrOutbox = options.segmentDsrOutbox || null;
+    const consolidatedReportingPersistence = options.consolidatedReportingPersistence || null;
     const getEmailConfiguration = options.getEmailConfiguration || (() => ({
         recipients: options.closingEmail === undefined
             ? String(process.env.DAY_CLOSING_EMAIL || "").split(",").map(value => value.trim()).filter(Boolean)
@@ -608,6 +609,7 @@ function createDayClosingService(options = {}) {
         }
 
         const closedAt = now().toISOString();
+        let consolidatedReportingJob = null;
         try {
             await run("BEGIN IMMEDIATE TRANSACTION");
             const update = await run(`
@@ -629,6 +631,14 @@ function createDayClosingService(options = {}) {
                     SET state = 'CLOSED', closed_at = ?, updated_at = ?
                     WHERE business_date = ?
                 `, [closedAt, closedAt, reservation.businessDate]);
+            }
+            if (consolidatedReportingPersistence) {
+                const closedSnapshot = await get("SELECT * FROM day_closing_snapshots WHERE id = ? AND close_status = 'CLOSED'", [reservation.snapshotId]);
+                consolidatedReportingJob = await consolidatedReportingPersistence.createFrozenJobWithinTransaction(
+                    closedSnapshot,
+                    closedAt,
+                    klbsVersion
+                );
             }
             await run("COMMIT");
         }
@@ -733,7 +743,14 @@ function createDayClosingService(options = {}) {
             activityWarning,
             dsrSyncStatus: dsrResult.status,
             dsrSyncWarning: dsrResult.warning,
-            dsrSyncAction: dsrResult.action
+            dsrSyncAction: dsrResult.action,
+            consolidatedReportingJob: consolidatedReportingJob
+                ? {
+                    jobId: consolidatedReportingJob.jobId,
+                    payloadHash: consolidatedReportingJob.payloadHash,
+                    dataQualityStatus: consolidatedReportingJob.payload.dataQuality.status
+                }
+                : null
         };
     }
 
@@ -745,6 +762,14 @@ function createDayClosingService(options = {}) {
                 alreadyClosing: true,
                 businessDate: state.businessDate,
                 message: "Business Day closing is already in progress."
+            };
+        }
+        if (!consolidatedReportingPersistence || typeof consolidatedReportingPersistence.createFrozenJobWithinTransaction !== "function") {
+            return {
+                success: false,
+                reportingPersistenceRequired: true,
+                businessDate: targetBusinessDate,
+                error: "Consolidated reporting persistence is required before Day Closing can commit CLOSED."
             };
         }
         closeInFlight = executeClose(targetBusinessDate);

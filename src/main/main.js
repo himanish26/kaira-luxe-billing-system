@@ -362,6 +362,7 @@ const { createDayClosingHistoryService } = require("../database/dayClosingHistor
 const { createDsrSyncService } = require("../services/dsrSyncService");
 const { createBusinessSegmentDsrOutboxService } = require("../services/businessSegmentDsrOutboxService");
 const { createBusinessSegmentDsrSyncService } = require("../services/businessSegmentDsrSyncService");
+const { createConsolidatedReportingPersistenceService } = require("../services/consolidatedReportingPersistenceService");
 const dsrSyncService = createDsrSyncService({
     configProvider: () => integrationConfig.resolveDsrRuntime()
 });
@@ -391,6 +392,7 @@ const segmentDsrOutbox = createBusinessSegmentDsrOutboxService({
     getEmailConfiguration: () => integrationConfig.resolveEmailRuntime(),
     klbsVersion: app.getVersion()
 });
+const consolidatedReportingPersistence = createConsolidatedReportingPersistenceService({ database });
 const {
     getDayClosingSummary,
     getDayClosingSnapshot,
@@ -405,6 +407,7 @@ const {
     dsrSyncService,
     integrationOutbox,
     segmentDsrOutbox,
+    consolidatedReportingPersistence,
     klbsVersion: app.getVersion(),
     logBusinessDayClosed,
     logBusinessDayReopened,

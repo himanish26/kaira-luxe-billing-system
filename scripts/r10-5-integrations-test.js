@@ -163,6 +163,8 @@ async function main() {
     assert(main.includes('requireIntegrationSession(grant, "INTEGRATION_EMAIL_SETTINGS")'));
     assert(main.includes('requireIntegrationSession(grant, "INTEGRATION_DSR_SETTINGS")'));
     assert(ui.includes("KLBS_Test"));
+    assert(!ui.includes("message.textContent"));
+    assert.strictEqual((ui.match(/document\.getElementById\("message"\)\.textContent/g) || []).length, 10);
     assert(!ui.includes("Automatic Email Backup"));
     assert(!ui.includes("Automatic DSR Sync"));
     assert(!ui.includes("Google password"));

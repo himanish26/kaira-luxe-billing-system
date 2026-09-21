@@ -72,12 +72,13 @@ async function main() {
         assert.strictEqual(await readSchemaVersion(database), CURRENT_DB_SCHEMA_VERSION);
         await close(database);
 
-        // 3: current databases do not incur migration churn or version rewrites.
+        // 3: current databases reconcile idempotent release-level migrations
+        // without changing the numbered schema version.
         database = await createDatabase(path.join(temporary, "current.db"));
         await prepare(database);
         let migrationRuns = 0;
         await prepare(database, { runCurrentMigrations: async () => { migrationRuns += 1; } });
-        assert.strictEqual(migrationRuns, 0);
+        assert.strictEqual(migrationRuns, 1);
         assert.strictEqual((await metadata(database)).schema_version, CURRENT_DB_SCHEMA_VERSION);
         await close(database);
 

@@ -252,6 +252,13 @@ async function openSecuritySetup() {
 }
 
 document.getElementById("securitySetupBtn").addEventListener("click", openSecuritySetup);
+const reopenReasonSelect = document.getElementById("reopenReason");
+window.KLBS_DAY_REOPEN_REASONS.forEach(reason => {
+    const option = document.createElement("option");
+    option.value = reason;
+    option.textContent = reason;
+    reopenReasonSelect.appendChild(option);
+});
 document.getElementById("reopenBtn").addEventListener("click", () => {
     document.getElementById("actions").hidden = true;
     document.getElementById("reopenPanel").hidden = false;
@@ -263,10 +270,10 @@ document.getElementById("cancelReopenBtn").addEventListener("click", () => {
     document.getElementById("reopenPin").value = "";
 });
 document.getElementById("confirmReopenBtn").addEventListener("click", async () => {
-    const reason = document.getElementById("reopenReason").value.trim();
+    const reason = reopenReasonSelect.value.trim();
     const pin = document.getElementById("reopenPin").value;
     const error = document.getElementById("reopenError");
-    if (!reason || !/^\d{4}$/.test(pin)) {
+    if (!window.KLBS_isValidDayReopenReason(reason) || !/^\d{4}$/.test(pin)) {
         error.textContent = "Enter a reason and valid 4-digit Manager PIN.";
         return;
     }

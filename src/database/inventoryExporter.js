@@ -4,6 +4,7 @@ const INVENTORY_EXPORT_COLUMNS = [
     { header: "Barcode", key: "barcode", width: 18 },
     { header: "SKU", key: "sku", width: 18 },
     { header: "Brand", key: "brand", width: 18 },
+    { header: "Business Segment", key: "business_segment", width: 20 },
     { header: "Segment", key: "segment", width: 15 },
     { header: "Category", key: "category", width: 18 },
     { header: "Season", key: "season", width: 15 },

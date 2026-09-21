@@ -106,7 +106,7 @@ function addBusinessCreditNoteSheets(
     );
     sheet.columns = [
         { width: 18 }, { width: 16 }, { width: 18 }, { width: 18 },
-        { width: 18 }, { width: 24 }, { width: 16 }, { width: 18 },
+        { width: 18 }, { width: 24 }, { width: 20 }, { width: 20 }, { width: 16 }, { width: 18 },
         { width: 18 }, { width: 28 }, { width: 16 }, { width: 14 },
         { width: 10 }, { width: 18 }, { width: 13 }, { width: 13 },
         { width: 17 }, { width: 19 }, { width: 19 }, { width: 10 },
@@ -115,7 +115,7 @@ function addBusinessCreditNoteSheets(
     sheet.getRow(11).values = [
         "Credit Note No", "Credit Note Date", "Return No",
         "Original Bill No", "Original Bill Date", "Customer Name",
-        "Mobile Number", "Barcode", "Brand", "Product Name",
+        "Mobile Number", "Barcode", "Brand", "Segment", "Business Segment", "Product Name",
         "Style Code", "Colour", "Size", "Category", "Qty Returned",
         "MRP", "Gross Reversal", "Discount Reversal",
         "Taxable Reversal", "GST %", "CGST Reversal", "SGST Reversal",
@@ -135,6 +135,8 @@ function addBusinessCreditNoteSheets(
             item.customer_mobile,
             item.barcode,
             item.brand || null,
+            item.segment || null,
+            item.business_segment || null,
             item.product_name,
             item.style_code || null,
             item.colour || null,
@@ -156,28 +158,28 @@ function addBusinessCreditNoteSheets(
 
     const creditNoteDataEnd = rowNumber - 1;
     if (creditNoteItems.length === 0) {
-        sheet.mergeCells("A12:X12");
+        sheet.mergeCells("A12:Z12");
         sheet.getCell("A12").value = "No Credit Notes for selected period";
         sheet.getCell("A12").alignment = { horizontal: "center" };
     }
     else {
         const totalRow = sheet.getRow(rowNumber);
         totalRow.values = ["TOTAL"];
-        for (const column of [15, 17, 18, 19, 21, 22, 23, 24]) {
+        for (const column of [17, 19, 20, 21, 23, 24, 25, 26]) {
             const letter = sheet.getColumn(column).letter;
             const result = creditNoteItems.reduce(
                 (total, item) => {
                     const fields = {
-                        15: "quantity_returned",
-                        17: "gross_reversal",
-                        18: "discount_reversal",
-                        19: "taxable_reversal",
-                        21: "cgst_reversal",
-                        22: "sgst_reversal",
-                        23: "gst_reversal",
-                        24: "net_reversal"
+                        17: "quantity_returned",
+                        19: "gross_reversal",
+                        20: "discount_reversal",
+                        21: "taxable_reversal",
+                        23: "cgst_reversal",
+                        24: "sgst_reversal",
+                        25: "gst_reversal",
+                        26: "net_reversal"
                     };
-                    return column === 15
+                    return column === 17
                         ? total + Number(item[fields[column]] || 0)
                         : addPaise(total, item[fields[column]]);
                 },
@@ -185,13 +187,13 @@ function addBusinessCreditNoteSheets(
             );
             totalRow.getCell(column).value = {
                 formula: `SUM(${letter}12:${letter}${creditNoteDataEnd})`,
-                result: column === 15 ? result : fromPaise(result)
+                result: column === 17 ? result : fromPaise(result)
             };
         }
         totalRow.font = { bold: true };
     }
 
-    for (const column of [16, 17, 18, 19, 21, 22, 23, 24]) {
+    for (const column of [18, 19, 20, 21, 23, 24, 25, 26]) {
         sheet.getColumn(column).numFmt =
             '"₹"#,##0.00;[Red]("₹"#,##0.00);-';
     }
@@ -251,17 +253,17 @@ function addBusinessCreditNoteSheets(
     const salesEnd = Math.max(12, 11 + salesData.length);
     const cnEnd = Math.max(12, creditNoteDataEnd);
     const rows = [
-        [12, "Gross Sales", `SUMPRODUCT('Business Report'!M12:M${salesEnd},'Business Report'!N12:N${salesEnd})`, salesTotals.gross],
-        [13, "Discount", `SUM('Business Report'!O12:O${salesEnd})`, salesTotals.discount],
-        [14, "Net Billing", `SUM('Business Report'!T12:T${salesEnd})`, salesTotals.net],
-        [18, "Returned Qty", `SUM('Returns & Credit Notes'!O12:O${cnEnd})`, creditTotals.qty, true],
-        [19, "Gross Reversal", `SUM('Returns & Credit Notes'!Q12:Q${cnEnd})`, creditTotals.gross_reversal],
-        [20, "Discount Reversal", `SUM('Returns & Credit Notes'!R12:R${cnEnd})`, creditTotals.discount_reversal],
-        [21, "Taxable Reversal", `SUM('Returns & Credit Notes'!S12:S${cnEnd})`, creditTotals.taxable_reversal],
-        [22, "CGST Reversal", `SUM('Returns & Credit Notes'!U12:U${cnEnd})`, creditTotals.cgst_reversal],
-        [23, "SGST Reversal", `SUM('Returns & Credit Notes'!V12:V${cnEnd})`, creditTotals.sgst_reversal],
-        [24, "GST Reversal", `SUM('Returns & Credit Notes'!W12:W${cnEnd})`, creditTotals.gst_reversal],
-        [25, "Net Reversal", `SUM('Returns & Credit Notes'!X12:X${cnEnd})`, creditTotals.net_reversal],
+        [12, "Gross Sales", `SUMPRODUCT('Business Report'!O12:O${salesEnd},'Business Report'!P12:P${salesEnd})`, salesTotals.gross],
+        [13, "Discount", `SUM('Business Report'!Q12:Q${salesEnd})`, salesTotals.discount],
+        [14, "Net Billing", `SUM('Business Report'!V12:V${salesEnd})`, salesTotals.net],
+        [18, "Returned Qty", `SUM('Returns & Credit Notes'!Q12:Q${cnEnd})`, creditTotals.qty, true],
+        [19, "Gross Reversal", `SUM('Returns & Credit Notes'!S12:S${cnEnd})`, creditTotals.gross_reversal],
+        [20, "Discount Reversal", `SUM('Returns & Credit Notes'!T12:T${cnEnd})`, creditTotals.discount_reversal],
+        [21, "Taxable Reversal", `SUM('Returns & Credit Notes'!U12:U${cnEnd})`, creditTotals.taxable_reversal],
+        [22, "CGST Reversal", `SUM('Returns & Credit Notes'!W12:W${cnEnd})`, creditTotals.cgst_reversal],
+        [23, "SGST Reversal", `SUM('Returns & Credit Notes'!X12:X${cnEnd})`, creditTotals.sgst_reversal],
+        [24, "GST Reversal", `SUM('Returns & Credit Notes'!Y12:Y${cnEnd})`, creditTotals.gst_reversal],
+        [25, "Net Reversal", `SUM('Returns & Credit Notes'!Z12:Z${cnEnd})`, creditTotals.net_reversal],
         [28, "Net Sales After Returns", "B14-B25", salesTotals.net - creditTotals.net_reversal]
     ];
     summary.getCell("A17").value = "Credit Notes";
@@ -465,6 +467,8 @@ worksheet.getCell("B9").value =
    
     { key: "barcode", width: 18 },
     { key: "brand", width: 20 },
+    { key: "segment", width: 20 },
+    { key: "business_segment", width: 20 },
     { key: "product_name", width: 30 },
 
     { key: "style_code", width: 18 },
@@ -498,6 +502,8 @@ headerRow.values = [
 
     "Barcode",
     "Brand",
+    "Segment",
+    "Business Segment",
     "Product Name",
     "Style Code",
     "Colour",
@@ -558,6 +564,8 @@ worksheet.getRow(currentRow).values = [
 
     row.barcode,
     row.brand,
+    row.segment,
+    row.business_segment,
     row.product_name,
     row.style_code,
     row.colour,
@@ -614,6 +622,8 @@ previousBillNo = row.bill_no;
     worksheet.getRow(currentRow).values = [
 
     "TOTAL",
+    "",
+    "",
     "",
     "",
     "",
@@ -854,7 +864,7 @@ async function exportProductSalesReport(
     toDate
 ) {
 
-    const totalColumns = 17;
+    const totalColumns = 19;
 
     const lastColumn =
         String.fromCharCode(64 + totalColumns);
@@ -899,6 +909,8 @@ worksheet.getCell("B9").value =
 
         { key: "barcode", width: 18 },
         { key: "brand", width: 18 },
+        { key: "segment", width: 20 },
+        { key: "business_segment", width: 20 },
         { key: "product_name", width: 30 },
         { key: "style_code", width: 18 },
         { key: "colour", width: 15 },
@@ -923,6 +935,8 @@ worksheet.getCell("B9").value =
 
         "Barcode",
         "Brand",
+        "Segment",
+        "Business Segment",
         "Product Name",
         "Style Code",
         "Colour",
@@ -954,6 +968,8 @@ worksheet.getCell("B9").value =
 
             row.barcode,
             row.brand || null,
+            row.segment || null,
+            row.business_segment || null,
             row.product_name || null,
             row.style_code || null,
             row.colour || null,
@@ -988,7 +1004,7 @@ worksheet.getCell("B9").value =
 
     "TOTAL",
 
-    null, null, null, null, null, null, totalQtySold,
+    null, null, null, null, null, null, null, null, totalQtySold,
     totalQtyReturned, totalNetQtySold,
     null, null, null, null, null, null,
     fromPaise(totalNetSalesAfterReturns)
@@ -1001,7 +1017,7 @@ worksheet.getRow(currentRow).font = {
 
 };
 
-    for (const column of [11, 12, 13, 14, 15, 16, 17]) {
+    for (const column of [13, 14, 15, 16, 17, 18, 19]) {
         worksheet.getColumn(column).numFmt =
             '"₹"#,##0.00;[Red]("₹"#,##0.00);-';
     }

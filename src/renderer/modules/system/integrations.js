@@ -121,7 +121,7 @@ save.onclick = async () => {
             "Configuration saved securely." +
             (r.activityWarning ? ` ${r.activityWarning}` : "");
     } catch (e) {
-        message.textContent = e.message;
+        document.getElementById("message").textContent = e.message;
     }
 };
 
@@ -137,7 +137,7 @@ testConnection.onclick = async () => {
                 : integrationLabel(r.error)) +
             (r.activityWarning ? ` ${r.activityWarning}` : "");
     } catch (e) {
-        message.textContent = e.message;
+        document.getElementById("message").textContent = e.message;
     }
 };
 
@@ -154,13 +154,13 @@ sendTest.onclick = async () => {
                 grant
             );
 
-        message.textContent =
+        document.getElementById("message").textContent =
             (r.success
                 ? "Test Email Sent"
                 : integrationLabel(r.error)) +
             (r.activityWarning ? ` ${r.activityWarning}` : "");
     } catch (e) {
-        message.textContent = e.message;
+        document.getElementById("message").textContent = e.message;
     }
 };
 
@@ -194,7 +194,7 @@ save.onclick = async () => {
             "Configuration saved securely." +
             (r.activityWarning ? ` ${r.activityWarning}` : "");
     } catch (e) {
-        message.textContent = e.message;
+        document.getElementById("message").textContent = e.message;
     }
 };
 
@@ -205,13 +205,13 @@ testConnection.onclick = async () => {
                 grant
             );
 
-        message.textContent =
+        document.getElementById("message").textContent =
             (r.success
                 ? "Connection Successful\nTest log written to KLBS_Test."
                 : integrationLabel(r.error)) +
             (r.activityWarning ? ` ${r.activityWarning}` : "");
     } catch (e) {
-        message.textContent = e.message;
+        document.getElementById("message").textContent = e.message;
     }
 };
 

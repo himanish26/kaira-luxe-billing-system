@@ -11,7 +11,8 @@ const {
 } = require("../services/credentialCrypto");
 const {
     migrateDayClosingSnapshots,
-    migrateSegmentDsrOutbox
+    migrateSegmentDsrOutbox,
+    migrateConsolidatedReportingJobs
 } = require("./dayClosingMigration");
 const {
     migrateActivityLogSchema
@@ -2989,6 +2990,8 @@ try {
         await runNamedMigration("business_segment_columns", () => migrateBusinessSegmentColumns(db));
 
         await runNamedMigration("segment_dsr_outbox", () => migrateSegmentDsrOutbox(db));
+
+        await runNamedMigration("consolidated_reporting_jobs", () => migrateConsolidatedReportingJobs(db));
             }
         });
 

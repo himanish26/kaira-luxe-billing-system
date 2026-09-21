@@ -63,11 +63,18 @@ async function main() {
         [...AUTHORIZATION_PURPOSES].sort(),
         Object.keys(ADMIN_PIN_AUDIT_POLICY).sort()
     );
-    for (const purpose of ["FF", "GIFT_VOUCHER", "DAY_REOPEN"]) {
+    const managerPurposes = [
+        "FF",
+        "GIFT_VOUCHER",
+        "INVENTORY_INWARD",
+        "INVENTORY_OUTWARD",
+        "DAY_REOPEN"
+    ];
+    for (const purpose of managerPurposes) {
         assert.strictEqual(AUTHORIZATION_POLICY[purpose], AUTHORIZATION_LEVELS.MANAGER);
     }
     for (const purpose of [...AUTHORIZATION_PURPOSES].filter(purpose =>
-        !["FF", "GIFT_VOUCHER", "DAY_REOPEN"].includes(purpose))) {
+        !managerPurposes.includes(purpose))) {
         assert.strictEqual(AUTHORIZATION_POLICY[purpose], AUTHORIZATION_LEVELS.ADMINISTRATOR);
     }
 

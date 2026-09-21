@@ -89,7 +89,7 @@ async function main() {
     assert(result.backupFilePath.includes(`${path.sep}PreUpgrade${path.sep}`));
     const validation = await backupService.validateBackup(result.backupFilePath);
     assert.strictEqual(validation.success, true);
-    assert.strictEqual(validation.metadata.appVersion, "1.0.0");
+    assert.strictEqual(validation.metadata.appVersion, require("../package.json").version);
     assert.strictEqual(validation.metadata.schemaVersion, 1);
     assert.strictEqual(validation.metadata.purpose, "PRE_UPGRADE");
     assert.strictEqual(new AdmZip(result.backupFilePath).getEntry("Database/billing.db") !== null, true);

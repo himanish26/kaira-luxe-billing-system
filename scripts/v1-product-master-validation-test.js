@@ -2,6 +2,7 @@ const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { spawnSync } = require("child_process");
 const XLSX = require("xlsx");
 
 const headers = [
@@ -45,9 +46,8 @@ function baseRow(barcode, overrides = {}) {
     };
 }
 
-async function main() {
+async function child(tempRoot) {
     const { app } = require("electron");
-    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-pm-validation-"));
     app.setPath("userData", path.join(tempRoot, "user data"));
     process.env.KLBS_DEV_DATABASE_PATH = path.join(tempRoot, "billing.db");
     const db = require("../src/database/database");
@@ -166,7 +166,39 @@ async function main() {
     app.exit(0);
 }
 
-main().catch(error => {
-    console.error(error.stack || error);
-    process.exitCode = 1;
-});
+if (process.argv.includes("--child")) {
+    child(process.argv[process.argv.indexOf("--child") + 1]).catch(error => {
+        console.error(error.stack || error);
+        try { require("electron").app.exit(1); } catch (_) {}
+        process.exitCode = 1;
+    });
+} else if (process.versions.electron) {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-pm-validation-"));
+    process.env.KLBS_DEV_DATABASE_PATH = path.join(tempRoot, "billing.db");
+    child(tempRoot).catch(error => {
+        console.error(error.stack || error);
+        try { require("electron").app.exit(1); } catch (_) {}
+        process.exitCode = 1;
+    });
+} else {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-pm-validation-"));
+    const electronBinary = require("electron");
+    const result = spawnSync(
+        electronBinary,
+        ["--disable-gpu", "--in-process-gpu", __filename, "--child", tempRoot],
+        {
+            cwd: path.resolve(__dirname, ".."),
+            env: { ...process.env, KLBS_DEV_DATABASE_PATH: path.join(tempRoot, "billing.db") },
+            encoding: "utf8",
+            timeout: 120000,
+            windowsHide: true
+        }
+    );
+    if (result.error) throw result.error;
+    if (result.status !== 0) {
+        process.stdout.write(result.stdout || "");
+        process.stderr.write(result.stderr || "");
+        process.exit(result.status || 1);
+    }
+    process.stdout.write(result.stdout || "");
+}

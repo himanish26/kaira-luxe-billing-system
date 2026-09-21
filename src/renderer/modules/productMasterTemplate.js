@@ -103,6 +103,14 @@ window.productMasterTemplate = `
 
     </div>
 
+    <div class="info-row">
+
+        <label>Last Existing SKU</label>
+
+        <span id="inventoryLatestSku">-</span>
+
+    </div>
+
 </div>
 
 <input

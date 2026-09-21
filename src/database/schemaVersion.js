@@ -200,9 +200,11 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
         );
     }
 
-    if (detectedVersion === null || detectedVersion < currentVersion) {
-        await runCurrentMigrations();
-    }
+    // Current migrations are idempotent schema reconciliation steps. They
+    // must also run for databases whose version marker already equals the
+    // current numbered schema, because release-level objects can be added
+    // without changing the numbered compatibility version.
+    await runCurrentMigrations();
     await validateCurrentSchema(database);
 
     if (detectedVersion === null) {

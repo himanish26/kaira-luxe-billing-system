@@ -864,7 +864,8 @@ button.secondary {
 }
 
 .reopen-panel textarea,
-.reopen-panel input {
+.reopen-panel input,
+.reopen-panel select {
     width: 100%;
 
     margin-top: 5px;

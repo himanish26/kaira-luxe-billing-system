@@ -50,6 +50,7 @@ async function child(tempRoot) {
     const valid = row => ({
         Barcode: row.barcode,
         Brand: "Import Test",
+        "Business Segment": "KL",
         Category: "Test",
         "Product Name": "Import Test Product",
         MRP: 100,
@@ -90,7 +91,8 @@ async function child(tempRoot) {
 
     const malformedFile = files("malformed.xlsx");
     fs.writeFileSync(malformedFile, "not an Excel workbook");
-    await assert.rejects(() => importProducts(malformedFile));
+    const malformed = await importProducts(malformedFile);
+    assert.strictEqual(malformed.success, false);
     const malformedActivities = await failedActivities(db, "malformed.xlsx");
     assert.strictEqual(malformedActivities.length, 1);
     assert.strictEqual(malformedActivities[0].status, "FAILED");
