@@ -140,6 +140,23 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
         }
     }
 
+    async function requeueFailedJob(jobId) {
+        if (!Number.isInteger(jobId) || jobId <= 0) {
+            return { requeued: false, jobId: null, code: "INVALID_JOB_ID" };
+        }
+        const result = await run(`
+            UPDATE consolidated_reporting_jobs
+            SET sheet_status = 'PENDING',
+                sheet_processing_started_at = NULL
+            WHERE id = ?
+              AND sheet_status = 'FAILED'
+              AND sheet_delivered_at IS NULL
+        `, [jobId]);
+        return result.changes === 1
+            ? { requeued: true, jobId }
+            : { requeued: false, jobId, code: "JOB_NOT_REQUEUEABLE" };
+    }
+
     async function persistOutcome(claimed, outcome) {
         const delivered = outcome.delivered === true;
         const nextStatus = delivered ? "DELIVERED" : outcome.retryable ? "PENDING" : "FAILED";
@@ -256,6 +273,7 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
 
     return {
         claimNext,
+        requeueFailedJob,
         recoverStaleProcessing,
         processNext,
         processClaimed: async claimed => persistOutcome(claimed, await sendClaimed(claimed)),
