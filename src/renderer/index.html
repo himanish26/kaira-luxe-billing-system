@@ -2243,20 +2243,20 @@ style="display:none;">
 
     <div class="modal-content">
 
+        <div class="ff-pin-lock" aria-hidden="true">&#128274;</div>
+
         <h2>
-            Manager Authorization
+            Manager Access
         </h2>
 
-        <p>
-            Enter 4-digit Manager PIN
-        </p>
-
-        <input
-            type="password"
-            id="ffPinInput"
-            maxlength="4"
-            inputmode="numeric"
-            placeholder="Enter Manager PIN">
+        <div class="ff-pin-box">
+            <input
+                type="password"
+                id="ffPinInput"
+                maxlength="4"
+                inputmode="numeric"
+                placeholder="Enter 4-digit Manager PIN">
+        </div>
 
         <div
             id="ffPinError"
@@ -2277,7 +2277,7 @@ style="display:none;">
                 id="ffPinVerifyBtn"
                 class="dashboard-btn klbs-primary-btn">
 
-                Verify
+                Unlock
 
             </button>
 

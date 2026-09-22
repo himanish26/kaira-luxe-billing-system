@@ -1273,7 +1273,9 @@ function showAuthorizationGranted({ button, modal, input, resetText, onComplete 
             settingsScreen.style.display = "block";
         }
 
-        resetScrollPosition();
+        if (settingsPage.dataset.integrationConfigure !== "true") {
+            resetScrollPosition();
+        }
 
     });
 
@@ -1289,7 +1291,13 @@ function requireAdminAuthorization(purpose, callback){
     adminSuccessCallback = callback;
     adminAuthorizationPurpose = purpose;
 
-    const managerPurpose = ["FF", "GIFT_VOUCHER", "DAY_REOPEN"].includes(purpose);
+    const managerPurpose = [
+        "FF",
+        "GIFT_VOUCHER",
+        "INVENTORY_INWARD",
+        "INVENTORY_OUTWARD",
+        "DAY_REOPEN"
+    ].includes(purpose);
     const title = document.getElementById("authorizationDialogTitle");
     if (title) title.textContent = managerPurpose ? "Manager Access" : "Administrator Access";
     adminPin.placeholder = managerPurpose
@@ -1300,6 +1308,7 @@ function requireAdminAuthorization(purpose, callback){
 
     document.getElementById("adminError").innerText = "";
 
+    adminDialog.classList.toggle("manager-authorization", managerPurpose);
     adminDialog.style.display = "flex";
 
     requestAnimationFrame(() => {
@@ -1369,8 +1378,19 @@ function showReturnReasonDialog() {
             dialog.style.display = "none";
             cancel.onclick = null;
             confirm.onclick = null;
+            dialog.removeEventListener("keydown", handleEscape);
             resolve(value);
         };
+
+        const handleEscape = event => {
+            if (event.key !== "Escape") return;
+
+            event.preventDefault();
+            event.stopPropagation();
+            cancel.click();
+        };
+
+        dialog.addEventListener("keydown", handleEscape);
 
         cancel.onclick = () => finish(null);
         confirm.onclick = () => {
@@ -1538,6 +1558,7 @@ if (adminUnlockBtn){
         input: adminPin,
         resetText: "Unlock",
         onComplete: () => {
+            adminDialog.classList.remove("manager-authorization");
             isEditMode = true;
             if (adminSuccessCallback) {
                 adminSuccessCallback(authorization.grant);
@@ -1614,7 +1635,10 @@ document.addEventListener("keydown", (event) => {
         adminDialog.style.display === "flex"
     ){
 
-        adminDialog.style.display = "none";
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        adminCancelBtn?.click();
 
     }
 
@@ -2088,6 +2112,18 @@ if (cancelStoreCreditBtn) {
 
         }
     );
+
+}
+
+if (storeCreditModal) {
+
+    storeCreditModal.addEventListener("keydown", event => {
+        if (event.key !== "Escape") return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        cancelStoreCreditBtn?.click();
+    });
 
 }
 
@@ -4275,7 +4311,7 @@ showAuthorizationGranted({
     button: ffPinVerifyBtn,
     modal: ffPinDialog,
     input: ffPinInput,
-    resetText: "Verify",
+    resetText: "Unlock",
     onComplete: () => {
         managerAuthorizationPending = false;
         if (authorizedAction === "FF") {
@@ -4533,6 +4569,18 @@ if (giftVoucherCancelBtn) {
 
         }
     );
+
+}
+
+if (giftVoucherDialog) {
+
+    giftVoucherDialog.addEventListener("keydown", event => {
+        if (event.key !== "Escape") return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        giftVoucherCancelBtn?.click();
+    });
 
 }
 

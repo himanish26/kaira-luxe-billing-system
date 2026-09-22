@@ -773,6 +773,7 @@ function requestDayReopenReason() {
                 if (event.key === "Escape") {
 
                     event.preventDefault();
+                    event.stopPropagation();
 
                     closeModal(null);
 

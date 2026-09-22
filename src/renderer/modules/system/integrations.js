@@ -16,6 +16,7 @@ function integrationEvent(event) { return event ? `${integrationTime(event.at)} 
 let integrationConfigureGeneration = 0;
 let activeIntegrationConfigureRequest = null;
 let systemHealthGeneration = 0;
+let integrationNavigationInProgress = false;
 
 function invalidateSystemHealthRequests() {
     systemHealthGeneration += 1;
@@ -32,8 +33,13 @@ if (typeof window !== "undefined") {
 }
 
 function leaveIntegrationConfiguration() {
+    if (integrationNavigationInProgress) return;
+
+    integrationNavigationInProgress = true;
     invalidateIntegrationConfigureRequests();
-    return showSystemHealthPage();
+    return showSystemHealthPage().finally(() => {
+        integrationNavigationInProgress = false;
+    });
 }
 
 async function showSystemHealthPage() {
@@ -55,6 +61,7 @@ async function showSystemHealthPage() {
         <article class="integration-card"><h3>DAILY SALES REPORT</h3><strong>${config.dsr.configured ? "CONFIGURED" : "NOT CONFIGURED"}</strong>${source(config.dsr)}
         <dl><div><dt>Google Sheets</dt><dd>${integrationEscape(config.dsr.tabName || "KLBS_Daily_Data")}</dd></div><div><dt>Daily Sales Report Sync</dt><dd class="integration-enabled">ENABLED</dd></div><div><dt>Last DSR Sync</dt><dd>${integrationEscape(integrationEvent(config.dsr.lastSync))}</dd></div><div><dt>Last Connection Test</dt><dd>${integrationEscape(config.dsr.lastTestAt ? integrationTime(config.dsr.lastTestAt) + " · " + integrationLabel(config.dsr.lastTestResult) : "Never")}</dd></div></dl><button id="configureDsrIntegration" class="dashboard-btn">CONFIGURE</button></article>
         </div></section>` });
+    delete settingsPage.dataset.integrationConfigure;
     document.getElementById("configureEmailIntegration").onclick = () => enterIntegration("email");
     document.getElementById("configureDsrIntegration").onclick = () => enterIntegration("dsr");
     document.getElementById("refreshIntegrationStatus").onclick = showSystemHealthPage;
@@ -101,6 +108,7 @@ function wireSecret() {
 function showEmailIntegrationForm(email, grant) {
     renderSettingsPage({ title:"EMAIL & BACKUP", icon:"&#128231;", subtitle:"Configure the outgoing email service used for automated KLBS Day Closing backups.", backText:"← System Health", backAction:leaveIntegrationConfiguration,
         content:`<div class="integration-form"><h2>EMAIL ACCOUNT</h2><div class="integration-form-grid"><label>Account Name<input id="accountName" value="${integrationEscape(email.accountName)}"></label><label>Sender<input id="senderEmail" type="email" value="${integrationEscape(email.senderEmail)}"></label><label>SMTP Server<input id="smtpHost" value="${integrationEscape(email.smtpHost)}"></label><label>SMTP Port<input id="smtpPort" type="number" min="1" max="65535" value="${email.smtpPort}"></label><label>Security Mode<select id="securityMode"><option>STARTTLS</option><option value="SSL_TLS">SSL/TLS</option></select></label><label>SMTP Username<input id="smtpUsername" value="${integrationEscape(email.smtpUsername)}"></label></div><h2>SECURITY</h2>${secretControl("email", email.passwordConfigured)}<fieldset><legend>Backup Recipients</legend><div id="recipients">${recipientRows(email.recipients)}</div><button id="addRecipient" type="button" class="integration-button integration-button-small integration-button-secondary">+ ADD RECIPIENT</button></fieldset><div class="integration-info-row"><span>Email After Day Closing</span><strong>ENABLED</strong></div><div id="message" class="security-message" aria-live="polite"></div><div class="integration-actions"><button id="testConnection" class="integration-button integration-button-secondary">TEST CONNECTION</button><button id="sendTest" class="integration-button integration-button-secondary">SEND TEST EMAIL</button><button id="cancel" class="integration-button integration-button-neutral">CANCEL</button><button id="save" class="integration-button integration-button-primary">SAVE CHANGES</button></div>${emailGuide()}</div>` });
+    settingsPage.dataset.integrationConfigure = "true";
     document.getElementById("securityMode").value = email.securityMode; wireSecret();
     const wireRemove = () => document.querySelectorAll(".removeIntegrationRecipient").forEach(b => { b.onclick = () => b.closest(".integration-recipient-row").remove(); }); wireRemove();
     document.getElementById("addRecipient").onclick = () => { document.getElementById("recipients").insertAdjacentHTML("beforeend", recipientRows([""])); wireRemove(); };
@@ -172,6 +180,7 @@ function showDsrIntegrationForm(dsr, grant) {
     const banner=dsr.source==="ENVIRONMENT"?'<aside class="integration-banner"><strong>CURRENT CONFIGURATION</strong><p>Some DSR connection settings are currently supplied by Windows system configuration. Saving this form will create a KLBS-managed configuration.</p></aside>':"";
     renderSettingsPage({ title:"DAILY SALES REPORT", icon:"&#128202;", subtitle:"KLBS → Apps Script Web App → Google Sheet. No Google login is required.", backText:"← System Health", backAction:leaveIntegrationConfiguration,
         content:`<div class="integration-form">${banner}<h2>GOOGLE SHEET</h2><label>Google Sheet URL or Sheet ID<input id="sheetInput" value="${integrationEscape(dsr.sheetId)}"></label><label>Detected Sheet ID<input id="detectedSheet" value="${integrationEscape(dsr.sheetId)}" readonly></label><label>Data Sheet / Tab Name<input id="tabName" value="${integrationEscape(dsr.tabName||"KLBS_Daily_Data")}"></label><h2>APPS SCRIPT CONNECTION</h2><label>Apps Script Web App URL<input id="webAppUrl" type="url" value="${integrationEscape(dsr.webAppUrl)}"></label>${secretControl("dsr",dsr.secretConfigured)}<h2>SYNC STATUS</h2><div class="integration-info-row"><span>Daily Sales Report Sync</span><strong>ENABLED</strong></div><p>Test Connection verifies the Apps Script and Google Sheet connection. A diagnostic entry will be written to KLBS_Test.</p><div id="message" class="security-message" aria-live="polite"></div><div class="integration-actions"><button id="testConnection" class="integration-button integration-button-secondary">TEST CONNECTION</button><button id="cancel" class="integration-button integration-button-neutral">CANCEL</button><button id="save" class="integration-button integration-button-primary">SAVE CHANGES</button></div>${dsrGuide()}</div>` });
+    settingsPage.dataset.integrationConfigure = "true";
     wireSecret(); sheetInput.oninput=()=>{detectedSheet.value=detectedSheetId(sheetInput.value);};
 save.onclick = async () => {
     try {

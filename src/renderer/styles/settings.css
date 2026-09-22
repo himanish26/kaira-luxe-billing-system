@@ -710,6 +710,36 @@ font-size:15px;
 
 }
 
+#adminDialog.manager-authorization .modal-content h2{
+    color:#B26A00;
+}
+
+#adminDialog.manager-authorization .klbs-primary-btn{
+    background:#B26A00;
+    border-color:#B26A00;
+}
+
+#adminDialog.manager-authorization .klbs-primary-btn:hover:not(:disabled){
+    background:#8A4F00;
+    border-color:#8A4F00;
+}
+
+#adminDialog.manager-authorization .klbs-cancel-btn{
+    color:#B26A00;
+    border-color:#B26A00;
+}
+
+#adminDialog.manager-authorization .klbs-cancel-btn:hover:not(:disabled){
+    background:#FFF7E8;
+    color:#B26A00;
+    border-color:#B26A00;
+}
+
+#adminDialog.manager-authorization .klbs-primary-btn:focus-visible,
+#adminDialog.manager-authorization .klbs-cancel-btn:focus-visible{
+    outline-color:rgba(178,106,0,.28);
+}
+
 .modal-buttons button{
 
 transition:.2s;
