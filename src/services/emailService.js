@@ -3,6 +3,7 @@ const nodemailer = require("nodemailer");
 let integrationConfigService = null;
 
 function setIntegrationConfigService(service) { integrationConfigService = service; }
+function getIntegrationConfigService() { return integrationConfigService; }
 
 async function getSmtpSettings() {
     if (!integrationConfigService) throw new Error("Email configuration service is unavailable.");
@@ -61,5 +62,5 @@ async function sendTestEmail(recipient) {
 
 module.exports = {
     sendEmail, verifyEmailConnection, sendTestEmail,
-    setIntegrationConfigService, classifyEmailError
+    setIntegrationConfigService, getIntegrationConfigService, classifyEmailError
 };

@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { getIntegrationConfigService } = require("./emailService");
 const {
     buildEnvelope,
     classifyTransportFailure,
@@ -13,14 +14,31 @@ const MAX_REDIRECTS = 1;
 const CONSOLIDATED_ENDPOINT_ENV = "KLBS_CONSOLIDATED_DSR_WEB_APP_URL";
 const CONSOLIDATED_SECRET_ENV = "KLBS_CONSOLIDATED_DSR_SYNC_SECRET";
 
+async function resolveConsolidatedDsrConfiguration({ environment = process.env, integrationConfigProvider } = {}) {
+    const explicitEndpoint = String(environment[CONSOLIDATED_ENDPOINT_ENV] || "").trim();
+    const explicitSecret = String(environment[CONSOLIDATED_SECRET_ENV] || "");
+    let configured = {};
+    if (!explicitEndpoint || !explicitSecret) {
+        const integrationConfig = integrationConfigProvider || getIntegrationConfigService();
+        if (integrationConfig) {
+            configured = typeof integrationConfig.resolveDsrRuntime === "function"
+                ? await integrationConfig.resolveDsrRuntime()
+                : await integrationConfig();
+        }
+    }
+    return {
+        endpoint: explicitEndpoint || String(configured.endpoint || "").trim(),
+        secret: explicitSecret || String(configured.secret || "")
+    };
+}
+
 function createConsolidatedSheetDeliveryWorker(options = {}) {
     const database = options.database;
     if (!database) throw new Error("Consolidated Sheet worker database dependency is required.");
     const now = options.now || (() => new Date());
     const httpClient = options.httpClient || axios;
-    const configProvider = options.configProvider || (() => ({
-        endpoint: process.env[CONSOLIDATED_ENDPOINT_ENV],
-        secret: process.env[CONSOLIDATED_SECRET_ENV]
+    const configProvider = options.configProvider || (() => resolveConsolidatedDsrConfiguration({
+        integrationConfigProvider: options.integrationConfigProvider
     }));
 
     const run = (sql, params = []) => new Promise((resolve, reject) => {
@@ -293,5 +311,6 @@ module.exports = {
     MAX_REDIRECTS,
     CONSOLIDATED_ENDPOINT_ENV,
     CONSOLIDATED_SECRET_ENV,
+    resolveConsolidatedDsrConfiguration,
     createConsolidatedSheetDeliveryWorker
 };
