@@ -7,6 +7,7 @@ const {
 const { sha256Utf8 } = require("../src/services/consolidatedReportingTransport");
 const {
     STALE_PROCESSING_TIMEOUT_MS,
+    MAX_REDIRECTS,
     createConsolidatedSheetDeliveryWorker
 } = require("../src/services/consolidatedSheetDeliveryWorker");
 
@@ -118,6 +119,9 @@ async function testClaimAndInsertedEnvelope() {
     assert.strictEqual(after.sheet_last_error, null);
     assert.strictEqual(request.url, ENDPOINT);
     assert.strictEqual(request.config.timeout, 30000);
+    assert.strictEqual(request.config.maxRedirects, MAX_REDIRECTS);
+    assert.doesNotThrow(() => request.config.beforeRedirect({ protocol: "https:" }));
+    assert.throws(() => request.config.beforeRedirect({ protocol: "http:" }), /must use HTTPS/);
     assert.strictEqual(request.config.headers["Content-Type"], "application/json");
     assert.deepStrictEqual(Object.keys(request.envelope), ["transportVersion", "timestamp", "payload", "payloadHash", "signature"]);
     assert.strictEqual(request.envelope.timestamp, ATTEMPT_AT);

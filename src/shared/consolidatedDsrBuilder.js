@@ -6,13 +6,13 @@ const SNAPSHOT_VERSION = 2;
 const REQUIRED_PAYMENT_FIELDS = Object.freeze(PAYMENT_MODES.map(mode => `${mode}Paise`));
 const SEGMENT_PAYMENT_FIELDS = Object.freeze(REQUIRED_PAYMENT_FIELDS);
 
-function stableValue(value) {
+function stableValue(value, parentKey = null) {
     if (typeof value === "bigint") throw new TypeError("BigInt is not JSON-safe in a semantic payload.");
-    if (Array.isArray(value)) return value.map(stableValue);
+    if (Array.isArray(value)) return value.map(item => stableValue(item, parentKey));
     if (value && typeof value === "object") {
         const result = {};
         const keys = Object.keys(value);
-        const preferred = value.segments ? ["KL", "MENS", "KIDS"] : null;
+        const preferred = parentKey === "segments" ? ["KL", "MENS", "KIDS"] : null;
         keys.sort((left, right) => {
             if (preferred) {
                 const li = preferred.indexOf(left);
@@ -21,7 +21,7 @@ function stableValue(value) {
             }
             return left < right ? -1 : left > right ? 1 : 0;
         });
-        for (const key of keys) result[key] = stableValue(value[key]);
+        for (const key of keys) result[key] = stableValue(value[key], key);
         return result;
     }
     return value;

@@ -9,6 +9,7 @@ const {
 
 const STALE_PROCESSING_TIMEOUT_MS = 5 * 60 * 1000;
 const HTTP_TIMEOUT_MS = 30 * 1000;
+const MAX_REDIRECTS = 1;
 const CONSOLIDATED_ENDPOINT_ENV = "KLBS_CONSOLIDATED_DSR_WEB_APP_URL";
 const CONSOLIDATED_SECRET_ENV = "KLBS_CONSOLIDATED_DSR_SYNC_SECRET";
 
@@ -208,7 +209,12 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
         try {
             const response = await httpClient.post(configuration.endpoint, envelope, {
                 timeout: HTTP_TIMEOUT_MS,
-                maxRedirects: 0,
+                maxRedirects: MAX_REDIRECTS,
+                beforeRedirect: redirectOptions => {
+                    if (!redirectOptions || redirectOptions.protocol !== "https:") {
+                        throw new Error("Consolidated receiver redirect destination must use HTTPS.");
+                    }
+                },
                 maxContentLength: 128 * 1024,
                 maxBodyLength: 128 * 1024,
                 headers: { "Content-Type": "application/json" },
@@ -256,6 +262,7 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
         constants: Object.freeze({
             STALE_PROCESSING_TIMEOUT_MS,
             HTTP_TIMEOUT_MS,
+            MAX_REDIRECTS,
             CONSOLIDATED_ENDPOINT_ENV,
             CONSOLIDATED_SECRET_ENV
         })
@@ -265,6 +272,7 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
 module.exports = {
     STALE_PROCESSING_TIMEOUT_MS,
     HTTP_TIMEOUT_MS,
+    MAX_REDIRECTS,
     CONSOLIDATED_ENDPOINT_ENV,
     CONSOLIDATED_SECRET_ENV,
     createConsolidatedSheetDeliveryWorker
