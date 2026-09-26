@@ -8,6 +8,8 @@ const IDENTITY = { merchant_id: "KAIRA_LUXE", store_code: "KL001", terminal_id: 
 const EVENT_TYPES = new Set(["BILL_SAVED", "KLBS_STARTED", "DAY_CLOSED"]);
 const RETRYABLE_CODES = new Set(["SERVER_BUSY", "UPSTREAM_UNAVAILABLE"]);
 const ACCEPTED_CODES = new Set(["ACCEPTED", "DUPLICATE"]);
+const EVENT_TIMEOUT_MS = 8000;
+const SNAPSHOT_TIMEOUT_MS = 20000;
 
 function stableJson(value) {
     if (value === null || typeof value !== "object") return JSON.stringify(value);
@@ -126,7 +128,7 @@ function createRemoteDashboardService(options = {}) {
             const requestTimestamp = isoWithBusinessOffset(now());
             const requestId = `delivery-${crypto.randomUUID()}`;
             const envelope = signedEnvelope(payload, "/notification-events", settings.secret, requestId, requestTimestamp);
-            const response = await post(endpointFor(row.event_type, settings), envelope, { "content-type": "application/json" }, 8000);
+            const response = await post(endpointFor(row.event_type, settings), envelope, { "content-type": "application/json" }, EVENT_TIMEOUT_MS);
             classification = classify(response, "event");
             if (classification !== "ACCEPTED") errorText = `Remote Dashboard HTTP ${Number(response && response.status) || "failure"} ${String(response && response.data && response.data.code || "").slice(0, 80)}.`;
         }
@@ -174,7 +176,7 @@ function createRemoteDashboardService(options = {}) {
             const requestId = `snapshot-request-${crypto.randomUUID()}`;
             const payload = await buildRemoteDashboardSnapshot({ database, now, sessionStartedAt, snapshotId: `snapshot-${sessionId}-${timestamp}`, requestId, getStatus: options.getStatus });
             const envelope = signedEnvelope(payload, "/snapshot", settings.secret, requestId, timestamp);
-            const response = await post(settings.webAppBase, envelope, { "content-type": "application/json" }, 8000);
+            const response = await post(settings.webAppBase, envelope, { "content-type": "application/json" }, SNAPSHOT_TIMEOUT_MS);
             const classification = classify(response, "snapshot");
             if (classification !== "ACCEPTED") throw new Error(`Remote Dashboard snapshot ${String(response && response.data && response.data.code || "failed")}.`);
             log("snapshot-accepted", {});
@@ -194,4 +196,4 @@ function createRemoteDashboardService(options = {}) {
     return { buildSnapshot: () => buildRemoteDashboardSnapshot({ database, now, sessionStartedAt, getStatus: options.getStatus }), queueBillSaved, queueStarted, queueDayClosed, start, stop, drain, syncSnapshot, listOutbox: () => all("SELECT * FROM remote_dashboard_outbox ORDER BY id"), _test: { signedEnvelope, classify, sessionStartedAt, sessionId, stableJson } };
 }
 
-module.exports = { createRemoteDashboardService, EVENT_CONTRACT_ID, IDENTITY, stableJson };
+module.exports = { createRemoteDashboardService, EVENT_CONTRACT_ID, IDENTITY, EVENT_TIMEOUT_MS, SNAPSHOT_TIMEOUT_MS, stableJson };

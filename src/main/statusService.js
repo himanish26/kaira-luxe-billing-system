@@ -302,6 +302,18 @@ async function getPrinterStatus() {
 
         }
 
+        if (process.platform !== "win32") {
+
+            return {
+
+                status: "Unavailable",
+
+                name: configuredPrinter
+
+            };
+
+        }
+
         const { execFile } =
             require("child_process");
 

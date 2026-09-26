@@ -50,12 +50,15 @@ function makeDb() { return new Promise((resolve, reject) => { const db = new sql
     assert.deepStrictEqual(emptySnapshot.today, { net_sales_paise: 0, bills: 0, qty: 0 });
     await emptyDb.close();
     assert(!/remoteDashboard|REMOTE_DASHBOARD|secret/i.test(fs.readFileSync("src/main/preload.js", "utf8")));
+    const statusServiceSource = fs.readFileSync("src/main/statusService.js", "utf8");
+    assert(statusServiceSource.indexOf('process.platform !== "win32"') !== -1);
+    assert(statusServiceSource.indexOf('process.platform !== "win32"') < statusServiceSource.indexOf('"powershell.exe"'));
 
     await migrateRemoteDashboardOutbox(db);
     await migrateRemoteDashboardOutbox(db);
     let calls = 0;
     const requests = [];
-    const service = createRemoteDashboardService({ database: db, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: () => ({ webAppBase: "https://script.example.test/exec", gatewayBase: "https://gateway.example.test", secret: "fictional-installation-secret", enabled: true }), post: async (endpoint, envelope) => { calls += 1; requests.push({ endpoint, envelope }); return { status: 200, data: { ok: true, code: "ACCEPTED" } }; } });
+    const service = createRemoteDashboardService({ database: db, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: () => ({ webAppBase: "https://script.example.test/exec", gatewayBase: "https://gateway.example.test", secret: "fictional-installation-secret", enabled: true }), post: async (endpoint, envelope, headers, timeout) => { calls += 1; requests.push({ endpoint, envelope, timeout }); return { status: 200, data: { ok: true, code: "ACCEPTED" } }; } });
     await service.queueBillSaved({ bill_no: "KL260926001", bill_date: "1900-01-01", net_amount: 999999 });
     await service.queueBillSaved({ bill_no: "KL260926001", bill_date: "1900-01-01", net_amount: 999999 });
     await service.queueStarted();
@@ -65,6 +68,7 @@ function makeDb() { return new Promise((resolve, reject) => { const db = new sql
     assert.strictEqual(calls, 3);
     assert((await all(db, "SELECT * FROM remote_dashboard_outbox WHERE status='ACCEPTED'")).length === 3);
     assert.strictEqual(requests[0].endpoint, "https://gateway.example.test/api/events");
+    assert.strictEqual(requests[0].timeout, 8000);
     assert.strictEqual(requests[0].envelope.context, "/notification-events");
     assert.strictEqual(requests[0].envelope.method, "POST");
     assert.strictEqual(requests[0].envelope.body.contract_id, "klbs.remote-dashboard.notification-event.v1");
@@ -85,6 +89,7 @@ function makeDb() { return new Promise((resolve, reject) => { const db = new sql
     await service.syncSnapshot();
     assert.strictEqual(calls, 4);
     assert.strictEqual(requests[3].endpoint, "https://script.example.test/exec");
+    assert.strictEqual(requests[3].timeout, 20000);
     assert.strictEqual(requests[3].envelope.context, "/snapshot");
     assert.strictEqual(requests[3].envelope.body.contract_id, "klbs.remote-dashboard.snapshot.v1");
     const snapshotEnvelope = requests[3].envelope;
@@ -116,6 +121,23 @@ function makeDb() { return new Promise((resolve, reject) => { const db = new sql
     const stillRetryable = (await all(failureDb, "SELECT * FROM remote_dashboard_outbox"))[0];
     assert.strictEqual(stillRetryable.status, "RETRYABLE_FAILURE");
     assert(stillRetryable.attempt_count > 8);
+
+    let snapshotCalls = 0;
+    let releaseSnapshot;
+    const snapshotStarted = new Promise(resolve => { releaseSnapshot = resolve; });
+    const overlapDb = await makeDb();
+    await run(overlapDb, "CREATE TABLE bills (id INTEGER PRIMARY KEY, bill_no TEXT, bill_date TEXT, net_amount REAL, total_qty INTEGER, cash_amount REAL, upi_amount REAL, card_amount REAL, created_at TEXT)");
+    await run(overlapDb, "CREATE TABLE bill_items (bill_no TEXT, business_segment TEXT, qty INTEGER, net_amount REAL)");
+    const overlapService = createRemoteDashboardService({ database: overlapDb, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: () => ({ webAppBase: "https://script.example.test/exec", gatewayBase: "https://gateway.example.test", secret: "fictional-installation-secret", enabled: true }), post: async (endpoint, envelope, headers, timeout) => { if (envelope.context === "/snapshot") { snapshotCalls += 1; await snapshotStarted; assert.strictEqual(timeout, 20000); } return { status: 200, data: { code: "ACCEPTED" } }; } });
+    const firstSnapshot = overlapService.syncSnapshot();
+    const secondSnapshot = overlapService.syncSnapshot();
+    await new Promise(resolve => setTimeout(resolve, 25));
+    assert.strictEqual(snapshotCalls, 1);
+    releaseSnapshot();
+    assert.deepStrictEqual(await firstSnapshot, { accepted: true, code: "ACCEPTED" });
+    const failingSnapshotService = createRemoteDashboardService({ database: overlapDb, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: () => ({ webAppBase: "https://script.example.test/exec", gatewayBase: "https://gateway.example.test", secret: "fictional-installation-secret", enabled: true }), post: async () => { throw new Error("timeout of 20000ms exceeded"); } });
+    assert.deepStrictEqual(await failingSnapshotService.syncSnapshot(), { accepted: false });
+    await overlapDb.close();
     await db.close(); await failureDb.close();
     console.log("Remote Dashboard KLBS integration tests: PASS");
 })().catch(error => { console.error(error); process.exitCode = 1; });
