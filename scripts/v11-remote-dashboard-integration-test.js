@@ -99,9 +99,20 @@ function makeDb() { return new Promise((resolve, reject) => { const db = new sql
     assert.strictEqual(snapshotEnvelope.signature, crypto.createHmac("sha256", "fictional-installation-secret").update(signingMaterial, "utf8").digest("hex"));
     assert.strictEqual(service._test.classify({ status: 200, data: { code: "DUPLICATE" } }), "ACCEPTED");
     assert.strictEqual(service._test.classify({ status: 503, data: { code: "SERVER_BUSY" } }), "RETRYABLE_FAILURE");
+    assert.strictEqual(service._test.classify({ status: 503, data: { code: "RETRYABLE_FAILURE" } }), "RETRYABLE_FAILURE");
     assert.strictEqual(service._test.classify({ status: 400, data: { code: "INVALID_EVENT" } }), "PERMANENT_FAILURE");
     const eventPayload = JSON.stringify((await all(db, "SELECT payload_json FROM remote_dashboard_outbox"))).toLowerCase();
     assert(!eventPayload.includes("customer") && !eventPayload.includes("mobile"));
+
+    const startupDb = await makeDb();
+    await migrateRemoteDashboardOutbox(startupDb);
+    await run(startupDb, "CREATE TABLE bills (bill_no TEXT, bill_date TEXT, net_amount REAL, created_at TEXT, total_qty INTEGER, cash_amount REAL, upi_amount REAL, card_amount REAL)");
+    await run(startupDb, "CREATE TABLE bill_items (bill_no TEXT, business_segment TEXT, qty INTEGER, net_amount REAL)");
+    const startupRequests = [];
+    const startupService = createRemoteDashboardService({ database: startupDb, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: () => ({ gatewayBase: "https://gateway.example.test", secret: "fictional-installation-secret", enabled: true }), post: async (endpoint, envelope) => { startupRequests.push({ endpoint, envelope }); return { status: 200, data: { code: "ACCEPTED" } }; } });
+    await startupService.start();
+    assert.strictEqual(startupRequests[0].envelope.body.event_type, "KLBS_STARTED");
+    startupService.stop(); await startupDb.close();
 
     const failureDb = await makeDb();
     await migrateRemoteDashboardOutbox(failureDb);
@@ -121,6 +132,18 @@ function makeDb() { return new Promise((resolve, reject) => { const db = new sql
     const stillRetryable = (await all(failureDb, "SELECT * FROM remote_dashboard_outbox"))[0];
     assert.strictEqual(stillRetryable.status, "RETRYABLE_FAILURE");
     assert(stillRetryable.attempt_count > 8);
+
+    const unavailableDb = await makeDb();
+    await migrateRemoteDashboardOutbox(unavailableDb);
+    await run(unavailableDb, "CREATE TABLE bills (bill_no TEXT, bill_date TEXT, net_amount REAL, created_at TEXT)");
+    await run(unavailableDb, "INSERT INTO bills VALUES ('B2','2026-09-26',10,'2026-09-26T10:00:00+05:30')");
+    let unavailableCalls = 0; const diagnostics = [];
+    const unavailableService = createRemoteDashboardService({ database: unavailableDb, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: () => ({ enabled: true }), post: async () => { unavailableCalls += 1; } , log: (action, metadata) => diagnostics.push({ action, metadata }) });
+    await unavailableService.queueBillSaved({ bill_no: "B2" });
+    await unavailableService.start(); unavailableService.stop();
+    const unavailable = (await all(unavailableDb, "SELECT * FROM remote_dashboard_outbox WHERE event_type='BILL_SAVED'"))[0];
+    assert.strictEqual(unavailable.status, "PENDING"); assert.strictEqual(unavailable.attempt_count, 0); assert.match(unavailable.last_error, /CONFIGURATION_UNAVAILABLE/); assert.strictEqual(unavailableCalls, 0); assert(!JSON.stringify(diagnostics).includes("fictional-installation-secret"));
+    await unavailableDb.close();
 
     let snapshotCalls = 0;
     let releaseSnapshot;

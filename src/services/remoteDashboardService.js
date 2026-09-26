@@ -39,13 +39,25 @@ function createRemoteDashboardService(options = {}) {
     let timer = null;
 
     function config() {
-        const value = configProvider() || {};
-        return {
-            webAppBase: String(value.webAppBase || "").trim(),
-            gatewayBase: String(value.gatewayBase || "").trim(),
-            secret: String(value.secret || ""),
-            enabled: value.enabled !== false
-        };
+        try {
+            const value = configProvider() || {};
+            return {
+                webAppBase: String(value.webAppBase || "").trim(),
+                gatewayBase: String(value.gatewayBase || "").trim(),
+                secret: String(value.secret || ""),
+                enabled: value.enabled !== false,
+                error: null
+            };
+        }
+        catch (error) {
+            return { webAppBase: "", gatewayBase: "", secret: "", enabled: true, error };
+        }
+    }
+    function configurationState(settings, needsGateway = true) {
+        if (settings.error) return "CONFIGURATION_ERROR";
+        if (!settings.enabled) return "DISABLED";
+        if ((needsGateway && (!settings.gatewayBase || !settings.secret)) || (!needsGateway && (!settings.webAppBase || !settings.secret))) return "CONFIGURATION_UNAVAILABLE";
+        return "CONFIGURED";
     }
     function eventKey(type, identity) { return `${type}:${identity}`; }
     function eventPayload(type, data, key) {
@@ -117,7 +129,13 @@ function createRemoteDashboardService(options = {}) {
     }
     async function processOne(row) {
         const settings = config();
-        if (!settings.enabled || !settings.gatewayBase || !settings.secret) return false;
+        const state = configurationState(settings);
+        if (state !== "CONFIGURED") {
+            const diagnostic = `Remote Dashboard ${state}.`;
+            await run("UPDATE remote_dashboard_outbox SET updated_at=?, last_error=? WHERE id=? AND status IN ('PENDING','RETRYABLE_FAILURE')", [isoWithBusinessOffset(now()), diagnostic, row.id]);
+            log("configuration-unavailable", { classification: state, eventType: row.event_type });
+            return false;
+        }
         const attempt = Number(row.attempt_count || 0) + 1;
         const started = isoWithBusinessOffset(now());
         await run("UPDATE remote_dashboard_outbox SET attempt_count=?, last_attempt_at=?, updated_at=? WHERE id=? AND status IN ('PENDING','RETRYABLE_FAILURE')", [attempt, started, started, row.id]);
@@ -156,8 +174,6 @@ function createRemoteDashboardService(options = {}) {
     async function drain() {
         if (drainInFlight) return drainInFlight;
         drainInFlight = (async () => {
-            const settings = config();
-            if (!settings.enabled || !settings.gatewayBase || !settings.secret) return;
             await run("DELETE FROM remote_dashboard_outbox WHERE status='ACCEPTED' AND accepted_at < ?", [isoWithBusinessOffset(new Date(now().getTime() - 30 * 24 * 60 * 60 * 1000))]);
             const current = isoWithBusinessOffset(now());
             const rows = await all(`SELECT * FROM remote_dashboard_outbox
@@ -171,7 +187,11 @@ function createRemoteDashboardService(options = {}) {
         if (snapshotInFlight) return snapshotInFlight;
         snapshotInFlight = (async () => {
             const settings = config();
-            if (!settings.enabled || !settings.webAppBase || !settings.secret) return { skipped: true };
+            const state = configurationState(settings, false);
+            if (state !== "CONFIGURED") {
+                log("snapshot-skipped", { classification: state });
+                return { skipped: true, classification: state };
+            }
             const timestamp = isoWithBusinessOffset(now());
             const requestId = `snapshot-request-${crypto.randomUUID()}`;
             const payload = await buildRemoteDashboardSnapshot({ database, now, sessionStartedAt, snapshotId: `snapshot-${sessionId}-${timestamp}`, requestId, getStatus: options.getStatus });
@@ -186,11 +206,14 @@ function createRemoteDashboardService(options = {}) {
     }
     function start() {
         if (timer) return;
-        void queueStarted().catch(() => log("failed", { classification: "START_EVENT_QUEUE_FAILED" }));
-        void drain();
-        void syncSnapshot();
+        const startup = Promise.resolve()
+            .then(() => queueStarted())
+            .catch(() => { log("failed", { classification: "START_EVENT_QUEUE_FAILED" }); })
+            .then(() => drain())
+            .then(() => syncSnapshot());
         timer = setInterval(() => { void syncSnapshot(); void drain(); }, 30000);
         timer.unref?.();
+        return startup;
     }
     function stop() { if (timer) clearInterval(timer); timer = null; }
     return { buildSnapshot: () => buildRemoteDashboardSnapshot({ database, now, sessionStartedAt, getStatus: options.getStatus }), queueBillSaved, queueStarted, queueDayClosed, start, stop, drain, syncSnapshot, listOutbox: () => all("SELECT * FROM remote_dashboard_outbox ORDER BY id"), _test: { signedEnvelope, classify, sessionStartedAt, sessionId, stableJson } };
