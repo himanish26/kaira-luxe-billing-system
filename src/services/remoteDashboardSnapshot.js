@@ -47,16 +47,16 @@ async function buildRemoteDashboardSnapshot(options = {}) {
         query(database, "get", `SELECT COALESCE(SUM(net_amount),0) AS sales, COUNT(*) AS bills, COALESCE(SUM(total_qty),0) AS qty
             FROM bills WHERE substr(bill_date,1,7) = ?`, [month]),
         query(database, "all", `SELECT business_segment AS segment, COALESCE(SUM(ROUND(net_amount, 2)),0) AS sales,
-            COUNT(DISTINCT bill_no) AS bills
+            COUNT(DISTINCT bill_no) AS bills, COALESCE(SUM(qty),0) AS qty
             FROM bill_items WHERE bill_no IN (SELECT bill_no FROM bills WHERE bill_date = ?)
             GROUP BY business_segment`, [businessDate]),
         query(database, "all", `SELECT bill_no, created_at, net_amount FROM bills ORDER BY id DESC LIMIT 10`),
         typeof options.getStatus === "function" ? options.getStatus(businessDate) : Promise.resolve({})
     ]);
-    const segmentMap = Object.fromEntries(SEGMENTS.map(segment => [segment, { net_sales_paise: 0, bills: 0 }]));
+    const segmentMap = Object.fromEntries(SEGMENTS.map(segment => [segment, { net_sales_paise: 0, bills: 0, qty: 0 }]));
     for (const row of segmentRows) {
         const segment = SEGMENTS.includes(row.segment) ? row.segment : null;
-        if (segment) segmentMap[segment] = { net_sales_paise: paise(row.sales), bills: Number(row.bills) || 0 };
+        if (segment) segmentMap[segment] = { net_sales_paise: paise(row.sales), bills: Number(row.bills) || 0, qty: Number(row.qty) || 0 };
     }
     const today = metric(paise(todayRows.sales), Number(todayRows.bills) || 0, Number(todayRows.qty) || 0);
     return {
