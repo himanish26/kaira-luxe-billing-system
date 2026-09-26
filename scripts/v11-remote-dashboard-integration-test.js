@@ -30,7 +30,7 @@ function makeDb() { return new Promise((resolve, reject) => { const db = new sql
     assert.strictEqual(snapshot.today.qty, 6);
     assert.deepStrictEqual(snapshot.today, { net_sales_paise: 30000, bills: 2, qty: 6 });
     assert.deepStrictEqual(snapshot.payments, { cash_paise: 5000, upi_paise: 15000, card_paise: 10000 });
-    assert.deepStrictEqual(snapshot.segments, { KL: { net_sales_paise: 8002, bills: 2 }, MENS: { net_sales_paise: 6000, bills: 2 }, KIDS: { net_sales_paise: 20000, bills: 1 } });
+    assert.deepStrictEqual(snapshot.segments, { KL: { net_sales_paise: 8002, bills: 2, qty: 3 }, MENS: { net_sales_paise: 6000, bills: 2, qty: 2 }, KIDS: { net_sales_paise: 20000, bills: 1, qty: 3 } });
     const naiveSegments = await all(db, "SELECT business_segment AS segment, SUM(net_amount) AS sales FROM bill_items WHERE bill_no = 'KL260926002' GROUP BY business_segment");
     const naiveMixedSegments = Object.fromEntries(naiveSegments.map(row => [row.segment, Math.round(row.sales * 100)]));
     assert.deepStrictEqual(naiveMixedSegments, { KL: 2001, MENS: 2001, KIDS: 20000 });
