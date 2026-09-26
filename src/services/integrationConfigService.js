@@ -102,6 +102,9 @@ function createIntegrationConfigService(options) {
     function dsrEnvironmentConfigured() {
         return Boolean(environment.KLBS_DSR_WEB_APP_URL && environment.KLBS_DSR_SYNC_SECRET);
     }
+    function remoteDashboardEnvironmentConfigured() {
+        return Boolean(environment.KLBS_REMOTE_DASHBOARD_WEB_APP_BASE && environment.KLBS_INSTALLATION_SECRET && environment.KLBS_REMOTE_DASHBOARD_GATEWAY_BASE);
+    }
     function getConfigurationDetails() {
         const store = readStore();
         const email = store.email || null;
@@ -232,6 +235,16 @@ function createIntegrationConfigService(options) {
             automaticSync: true
         };
     }
+    function resolveRemoteDashboardRuntime() {
+        const store = readStore();
+        const remote = store.remoteDashboard || null;
+        return {
+            webAppBase: remote ? remote.webAppBase : environment.KLBS_REMOTE_DASHBOARD_WEB_APP_BASE,
+            gatewayBase: remote ? remote.gatewayBase : environment.KLBS_REMOTE_DASHBOARD_GATEWAY_BASE,
+            secret: remote && remote.secret ? decrypt(remote.secret) : environment.KLBS_INSTALLATION_SECRET,
+            enabled: remote ? remote.enabled !== false : remoteDashboardEnvironmentConfigured()
+        };
+    }
     function recordTest(kind, success) {
         if (kind !== "email" && kind !== "dsr") {
             throw new Error("Unsupported integration diagnostic type.");
@@ -266,6 +279,7 @@ function createIntegrationConfigService(options) {
     }
     return {
         getPublicConfig, getConfigurationDetails, saveEmail, saveDsr, resolveEmailRuntime, resolveDsrRuntime,
+        resolveRemoteDashboardRuntime,
         recordTest, migrateLegacyEmail
     };
 }

@@ -18,6 +18,7 @@ const {
     migrateActivityLogSchema
 } = require("./activityMigration");
 const { migrateManagerSecurity } = require("./managerSecurityMigration");
+const { migrateRemoteDashboardOutbox } = require("./remoteDashboardMigration");
 const technicalLogger = require("../services/technicalLogger");
 const {
     CURRENT_DB_SCHEMA_VERSION,
@@ -2992,6 +2993,7 @@ try {
         await runNamedMigration("segment_dsr_outbox", () => migrateSegmentDsrOutbox(db));
 
         await runNamedMigration("consolidated_reporting_jobs", () => migrateConsolidatedReportingJobs(db));
+        await runNamedMigration("remote_dashboard_outbox", () => migrateRemoteDashboardOutbox(db));
             }
         });
 

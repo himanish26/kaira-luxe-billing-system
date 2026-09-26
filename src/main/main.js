@@ -136,6 +136,7 @@ const {
     setIntegrationConfigService
 } = require("../services/emailService");
 const { createIntegrationOutboxService } = require("../services/integrationOutboxService");
+const { createRemoteDashboardService } = require("../services/remoteDashboardService");
 const { readClosedDsrPayload } = require("../database/dayClosingDsrService");
 const { getBackupFolder } = require("../services/backupService");
 const { createIntegrationConfigService } = require("../services/integrationConfigService");
@@ -412,6 +413,31 @@ const consolidatedReportingEmailWorker = createConsolidatedReportingEmailWorker(
     logActivity,
     technicalLogger
 });
+const remoteDashboard = createRemoteDashboardService({
+    database,
+    configProvider: () => integrationConfig.resolveRemoteDashboardRuntime(),
+    getStatus: async businessDate => {
+        const query = (sql, params = []) => new Promise((resolve, reject) => database.get(sql, params, (error, row) => error ? reject(error) : resolve(row || null)));
+        const [closing, backup, dsr] = await Promise.all([
+            query("SELECT close_status, closed_at FROM day_closing_snapshots WHERE business_date=? ORDER BY close_sequence DESC LIMIT 1", [businessDate]),
+            query("SELECT auto_backup_last_success_at FROM settings WHERE id=1"),
+            query("SELECT dsr_sync_status, dsr_synced_at FROM day_closing_snapshots WHERE close_status='CLOSED' ORDER BY closed_at DESC LIMIT 1")
+        ]);
+        return {
+            session_started_at: remoteDashboard._test.sessionStartedAt,
+            day_closing: { status: closing && closing.close_status === "CLOSED" ? "CLOSED" : "OPEN" },
+            backup: backup && backup.auto_backup_last_success_at
+                ? { status: "SUCCESS", last_at: backup.auto_backup_last_success_at }
+                : { status: "UNAVAILABLE" },
+            dsr: dsr
+                ? { status: dsr.dsr_sync_status || "UNAVAILABLE", ...(dsr.dsr_synced_at ? { last_at: dsr.dsr_synced_at } : {}) }
+                : { status: "UNAVAILABLE" }
+        };
+    },
+    log: (action, metadata) => {
+        if (action !== "snapshot-accepted") technicalLogger.info("REMOTE_DASHBOARD", `Remote Dashboard ${action}`, metadata);
+    }
+});
 const {
     getDayClosingSummary,
     getDayClosingSnapshot,
@@ -459,6 +485,7 @@ function attachWindowDiagnostics(window, component) {
 }
 
 app.on("before-quit", () => {
+    remoteDashboard.stop();
     if (orderlyShutdownLogged) return;
     orderlyShutdownLogged = true;
     technicalLogger.info("APPLICATION", "KLBS application shutdown requested");
@@ -740,6 +767,7 @@ app.whenReady().then(async () => {
         createWindow();
         createSplashWindow();
         startIntegrationOutboxDrain();
+        remoteDashboard.start();
 
     }
 
@@ -1399,6 +1427,9 @@ ipcMain.handle(
 
 
             await saveBill(billData);
+
+            try { await remoteDashboard.queueBillSaved(billData); }
+            catch (_) { technicalLogger.warn("REMOTE_DASHBOARD", "BILL_SAVED event could not be queued", { classification: "OUTBOX_QUEUE_FAILED" }); }
 
             if (authorizationReserved) {
                 // saveBill has committed. Do not let any finalization failure
@@ -3190,7 +3221,12 @@ ipcMain.handle(
 
         try {
 
-            return await closeBusinessDay();
+            const result = await closeBusinessDay();
+            if (result && result.success === true) {
+                try { await remoteDashboard.queueDayClosed(result); }
+                catch (_) { technicalLogger.warn("REMOTE_DASHBOARD", "DAY_CLOSED event could not be queued", { classification: "OUTBOX_QUEUE_FAILED" }); }
+            }
+            return result;
 
         }
 
