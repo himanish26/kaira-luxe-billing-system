@@ -185,15 +185,12 @@ async function getActivityPage(options = {}) {
         ? Math.min(Math.max(requestedPageSize, 1), 100)
         : 100;
     const keyword = String(options.keyword || "").trim().toLowerCase();
+    const categoryTerm = keyword.replace(/[\\%_]/g, "\\$&");
     const searchSql = keyword
-        ? `WHERE LOWER(activity_date) LIKE ? OR LOWER(activity_time) LIKE ?
-            OR LOWER(category) LIKE ? OR LOWER(action) LIKE ?
-            OR LOWER(details) LIKE ? OR LOWER(entity_type) LIKE ?
-            OR LOWER(reference_no) LIKE ? OR LOWER(user_name) LIKE ?
-            OR LOWER(status) LIKE ?`
+        ? "WHERE LOWER(category) LIKE ? ESCAPE '\\'"
         : "";
     const searchParams = keyword
-        ? Array(9).fill(`%${keyword}%`)
+        ? [`%${categoryTerm}%`]
         : [];
 
     const countRow = await new Promise((resolve, reject) => {

@@ -136,7 +136,7 @@ async function showActivityLogPage() {
             <div class="activity-toolbar">
                 <div class="activity-search">
                     <input id="activitySearch" type="text"
-                        placeholder="🔍 Search Activity Log..." />
+                        placeholder="🔍 Search by category..." />
                 </div>
             </div>
             <div class="activity-table-container">

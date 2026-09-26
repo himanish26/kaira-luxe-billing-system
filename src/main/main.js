@@ -139,6 +139,7 @@ const { createIntegrationOutboxService } = require("../services/integrationOutbo
 const { readClosedDsrPayload } = require("../database/dayClosingDsrService");
 const { getBackupFolder } = require("../services/backupService");
 const { createIntegrationConfigService } = require("../services/integrationConfigService");
+const { REPORTING_MODES, resolveReportingMode } = require("../services/reportingMode");
 const {
     recordIntegrationActivity, emailSettingsEvent, dsrSettingsEvent,
     connectionEvent, emailTestMessageEvent
@@ -363,6 +364,9 @@ const { createDsrSyncService } = require("../services/dsrSyncService");
 const { createBusinessSegmentDsrOutboxService } = require("../services/businessSegmentDsrOutboxService");
 const { createBusinessSegmentDsrSyncService } = require("../services/businessSegmentDsrSyncService");
 const { createConsolidatedReportingPersistenceService } = require("../services/consolidatedReportingPersistenceService");
+const { createConsolidatedSheetDeliveryWorker } = require("../services/consolidatedSheetDeliveryWorker");
+const { createConsolidatedReportingEmailWorker } = require("../services/consolidatedReportingEmailWorker");
+const reportingMode = resolveReportingMode();
 const dsrSyncService = createDsrSyncService({
     configProvider: () => integrationConfig.resolveDsrRuntime()
 });
@@ -393,6 +397,21 @@ const segmentDsrOutbox = createBusinessSegmentDsrOutboxService({
     klbsVersion: app.getVersion()
 });
 const consolidatedReportingPersistence = createConsolidatedReportingPersistenceService({ database });
+const consolidatedSheetDeliveryWorker = createConsolidatedSheetDeliveryWorker({
+    database,
+    integrationConfigProvider: () => integrationConfig.resolveDsrRuntime(),
+    logActivity,
+    technicalLogger
+});
+const consolidatedReportingEmailWorker = createConsolidatedReportingEmailWorker({
+    database,
+    sendEmail,
+    getEmailConfiguration: () => integrationConfig.resolveEmailRuntime(),
+    getBackupPath: async fileName => path.join(await getBackupFolder(), fileName),
+    validateBackup,
+    logActivity,
+    technicalLogger
+});
 const {
     getDayClosingSummary,
     getDayClosingSnapshot,
@@ -408,6 +427,7 @@ const {
     integrationOutbox,
     segmentDsrOutbox,
     consolidatedReportingPersistence,
+    reportingMode,
     klbsVersion: app.getVersion(),
     logBusinessDayClosed,
     logBusinessDayReopened,
@@ -582,6 +602,7 @@ function createSplashWindow() {
 
 let integrationOutboxTimer = null;
 let integrationOutboxOnline = false;
+let legacyReportingSuppressionLogged = false;
 function stopIntegrationOutboxDrain() {
     if (integrationOutboxTimer) {
         clearInterval(integrationOutboxTimer);
@@ -612,9 +633,28 @@ function startIntegrationOutboxDrain() {
             const status = await getSystemStatus();
             const online = Boolean(status.internet && status.internet.online);
             if (online) {
-                try { await integrationOutbox.drain(); } catch (_) {}
-                try { await segmentDsrOutbox.drain(); } catch (error) {
-                    technicalLogger.warn("SEGMENT_DSR", "Segment DSR startup drain failed", { classification: String(error.message || "").slice(0, 500) });
+                if (reportingMode === REPORTING_MODES.CONSOLIDATED_V2) {
+                    try { await consolidatedSheetDeliveryWorker.drain(); } catch (error) {
+                        technicalLogger.warn("CONSOLIDATED_SHEET", "Consolidated Sheet drain failed", { classification: String(error.message || "").slice(0, 500) });
+                    }
+                    try { await consolidatedReportingEmailWorker.processNext(); } catch (error) {
+                        technicalLogger.warn("CONSOLIDATED_EMAIL", "Consolidated email drain failed", { classification: String(error.message || "").slice(0, 500) });
+                    }
+                    if (!legacyReportingSuppressionLogged) {
+                        const [legacyDsr, legacySegment] = await Promise.all([integrationOutbox.list(), segmentDsrOutbox.list()]);
+                        const pendingDsr = legacyDsr.filter(row => row.delivery_type === "DSR_DAY_CLOSING" && row.status !== "SUCCESS").length;
+                        const pendingSegment = legacySegment.filter(row => row.status !== "SUCCESS" || row.sheets_status !== "SUCCESS").length;
+                        if (pendingDsr || pendingSegment) {
+                            technicalLogger.warn("REPORTING_MODE", "Legacy reporting jobs suppressed in CONSOLIDATED_V2 mode", { pendingDsr, pendingSegment });
+                        }
+                        legacyReportingSuppressionLogged = true;
+                    }
+                }
+                else {
+                    try { await integrationOutbox.drain(); } catch (_) {}
+                    try { await segmentDsrOutbox.drain(); } catch (error) {
+                        technicalLogger.warn("SEGMENT_DSR", "Segment DSR startup drain failed", { classification: String(error.message || "").slice(0, 500) });
+                    }
                 }
             }
             integrationOutboxOnline = online;
@@ -3217,6 +3257,18 @@ ipcMain.handle("day-closing:retry-dsr-sync", async (event, grant, snapshotId) =>
         const id = Number(snapshotId);
         if (!Number.isSafeInteger(id) || id <= 0) {
             throw new Error("A valid Day Closing snapshot is required.");
+        }
+        if (reportingMode === REPORTING_MODES.CONSOLIDATED_V2) {
+            const [sheet, email] = await Promise.all([
+                consolidatedSheetDeliveryWorker.retryForClosing(id),
+                consolidatedReportingEmailWorker.retryForClosing(id)
+            ]);
+            return {
+                success: Boolean(sheet.requeued || email.requeued),
+                dsrSyncStatus: sheet.requeued || email.requeued ? "PENDING" : "FAILED",
+                dsrSyncWarning: sheet.requeued || email.requeued ? null : "No failed consolidated reporting job was requeued.",
+                action: "CONSOLIDATED_RETRY"
+            };
         }
         const result = await retryDsrSync(id);
         return {

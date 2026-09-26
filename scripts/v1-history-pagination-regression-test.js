@@ -123,10 +123,10 @@ async function child(tempRoot, billCount, activityCount) {
         }, activityCount, "activities");
         measurements.activityCountMs = Number((Number(process.hrtime.bigint() - activityStart) / 1e6).toFixed(3));
         const searchStart = process.hrtime.bigint();
-        const activitySearch = await activityService.getActivityPage({ page: 1, pageSize: 100, keyword: `HISTORY-ACT-${String(activityCount).padStart(5, "0")}` });
+        const activitySearch = await activityService.getActivityPage({ page: 1, pageSize: 100, keyword: "SYSTEM" });
         measurements.activitySearchMs = Number((Number(process.hrtime.bigint() - searchStart) / 1e6).toFixed(3));
-        assert.strictEqual(activitySearch.totalCount, 1);
-        const broad = await activityService.getActivityPage({ page: 1, pageSize: 100, keyword: "HISTORY-ACT" });
+        assert.strictEqual(activitySearch.totalCount, activityCount);
+        const broad = await activityService.getActivityPage({ page: 1, pageSize: 100, keyword: "SYS" });
         assert.strictEqual(broad.totalCount, activityCount);
         assert(broad.activities.length <= 100);
         assert(activityResult.middle.activities.length <= 100 && activityResult.last.activities.length <= 100);

@@ -22,10 +22,13 @@ async function createTransporter() {
     });
 }
 
-async function sendEmail({ to, subject, text, html, attachments }) {
+async function sendEmail({ to, subject, text, html, attachments, messageId }) {
     const transporter = await createTransporter();
     const smtp = await getSmtpSettings();
-    const info = await transporter.sendMail({ from: smtp.from, to, subject, text, html, attachments });
+    const info = await transporter.sendMail({
+        from: smtp.from, to, subject, text, html, attachments,
+        ...(messageId ? { messageId } : {})
+    });
     return { success: true, messageId: info.messageId };
 }
 

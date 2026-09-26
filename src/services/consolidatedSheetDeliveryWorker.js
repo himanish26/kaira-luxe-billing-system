@@ -11,24 +11,17 @@ const {
 const STALE_PROCESSING_TIMEOUT_MS = 5 * 60 * 1000;
 const HTTP_TIMEOUT_MS = 30 * 1000;
 const MAX_REDIRECTS = 1;
-const CONSOLIDATED_ENDPOINT_ENV = "KLBS_CONSOLIDATED_DSR_WEB_APP_URL";
-const CONSOLIDATED_SECRET_ENV = "KLBS_CONSOLIDATED_DSR_SYNC_SECRET";
-
-async function resolveConsolidatedDsrConfiguration({ environment = process.env, integrationConfigProvider } = {}) {
-    const explicitEndpoint = String(environment[CONSOLIDATED_ENDPOINT_ENV] || "").trim();
-    const explicitSecret = String(environment[CONSOLIDATED_SECRET_ENV] || "");
-    let configured = {};
-    if (!explicitEndpoint || !explicitSecret) {
-        const integrationConfig = integrationConfigProvider || getIntegrationConfigService();
-        if (integrationConfig) {
-            configured = typeof integrationConfig.resolveDsrRuntime === "function"
-                ? await integrationConfig.resolveDsrRuntime()
-                : await integrationConfig();
-        }
-    }
+const RETRY_COOLDOWN_MS = 60 * 1000;
+async function resolveConsolidatedDsrConfiguration({ integrationConfigProvider } = {}) {
+    const integrationConfig = integrationConfigProvider || getIntegrationConfigService();
+    const configured = integrationConfig
+        ? (typeof integrationConfig.resolveDsrRuntime === "function"
+            ? await integrationConfig.resolveDsrRuntime()
+            : await integrationConfig())
+        : {};
     return {
-        endpoint: explicitEndpoint || String(configured.endpoint || "").trim(),
-        secret: explicitSecret || String(configured.secret || "")
+        endpoint: String(configured.endpoint || "").trim(),
+        secret: String(configured.secret || "")
     };
 }
 
@@ -37,6 +30,8 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
     if (!database) throw new Error("Consolidated Sheet worker database dependency is required.");
     const now = options.now || (() => new Date());
     const httpClient = options.httpClient || axios;
+    const logActivity = options.logActivity || (async () => {});
+    const technicalLogger = options.technicalLogger || { info: () => {}, warn: () => {} };
     const configProvider = options.configProvider || (() => resolveConsolidatedDsrConfiguration({
         integrationConfigProvider: options.integrationConfigProvider
     }));
@@ -53,6 +48,13 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
     const all = (sql, params = []) => new Promise((resolve, reject) => {
         database.all(sql, params, (error, rows) => error ? reject(error) : resolve(rows || []));
     });
+    let dayClosingSnapshotsAvailable = null;
+
+    async function hasDayClosingSnapshotsTable() {
+        if (dayClosingSnapshotsAvailable !== null) return dayClosingSnapshotsAvailable;
+        dayClosingSnapshotsAvailable = Boolean(await get("SELECT name FROM sqlite_master WHERE type='table' AND name='day_closing_snapshots'"));
+        return dayClosingSnapshotsAvailable;
+    }
 
     function safeMessage(code, fallback) {
         return `${code}: ${fallback}`.replace(/https?:\/\/\S+/gi, "[ENDPOINT]").slice(0, 500);
@@ -118,38 +120,49 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
     }
 
     async function claimNext() {
-        const attemptTimestamp = now().toISOString();
         let transactionStarted = false;
         try {
             await run("BEGIN IMMEDIATE TRANSACTION");
             transactionStarted = true;
-            const row = await get(`
+            const rows = await all(`
                 SELECT * FROM consolidated_reporting_jobs
                 WHERE sheet_status = 'PENDING'
                 ORDER BY business_date ASC, close_sequence ASC, id ASC
-                LIMIT 1
             `);
-            if (!row) {
+            for (const row of rows) {
+                if (row.sheet_last_attempt_at && now().getTime() - Date.parse(row.sheet_last_attempt_at) < RETRY_COOLDOWN_MS) continue;
+                if (await hasDayClosingSnapshotsTable()) {
+                    const snapshot = await get("SELECT id, business_date, close_sequence, close_status FROM day_closing_snapshots WHERE id = ?", [row.closing_id]);
+                    const latest = snapshot && await get("SELECT id, close_sequence FROM day_closing_snapshots WHERE business_date = ? AND close_status = 'CLOSED' ORDER BY close_sequence DESC LIMIT 1", [row.business_date]);
+                    if (!snapshot || snapshot.close_status !== "CLOSED" || !latest || Number(latest.id) !== Number(row.closing_id) || Number(latest.close_sequence) !== Number(row.close_sequence)) {
+                        const message = safeMessage("STALE_SUPERSEDED", "A newer CLOSED sequence is authoritative; Sheet delivery was suppressed locally.");
+                        await run("UPDATE consolidated_reporting_jobs SET sheet_status='FAILED', sheet_processing_started_at=NULL, sheet_last_error=? WHERE id=? AND sheet_status='PENDING'", [message, row.id]);
+                        continue;
+                    }
+                }
+                const attemptTimestamp = now().toISOString();
+                const claimed = await run(`
+                    UPDATE consolidated_reporting_jobs
+                    SET sheet_status = 'PROCESSING',
+                        sheet_attempt_count = sheet_attempt_count + 1,
+                        sheet_last_attempt_at = ?,
+                        sheet_processing_started_at = ?
+                    WHERE id = ? AND sheet_status = 'PENDING'
+                `, [attemptTimestamp, attemptTimestamp, row.id]);
+                if (claimed.changes !== 1) continue;
                 await run("COMMIT");
-                return null;
+                transactionStarted = false;
+                return {
+                    ...row,
+                    sheet_status: "PROCESSING",
+                    sheet_attempt_count: Number(row.sheet_attempt_count || 0) + 1,
+                    sheet_last_attempt_at: attemptTimestamp,
+                    sheet_processing_started_at: attemptTimestamp
+                };
             }
-            const claimed = await run(`
-                UPDATE consolidated_reporting_jobs
-                SET sheet_status = 'PROCESSING',
-                    sheet_attempt_count = sheet_attempt_count + 1,
-                    sheet_last_attempt_at = ?,
-                    sheet_processing_started_at = ?
-                WHERE id = ? AND sheet_status = 'PENDING'
-            `, [attemptTimestamp, attemptTimestamp, row.id]);
-            if (claimed.changes !== 1) throw new Error("Consolidated Sheet job claim was lost.");
             await run("COMMIT");
-            return {
-                ...row,
-                sheet_status: "PROCESSING",
-                sheet_attempt_count: Number(row.sheet_attempt_count || 0) + 1,
-                sheet_last_attempt_at: attemptTimestamp,
-                sheet_processing_started_at: attemptTimestamp
-            };
+            transactionStarted = false;
+            return null;
         }
         catch (error) {
             if (transactionStarted) await run("ROLLBACK").catch(() => {});
@@ -169,6 +182,7 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
             WHERE id = ?
               AND sheet_status = 'FAILED'
               AND sheet_delivered_at IS NULL
+              AND (sheet_last_error IS NULL OR sheet_last_error NOT LIKE 'STALE_SUPERSEDED:%')
         `, [jobId]);
         return result.changes === 1
             ? { requeued: true, jobId }
@@ -192,6 +206,25 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
         if (result.changes !== 1) {
             return terminal("INVALID_RESPONSE", "Consolidated Sheet job outcome could not be persisted because the claim changed.");
         }
+        try {
+            technicalLogger.info("CONSOLIDATED_SHEET", "Consolidated Sheet job outcome persisted", {
+                jobId: claimed.id,
+                closingId: claimed.closing_id,
+                closeSequence: claimed.close_sequence,
+                classification: outcome.code,
+                status: nextStatus
+            });
+            await logActivity({
+                category: "DAY CLOSING",
+                action: outcome.delivered ? "DSR_SYNC_SUCCEEDED" : "DSR_SYNC_FAILED",
+                details: `Consolidated Sheet ${outcome.delivered ? "delivered" : "failed"}; Close sequence: ${Number(claimed.close_sequence)} | ${String(outcome.code || "UNKNOWN")}`,
+                user_name: "SYSTEM",
+                status: outcome.delivered ? "SUCCESS" : "FAILED",
+                entity_type: "BUSINESS_DAY",
+                reference_no: claimed.business_date
+            });
+        }
+        catch (_) {}
         return {
             ...outcome,
             status: nextStatus,
@@ -289,18 +322,33 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
         return persistOutcome(claimed, outcome);
     }
 
+    async function drain() {
+        return processNext();
+    }
+
+    async function retryForClosing(closingId) {
+        const result = await run(`
+            UPDATE consolidated_reporting_jobs
+            SET sheet_status='PENDING', sheet_processing_started_at=NULL, sheet_last_error=NULL
+            WHERE closing_id=? AND sheet_status='FAILED' AND sheet_delivered_at IS NULL
+              AND (sheet_last_error IS NULL OR sheet_last_error NOT LIKE 'STALE_SUPERSEDED:%')
+        `, [closingId]);
+        return { requeued: result.changes === 1, closingId, code: result.changes === 1 ? null : "SHEET_JOB_NOT_REQUEUEABLE" };
+    }
+
     return {
         claimNext,
         requeueFailedJob,
         recoverStaleProcessing,
         processNext,
+        drain,
+        retryForClosing,
         processClaimed: async claimed => persistOutcome(claimed, await sendClaimed(claimed)),
         constants: Object.freeze({
             STALE_PROCESSING_TIMEOUT_MS,
             HTTP_TIMEOUT_MS,
             MAX_REDIRECTS,
-            CONSOLIDATED_ENDPOINT_ENV,
-            CONSOLIDATED_SECRET_ENV
+            RETRY_COOLDOWN_MS
         })
     };
 }
@@ -309,8 +357,6 @@ module.exports = {
     STALE_PROCESSING_TIMEOUT_MS,
     HTTP_TIMEOUT_MS,
     MAX_REDIRECTS,
-    CONSOLIDATED_ENDPOINT_ENV,
-    CONSOLIDATED_SECRET_ENV,
     resolveConsolidatedDsrConfiguration,
     createConsolidatedSheetDeliveryWorker
 };

@@ -54,6 +54,8 @@ function createDayClosingService(options = {}) {
     const integrationOutbox = options.integrationOutbox || null;
     const segmentDsrOutbox = options.segmentDsrOutbox || null;
     const consolidatedReportingPersistence = options.consolidatedReportingPersistence || null;
+    const reportingMode = String(options.reportingMode || "LEGACY").trim().toUpperCase();
+    const consolidatedV2 = reportingMode === "CONSOLIDATED_V2";
     const getEmailConfiguration = options.getEmailConfiguration || (() => ({
         recipients: options.closingEmail === undefined
             ? String(process.env.DAY_CLOSING_EMAIL || "").split(",").map(value => value.trim()).filter(Boolean)
@@ -661,7 +663,7 @@ function createDayClosingService(options = {}) {
         let summary = await getDayClosingSnapshot(reservation.snapshotId);
         let emailStatus = "PENDING";
         let emailWarning = null;
-        if (!integrationOutbox) try {
+        if (!integrationOutbox && !consolidatedV2) try {
             const emailConfiguration = await getEmailConfiguration();
             if (!emailConfiguration.automaticEmailBackup) {
                 throw new Error("Automatic email backup is disabled.");
@@ -688,7 +690,7 @@ function createDayClosingService(options = {}) {
             });
         }
 
-        if (!integrationOutbox) await run(`
+        if (!integrationOutbox && !consolidatedV2) await run(`
             UPDATE day_closing_snapshots
             SET email_status = ?,
                 remarks = CASE WHEN ? IS NULL THEN remarks ELSE ? END,
@@ -715,7 +717,7 @@ function createDayClosingService(options = {}) {
         }
 
         summary = await getDayClosingSnapshot(reservation.snapshotId);
-        if (segmentDsrOutbox) {
+        if (segmentDsrOutbox && !consolidatedV2) {
             try {
                 await segmentDsrOutbox.enqueue(reservation.snapshotId);
             }
@@ -727,9 +729,9 @@ function createDayClosingService(options = {}) {
             }
         }
         let dsrResult = { status: "PENDING", warning: null, action: null };
-        if (integrationOutbox) {
+        if (integrationOutbox && !consolidatedV2) {
             await integrationOutbox.enqueue(reservation.snapshotId, summary.businessDate, summary.closeSequence);
-        } else {
+        } else if (!consolidatedV2) {
             dsrResult = await attemptDsrSync(reservation.snapshotId);
         }
         summary = await getDayClosingSnapshot(reservation.snapshotId);
