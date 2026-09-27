@@ -44,9 +44,11 @@ assert(
     "startup readiness must verify authoritative identity and SQLite integrity"
 );
 assert(
-    databasePath.includes('path.resolve(PROJECT_ROOT, "billing.db")') &&
-    databasePath.includes('path.resolve(userDataPath, "billing.db")'),
-    "database resolver must retain dev repo-root and packaged userData authority"
+    databasePath.includes("return path.resolve(projectRoot, DATABASE_FILE_NAME);") &&
+    databasePath.includes("return path.resolve(userDataPath, DATABASE_FILE_NAME);") &&
+    databasePath.includes("if (isPackaged)") &&
+    databasePath.includes("developmentOverride"),
+    "database resolver must retain dev repo-root, packaged userData, and explicit development override authority"
 );
 
 console.log("V1.1 restore authority regression test: PASS");
