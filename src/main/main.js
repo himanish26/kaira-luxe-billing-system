@@ -859,6 +859,14 @@ ipcMain.handle("startup:run-check", async (event, checkName) =>
     })
 );
 
+ipcMain.handle("startup:retry-remote-dashboard", async event => {
+    if (!splashWindow || event.sender !== splashWindow.webContents) {
+        return { success: false, error: "Startup Remote Dashboard retry request rejected." };
+    }
+    await remoteDashboard.drain({ force: true });
+    return { success: true };
+});
+
 ipcMain.handle("startup:exit", () => {
     isAppQuitting = true;
     app.quit();
