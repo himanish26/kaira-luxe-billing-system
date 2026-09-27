@@ -583,6 +583,50 @@ function createDayClosingService(options = {}) {
                 : { success: false, alreadyClosing: true, ...active };
         }
 
+        // Accounting closure is authoritative before any backup snapshot is taken.
+        // This guarantees that a successfully verified Day Closing backup restores
+        // the same CLOSED business-day state rather than the earlier PREPARING state.
+        const closedAt = now().toISOString();
+        try {
+            await run("BEGIN IMMEDIATE TRANSACTION");
+            const update = await run(`
+                UPDATE day_closing_snapshots
+                SET close_status = 'CLOSED',
+                    closed_at = ?,
+                    backup_status = 'PENDING',
+                    backup_reference = NULL,
+                    email_status = 'PENDING',
+                    updated_at = ?
+                WHERE id = ? AND close_status = 'PREPARING'
+            `, [closedAt, closedAt, reservation.snapshotId]);
+            if (update.changes !== 1) {
+                throw new Error("Day Closing reservation changed before completion.");
+            }
+            if (await hasBusinessDayStateTable()) {
+                await run(`
+                    UPDATE business_day_state
+                    SET state = 'CLOSED', closed_at = ?, updated_at = ?
+                    WHERE business_date = ?
+                `, [closedAt, closedAt, reservation.businessDate]);
+            }
+            await run("COMMIT");
+        }
+        catch (error) {
+            technicalLogger.error(
+                "DAY_CLOSING",
+                "Day Closing accounting finalization failed",
+                error,
+                { snapshotId: reservation.snapshotId }
+            );
+            await run("ROLLBACK").catch(() => {});
+            await markFailed(
+                reservation.snapshotId,
+                `Closing finalization failed before mandatory backup: ${error.message}`,
+                "FAILED"
+            ).catch(() => {});
+            throw error;
+        }
+
         let backup;
         try {
             backup = await createBackupFn();
@@ -597,48 +641,50 @@ function createDayClosingService(options = {}) {
         catch (error) {
             technicalLogger.error(
                 "DAY_CLOSING",
-                "Mandatory Day Closing backup failed",
+                "Mandatory post-close Day Closing backup failed",
                 error,
                 { snapshotId: reservation.snapshotId }
             );
-            await markFailed(reservation.snapshotId, error.message, "FAILED");
+            await run(`
+                UPDATE day_closing_snapshots
+                SET backup_status = 'FAILED',
+                    remarks = ?,
+                    updated_at = ?
+                WHERE id = ? AND close_status = 'CLOSED'
+            `, [
+                `Mandatory post-close backup failed: ${error.message}`,
+                now().toISOString(),
+                reservation.snapshotId
+            ]).catch(() => {});
             return {
                 success: false,
+                dayClosed: true,
                 backupFailed: true,
                 businessDate: reservation.businessDate,
+                snapshotId: reservation.snapshotId,
                 error: error.message
             };
         }
 
-        const closedAt = now().toISOString();
         let consolidatedReportingJob = null;
         try {
             await run("BEGIN IMMEDIATE TRANSACTION");
-            const update = await run(`
+            const backupUpdate = await run(`
                 UPDATE day_closing_snapshots
-                SET close_status = 'CLOSED',
-                    closed_at = ?,
-                    backup_status = 'SUCCESS',
+                SET backup_status = 'SUCCESS',
                     backup_reference = ?,
-                    email_status = 'PENDING',
                     updated_at = ?
-                WHERE id = ? AND close_status = 'PREPARING'
-            `, [closedAt, backup.backupFileName, closedAt, reservation.snapshotId]);
-            if (update.changes !== 1) {
-                throw new Error("Day Closing reservation changed before completion.");
-            }
-            if (await hasBusinessDayStateTable()) {
-                await run(`
-                    UPDATE business_day_state
-                    SET state = 'CLOSED', closed_at = ?, updated_at = ?
-                    WHERE business_date = ?
-                `, [closedAt, closedAt, reservation.businessDate]);
+                WHERE id = ? AND close_status = 'CLOSED'
+                  AND backup_status = 'PENDING'
+            `, [backup.backupFileName, now().toISOString(), reservation.snapshotId]);
+            if (backupUpdate.changes !== 1) {
+                throw new Error("Day Closing backup state changed before verification could be committed.");
             }
             if (consolidatedReportingPersistence) {
-                const closedSnapshot = await get("SELECT * FROM day_closing_snapshots WHERE id = ? AND close_status = 'CLOSED'", [reservation.snapshotId]);
+                const closedSnapshot = await get("SELECT * FROM day_closing_snapshots WHERE id = ? AND close_status = 'CLOSED' AND backup_status = 'SUCCESS'", [reservation.snapshotId]);
                 consolidatedReportingJob = await consolidatedReportingPersistence.createFrozenJobWithinTransaction(
                     closedSnapshot,
-                    closedAt,
+                    now().toISOString(),
                     klbsVersion
                 );
             }
@@ -647,16 +693,11 @@ function createDayClosingService(options = {}) {
         catch (error) {
             technicalLogger.error(
                 "DAY_CLOSING",
-                "Day Closing finalization failed",
+                "Post-close backup finalization failed",
                 error,
                 { snapshotId: reservation.snapshotId }
             );
             await run("ROLLBACK").catch(() => {});
-            await markFailed(
-                reservation.snapshotId,
-                `Backup succeeded but closing finalization failed: ${error.message}`,
-                "SUCCESS"
-            ).catch(() => {});
             throw error;
         }
 
