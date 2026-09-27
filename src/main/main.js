@@ -2659,9 +2659,33 @@ ipcMain.handle(
 
         requireSecurityGrant(grant, "RESTORE");
 
-        return await restoreBackup(
+        const result = await restoreBackup(
             zipPath
         );
+
+        if (result && result.success === true) {
+            const relaunchArgs = [
+                ...process.argv.slice(1),
+                "--restore-completed",
+                path.basename(zipPath)
+            ];
+
+            technicalLogger.info(
+                "RESTORE",
+                "Restore installed at authoritative path; restarting for startup verification"
+            );
+
+            app.relaunch({ args: relaunchArgs });
+            app.exit(0);
+
+            return {
+                success: true,
+                restartRequired: true,
+                message: "Database restored successfully. KLBS is restarting."
+            };
+        }
+
+        return result;
 
     }
 
