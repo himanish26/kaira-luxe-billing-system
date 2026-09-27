@@ -171,14 +171,20 @@ function createRemoteDashboardService(options = {}) {
         log("retry", { eventType: row.event_type, delaySeconds });
         return false;
     }
-    async function drain() {
+    async function drain(options = {}) {
         if (drainInFlight) return drainInFlight;
+        const force = options.force === true;
         drainInFlight = (async () => {
             await run("DELETE FROM remote_dashboard_outbox WHERE status='ACCEPTED' AND accepted_at < ?", [isoWithBusinessOffset(new Date(now().getTime() - 30 * 24 * 60 * 60 * 1000))]);
             const current = isoWithBusinessOffset(now());
-            const rows = await all(`SELECT * FROM remote_dashboard_outbox
-                WHERE status IN ('PENDING','RETRYABLE_FAILURE') AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-                ORDER BY id LIMIT 10`, [current]);
+            const rows = force
+                ? await all(`SELECT * FROM remote_dashboard_outbox
+                    WHERE status IN ('PENDING','RETRYABLE_FAILURE')
+                    ORDER BY id LIMIT 10`)
+                : await all(`SELECT * FROM remote_dashboard_outbox
+                    WHERE status IN ('PENDING','RETRYABLE_FAILURE') AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+                    ORDER BY id LIMIT 10`, [current]);
+            if (force && rows.length) log("manual-retry", { pendingEvents: rows.length });
             for (const row of rows) await processOne(row);
         })().catch(error => log("failed", { classification: String(error.message || "").slice(0, 200) })).finally(() => { drainInFlight = null; });
         return drainInFlight;
