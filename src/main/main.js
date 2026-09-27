@@ -3274,6 +3274,50 @@ ipcMain.handle(
             if (result && result.success === true) {
                 try { await remoteDashboard.queueDayClosed(result); }
                 catch (_) { technicalLogger.warn("REMOTE_DASHBOARD", "DAY_CLOSED event could not be queued", { classification: "OUTBOX_QUEUE_FAILED" }); }
+
+                if (result.consolidatedReportingJob && result.consolidatedReportingJob.jobId) {
+                    let online = false;
+                    try {
+                        const systemStatus = await getSystemStatus();
+                        online = Boolean(systemStatus.internet && systemStatus.internet.online);
+                    }
+                    catch (_) {}
+
+                    if (online) {
+                        mainWindow && !mainWindow.isDestroyed() &&
+                            mainWindow.webContents.send("day-closing:progress", { stage: "UPDATING_DSR" });
+                        try { await consolidatedSheetDeliveryWorker.drain(); }
+                        catch (error) {
+                            technicalLogger.warn("CONSOLIDATED_SHEET", "Immediate Day Closing DSR delivery deferred", {
+                                classification: String(error.message || "").slice(0, 300)
+                            });
+                        }
+
+                        mainWindow && !mainWindow.isDestroyed() &&
+                            mainWindow.webContents.send("day-closing:progress", { stage: "SENDING_EMAIL" });
+                        try { await consolidatedReportingEmailWorker.processNext(); }
+                        catch (error) {
+                            technicalLogger.warn("CONSOLIDATED_EMAIL", "Immediate Day Closing email delivery deferred", {
+                                classification: String(error.message || "").slice(0, 300)
+                            });
+                        }
+                    }
+
+                    const delivery = await new Promise((resolve, reject) => database.get(
+                        "SELECT sheet_status, email_status, sheet_last_error, email_last_error FROM consolidated_reporting_jobs WHERE id = ?",
+                        [result.consolidatedReportingJob.jobId],
+                        (error, row) => error ? reject(error) : resolve(row || null)
+                    )).catch(() => null);
+                    result.onlineDelivery = {
+                        online,
+                        dsrStatus: delivery && delivery.sheet_status || "PENDING",
+                        emailStatus: delivery && delivery.email_status || "PENDING",
+                        dsrError: delivery && delivery.sheet_last_error || null,
+                        emailError: delivery && delivery.email_last_error || null
+                    };
+                }
+                mainWindow && !mainWindow.isDestroyed() &&
+                    mainWindow.webContents.send("day-closing:progress", { stage: "DAY_CLOSING_COMPLETE" });
             }
             return result;
 
