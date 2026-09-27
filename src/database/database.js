@@ -2940,6 +2940,36 @@ db.serialize(() => {
 try {
         await databaseInitialization;
 
+        // Re-assert database identity after initialization. Restore/relaunch must
+        // never become operational against a staging, Downloads, backup, or
+        // otherwise non-authoritative SQLite file.
+        await assertAuthoritativeDatabaseConnection(db);
+
+        const startupIntegrity = await new Promise((resolve, reject) => {
+            db.get("PRAGMA integrity_check", [], (error, row) => {
+                if (error) return reject(error);
+                if (!row || row.integrity_check !== "ok") {
+                    return reject(new Error("KLBS startup SQLite integrity_check failed."));
+                }
+                resolve(row.integrity_check);
+            });
+        });
+
+        if (startupIntegrity !== "ok") {
+            throw new Error("KLBS startup database integrity verification failed.");
+        }
+
+        const startupForeignKeyViolations = await new Promise((resolve, reject) => {
+            db.all("PRAGMA foreign_key_check", [], (error, rows) => {
+                if (error) return reject(error);
+                resolve(rows || []);
+            });
+        });
+
+        if (startupForeignKeyViolations.length > 0) {
+            throw new Error("KLBS startup foreign_key_check failed.");
+        }
+
         const runNamedMigration = async (name, operation) => {
             try {
                 return await operation();
