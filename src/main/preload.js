@@ -166,6 +166,15 @@ closeBusinessDay: () =>
 
     ),
 
+onDayClosingProgress: callback =>
+    ipcRenderer.on("day-closing:progress", (_event, payload) => callback(payload)),
+
+onDayClosingExitBlocked: callback =>
+    ipcRenderer.on("day-closing:exit-blocked", () => callback()),
+
+closeAfterDayClosing: () =>
+    ipcRenderer.invoke("app:close-after-day-closing"),
+
     retryDayClosingDsrSync: (grant, snapshotId) =>
         ipcRenderer.invoke("day-closing:retry-dsr-sync", grant, snapshotId),
 
