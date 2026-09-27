@@ -2226,3 +2226,198 @@ body{
 
     font-size:13px;
 }
+
+
+/* =========================================================
+   DAY CLOSING LIFECYCLE / SAFE EXIT
+   ========================================================= */
+
+.dc-lifecycle-overlay{
+    position:fixed;
+    inset:0;
+    z-index:1000000;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:32px;
+    background:var(--bg);
+    color:var(--text);
+}
+
+.dc-lifecycle-overlay.is-visible{ display:flex; }
+
+.dc-lifecycle-shell{
+    width:min(760px, 100%);
+    padding:38px 42px;
+    background:var(--card);
+    border:1px solid var(--border);
+    border-top:6px solid var(--primary);
+    border-radius:var(--radius-xl);
+    box-shadow:var(--shadow-lg);
+}
+
+.dc-lifecycle-brand{
+    color:var(--primary);
+    font-size:13px;
+    font-weight:900;
+    letter-spacing:.18em;
+}
+
+.dc-lifecycle-kicker{
+    margin-top:8px;
+    color:var(--text-muted);
+    font-size:12px;
+    font-weight:800;
+    letter-spacing:.12em;
+}
+
+.dc-lifecycle-shell h1{
+    margin:10px 0 6px;
+    color:var(--text);
+    font-size:30px;
+    line-height:1.2;
+}
+
+.dc-lifecycle-shell h1.is-success{ color:var(--success); }
+.dc-lifecycle-shell h1.is-error{ color:var(--danger); }
+
+#dcLifecycleSubtitle{
+    margin:0 0 24px;
+    color:var(--text-light);
+    font-size:14px;
+    line-height:1.55;
+}
+
+.dc-lifecycle-stages{
+    overflow:hidden;
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    background:#fff;
+}
+
+.dc-lifecycle-stage{
+    display:grid;
+    grid-template-columns:34px minmax(0,1fr) auto;
+    align-items:center;
+    gap:12px;
+    min-height:54px;
+    padding:9px 16px;
+    border-bottom:1px solid #eeeeee;
+}
+
+.dc-lifecycle-stage:last-child{ border-bottom:none; }
+
+.dc-lifecycle-stage-icon{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:28px;
+    height:28px;
+    border-radius:50%;
+    background:#f1f1f1;
+    color:var(--text-muted);
+    font-size:12px;
+    font-weight:900;
+}
+
+.dc-lifecycle-stage-label{
+    color:var(--text);
+    font-size:14px;
+    font-weight:700;
+}
+
+.dc-lifecycle-stage-state{
+    color:var(--text-muted);
+    font-size:12px;
+    font-weight:700;
+    text-align:right;
+}
+
+.dc-lifecycle-stage.is-active{
+    background:#fff6f9;
+}
+
+.dc-lifecycle-stage.is-active .dc-lifecycle-stage-icon{
+    background:var(--primary);
+    color:#fff;
+}
+
+.dc-lifecycle-stage.is-active .dc-lifecycle-stage-state{
+    color:var(--primary);
+}
+
+.dc-lifecycle-stage.is-complete .dc-lifecycle-stage-icon{
+    background:var(--success);
+    color:#fff;
+}
+
+.dc-lifecycle-stage.is-complete .dc-lifecycle-stage-state{
+    color:var(--success);
+}
+
+.dc-lifecycle-stage.is-pending{
+    background:#fffaf0;
+}
+
+.dc-lifecycle-stage.is-pending .dc-lifecycle-stage-icon{
+    background:#fff0c7;
+    color:var(--warning);
+}
+
+.dc-lifecycle-stage.is-pending .dc-lifecycle-stage-state{
+    color:var(--warning);
+}
+
+.dc-lifecycle-notice{
+    margin-top:16px;
+    padding:12px 14px;
+    border:1px solid #d7d7d7;
+    border-radius:var(--radius-sm);
+    background:#f8f9fb;
+    color:var(--text-light);
+    font-size:13px;
+    font-weight:600;
+    line-height:1.5;
+}
+
+.dc-lifecycle-notice.is-warning{
+    border-color:#efd49d;
+    background:#fff8e8;
+    color:#8a5b00;
+}
+
+.dc-lifecycle-notice.is-error{
+    border-color:#efb6bd;
+    background:#fff1f2;
+    color:#a32131;
+}
+
+.dc-lifecycle-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap:12px;
+    margin-top:22px;
+}
+
+.dc-lifecycle-actions button{
+    min-width:180px;
+    min-height:48px;
+    padding:10px 20px;
+    border-radius:var(--radius-sm);
+    font-size:13px;
+    font-weight:800;
+}
+
+.dc-lifecycle-actions button:disabled{
+    opacity:.45;
+    cursor:not-allowed;
+}
+
+@media (max-width:700px){
+    .dc-lifecycle-overlay{ padding:16px; }
+    .dc-lifecycle-shell{ padding:28px 22px; }
+    .dc-lifecycle-stage{ grid-template-columns:32px minmax(0,1fr); }
+    .dc-lifecycle-stage-state{ grid-column:2; text-align:left; }
+    .dc-lifecycle-actions{ flex-direction:column-reverse; }
+    .dc-lifecycle-actions button{ width:100%; }
+}
