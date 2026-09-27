@@ -184,7 +184,7 @@ const {
 } = require("../services/restoreState");
 
 const database = require("../database/database");
-const { databaseReady } = database;
+const { databaseReady, closeDatabase } = database;
 const masterRecoveryVerifier = require("../config/masterRecoveryVerifier");
 const { createAdministratorSecurityService } = require("../services/administratorSecurityService");
 const administratorSecurity = createAdministratorSecurityService(database, {
@@ -249,6 +249,7 @@ const {
     getBackupHistory,
 
     validateBackup,
+    validateDayClosingBackup,
 
     restoreBackup
 
@@ -455,6 +456,12 @@ const {
     consolidatedReportingPersistence,
     reportingMode,
     klbsVersion: app.getVersion(),
+    validateDayClosingBackup,
+    onProgress: stage => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("day-closing:progress", { stage });
+        }
+    },
     logBusinessDayClosed,
     logBusinessDayReopened,
     logDsrSyncSucceeded,
@@ -467,6 +474,7 @@ let startupSecuritySetupInProgress = false;
 
 let isAppQuitting = false;
 let orderlyShutdownLogged = false;
+let dayClosingCriticalInProgress = false;
 
 function attachWindowDiagnostics(window, component) {
     window.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
@@ -540,6 +548,11 @@ function createWindow() {
             }
 
             event.preventDefault();
+
+            if (dayClosingCriticalInProgress) {
+                mainWindow.webContents.send("day-closing:exit-blocked");
+                return;
+            }
 
             const result = await dialog.showMessageBox(
 
@@ -3251,6 +3264,10 @@ ipcMain.handle(
 
     async () => {
 
+        if (dayClosingCriticalInProgress) {
+            return { success: false, alreadyClosing: true, message: "Business Day closing is already in progress." };
+        }
+        dayClosingCriticalInProgress = true;
         try {
 
             const result = await closeBusinessDay();
@@ -3278,10 +3295,49 @@ ipcMain.handle(
             };
 
         }
+        finally {
+            dayClosingCriticalInProgress = false;
+        }
 
     }
 
 );
+
+ipcMain.handle("app:close-after-day-closing", async event => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) {
+        throw new Error("Close KLBS request rejected.");
+    }
+    if (dayClosingCriticalInProgress) {
+        return { success: false, error: "Day Closing is still in progress." };
+    }
+
+    const state = await getBusinessDayState();
+    if (!state.closed || !state.snapshot || state.snapshot.closeStatus !== "CLOSED") {
+        return { success: false, error: "Business Day must be CLOSED before KLBS can exit from the closing screen." };
+    }
+    if (state.snapshot.backupStatus !== "SUCCESS") {
+        return { success: false, error: "The mandatory Day Closing backup is not verified SUCCESS." };
+    }
+
+    isAppQuitting = true;
+    stopBackupScheduler();
+    stopIntegrationOutboxDrain();
+    remoteDashboard.stop();
+
+    try {
+        await logApplicationClosed();
+    }
+    catch (error) {
+        technicalLogger.warn("APPLICATION", "Application close log failed during Safe Exit", {
+            classification: String(error.message || "").slice(0, 200)
+        });
+    }
+
+    await closeDatabase();
+    technicalLogger.info("APPLICATION", "KLBS Safe Exit completed after Day Closing");
+    setImmediate(() => app.quit());
+    return { success: true };
+});
 
 ipcMain.handle(
     "reopen-business-day",
