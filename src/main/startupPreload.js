@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("startupAPI", {
     getMetadata: () => ipcRenderer.invoke("startup:get-metadata"),
     runCheck: checkName => ipcRenderer.invoke("startup:run-check", checkName),
+    retryRemoteDashboard: () => ipcRenderer.invoke("startup:retry-remote-dashboard"),
     openSecuritySetup: () => ipcRenderer.invoke("startup:open-security-setup"),
     reopenClosedDay: data => ipcRenderer.invoke("startup:reopen-closed-day", data),
     closePreviousDay: data => ipcRenderer.invoke("startup:close-previous-day", data),
