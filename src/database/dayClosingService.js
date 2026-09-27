@@ -42,6 +42,12 @@ function createDayClosingService(options = {}) {
         ? null : require("../services/backupService");
     const createBackupFn = options.createBackup || backupService.createBackup;
     const validateBackupFn = options.validateBackup || backupService.validateBackup;
+    const validateDayClosingBackupFn = options.validateDayClosingBackup ||
+        (backupService && backupService.validateDayClosingBackup) ||
+        (async (filePath) => validateBackupFn(filePath));
+    const onProgressFn = typeof options.onProgress === "function"
+        ? options.onProgress
+        : () => {};
     const sendEmailFn = options.sendEmail || require("../services/emailService").sendEmail;
     const noActivityLog = async () => {};
     const logClosedFn = options.logBusinessDayClosed || noActivityLog;
@@ -575,6 +581,7 @@ function createDayClosingService(options = {}) {
     }
 
     async function executeClose(targetBusinessDate) {
+        onProgressFn("FINALIZING_ACCOUNTS");
         const reservation = await reserveClose(targetBusinessDate);
         if (reservation.active) {
             const active = snapshotToSummary(reservation.active);
@@ -610,6 +617,7 @@ function createDayClosingService(options = {}) {
                 `, [closedAt, closedAt, reservation.businessDate]);
             }
             await run("COMMIT");
+            onProgressFn("BUSINESS_DAY_CLOSED");
         }
         catch (error) {
             technicalLogger.error(
@@ -629,8 +637,20 @@ function createDayClosingService(options = {}) {
 
         let backup;
         try {
+            onProgressFn("CREATING_BACKUP");
             backup = await createBackupFn();
-            const verification = await validateBackupFn(backup.backupFilePath);
+            onProgressFn("VERIFYING_BACKUP");
+            const expectedClosedSnapshot = await get(
+                "SELECT * FROM day_closing_snapshots WHERE id = ? AND close_status = 'CLOSED'",
+                [reservation.snapshotId]
+            );
+            if (!expectedClosedSnapshot) {
+                throw new Error("Closed Day Closing snapshot disappeared before backup verification.");
+            }
+            const verification = await validateDayClosingBackupFn(
+                backup.backupFilePath,
+                expectedClosedSnapshot
+            );
             if (!verification || verification.success !== true) {
                 throw new Error(
                     verification && verification.message ||
@@ -701,6 +721,7 @@ function createDayClosingService(options = {}) {
             throw error;
         }
 
+        onProgressFn("BACKUP_VERIFIED");
         let summary = await getDayClosingSnapshot(reservation.snapshotId);
         let emailStatus = "PENDING";
         let emailWarning = null;
@@ -758,6 +779,7 @@ function createDayClosingService(options = {}) {
         }
 
         summary = await getDayClosingSnapshot(reservation.snapshotId);
+        onProgressFn("UPDATING_DSR");
         if (segmentDsrOutbox && !consolidatedV2) {
             try {
                 await segmentDsrOutbox.enqueue(reservation.snapshotId);
@@ -776,6 +798,8 @@ function createDayClosingService(options = {}) {
             dsrResult = await attemptDsrSync(reservation.snapshotId);
         }
         summary = await getDayClosingSnapshot(reservation.snapshotId);
+        onProgressFn("ONLINE_TASKS_QUEUED");
+        onProgressFn("COMPLETING_DAY_CLOSING");
         return {
             success: true,
             snapshotId: reservation.snapshotId,
