@@ -178,20 +178,9 @@ if (!restoreResult.success) {
 
 }
 
-await window.electronAPI.showMessageBox({
-
-    type: "info",
-
-    title: "Restore Complete",
-
-    message:
-        "Backup restored successfully. Administrator Security settings were restored with the database.\n\nThe application will now restart."
-
-});
-
-await window.electronAPI.restartApp(
-    result.filePath
-);
+// Successful restore/restart is owned by the main process. The renderer
+// must never decide the post-restore database location or launch sequence.
+return;
 
             });
 
