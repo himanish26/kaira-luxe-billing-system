@@ -268,12 +268,10 @@ async function migrateDayClosingSnapshots(db) {
             FROM day_closing_snapshots
             WHERE close_status = 'CLOSED' AND backup_status = 'SUCCESS'
               AND email_status IN ('PENDING', 'UNKNOWN')`);
-        await run(db, `INSERT OR IGNORE INTO integration_outbox
-            (business_date, closing_id, close_sequence, delivery_type, created_at)
-            SELECT business_date, id, close_sequence, 'DSR_DAY_CLOSING', COALESCE(updated_at, closed_at, created_at)
-            FROM day_closing_snapshots
-            WHERE close_status = 'CLOSED' AND backup_status = 'SUCCESS'
-              AND dsr_sync_status IN ('NOT_ATTEMPTED', 'PENDING', 'FAILED')`);
+        // V1.1 consolidated reporting owns KLBS_Daily_Data delivery. Do not
+        // reconstruct legacy DSR_DAY_CLOSING work during startup migration.
+        // Historical SUCCESS rows remain intact for audit/status history.
+        // New consolidated work is persisted in consolidated_reporting_jobs.
 
         const recoveryTime = new Date().toISOString();
         await run(db, `
