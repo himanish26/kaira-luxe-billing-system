@@ -236,7 +236,11 @@ if (failed) {
 }, 1200);
 }
 
-document.getElementById("retryBtn").addEventListener("click", runChecks);
+document.getElementById("retryBtn").addEventListener("click", async () => {
+    if (checksRunning) return;
+    await window.startupAPI.retryRemoteDashboard().catch(() => ({ success: false }));
+    await runChecks();
+});
 document.getElementById("exitBtn").addEventListener("click", () => window.startupAPI.exit());
 async function openSecuritySetup() {
     if (securitySetupOpening || securitySetupOpened) return;
