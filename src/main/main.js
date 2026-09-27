@@ -136,6 +136,7 @@ const {
     setIntegrationConfigService
 } = require("../services/emailService");
 const { createIntegrationOutboxService } = require("../services/integrationOutboxService");
+const { createIntegrationStatusService } = require("../services/integrationStatusService");
 const { createRemoteDashboardService } = require("../services/remoteDashboardService");
 const { readClosedDsrPayload } = require("../database/dayClosingDsrService");
 const { getBackupFolder } = require("../services/backupService");
@@ -368,6 +369,7 @@ const { createBusinessSegmentDsrSyncService } = require("../services/businessSeg
 const { createConsolidatedReportingPersistenceService } = require("../services/consolidatedReportingPersistenceService");
 const { createConsolidatedSheetDeliveryWorker } = require("../services/consolidatedSheetDeliveryWorker");
 const { createConsolidatedReportingEmailWorker } = require("../services/consolidatedReportingEmailWorker");
+let activeDayClosingUiAttemptId = null;
 const reportingMode = resolveReportingMode();
 const dsrSyncService = createDsrSyncService({
     configProvider: () => integrationConfig.resolveDsrRuntime()
@@ -388,6 +390,7 @@ const integrationOutbox = createIntegrationOutboxService({
     getEmailConfiguration: () => integrationConfig.resolveEmailRuntime(),
     getBackupPath: async fileName => path.join(await getBackupFolder(), fileName)
 });
+const integrationStatus = createIntegrationStatusService({ database, legacyOutbox: integrationOutbox });
 const businessSegmentDsrSyncService = createBusinessSegmentDsrSyncService({
     configProvider: () => integrationConfig.resolveDsrRuntime()
 });
@@ -459,7 +462,7 @@ const {
     validateDayClosingBackup,
     onProgress: stage => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send("day-closing:progress", { stage });
+            mainWindow.webContents.send("day-closing:progress", { stage, attemptId: activeDayClosingUiAttemptId });
         }
     },
     logBusinessDayClosed,
@@ -550,7 +553,7 @@ function createWindow() {
             event.preventDefault();
 
             if (dayClosingCriticalInProgress) {
-                mainWindow.webContents.send("day-closing:exit-blocked");
+                mainWindow.webContents.send("day-closing:exit-blocked", activeDayClosingUiAttemptId);
                 return;
             }
 
@@ -829,7 +832,11 @@ app.whenReady().then(async () => {
 
 ipcMain.handle(
     'select-excel-file',
-    async () => {
+    async (_event, attemptId) => {
+
+        if (!Number.isSafeInteger(attemptId) || attemptId <= 0) {
+            return { success: false, error: "Day Closing attempt identifier is invalid." };
+        }
 
         const result =
             await dialog.showOpenDialog({
@@ -2033,24 +2040,23 @@ ipcMain.handle(
 
 ipcMain.handle("integrations:get-config", async () => {
     const config = integrationConfig.getPublicConfig();
-    const latest = await new Promise((resolve, reject) => database.get(`
-        SELECT closed_at, email_status, dsr_sync_status, dsr_synced_at, dsr_sync_attempts
+    const [latest, status] = await Promise.all([
+        new Promise((resolve, reject) => database.get(`
+        SELECT closed_at, email_status
         FROM day_closing_snapshots
         WHERE close_status = 'CLOSED'
         ORDER BY closed_at DESC LIMIT 1
-    `, [], (error, row) => error ? reject(error) : resolve(row || null)));
+    `, [], (error, row) => error ? reject(error) : resolve(row || null))),
+        integrationStatus.getStatusView()
+    ]);
     config.email.lastEmailBackup = latest ? {
         at: latest.closed_at, status: latest.email_status
     } : null;
-    config.dsr.lastSync = latest ? {
-        at: latest.dsr_synced_at || latest.closed_at,
-        status: latest.dsr_sync_status,
-        attempts: latest.dsr_sync_attempts
-    } : null;
+    config.dsr.lastSync = status.lastDsrSync;
     return config;
 });
 ipcMain.handle("integrations:get-outbox-status", async () => {
-    const view = await integrationOutbox.getStatusView();
+    const view = await integrationStatus.getStatusView();
     const system = await getSystemStatus();
     return { online: Boolean(system.internet && system.internet.online), ...view };
 });
@@ -3262,11 +3268,16 @@ ipcMain.handle(
 
     "close-business-day",
 
-    async () => {
+    async (_event, attemptId) => {
+
+        if (!Number.isSafeInteger(attemptId) || attemptId <= 0) {
+            return { success: false, error: "Day Closing attempt identifier is invalid." };
+        }
 
         if (dayClosingCriticalInProgress) {
             return { success: false, alreadyClosing: true, message: "Business Day closing is already in progress." };
         }
+        activeDayClosingUiAttemptId = attemptId;
         dayClosingCriticalInProgress = true;
         try {
 
@@ -3285,7 +3296,7 @@ ipcMain.handle(
 
                     if (online) {
                         mainWindow && !mainWindow.isDestroyed() &&
-                            mainWindow.webContents.send("day-closing:progress", { stage: "UPDATING_DSR" });
+                            mainWindow.webContents.send("day-closing:progress", { stage: "UPDATING_DSR", attemptId: activeDayClosingUiAttemptId });
                         try { await consolidatedSheetDeliveryWorker.drain(); }
                         catch (error) {
                             technicalLogger.warn("CONSOLIDATED_SHEET", "Immediate Day Closing DSR delivery deferred", {
@@ -3294,7 +3305,7 @@ ipcMain.handle(
                         }
 
                         mainWindow && !mainWindow.isDestroyed() &&
-                            mainWindow.webContents.send("day-closing:progress", { stage: "SENDING_EMAIL" });
+                            mainWindow.webContents.send("day-closing:progress", { stage: "SENDING_EMAIL", attemptId: activeDayClosingUiAttemptId });
                         try { await consolidatedReportingEmailWorker.processNext(); }
                         catch (error) {
                             technicalLogger.warn("CONSOLIDATED_EMAIL", "Immediate Day Closing email delivery deferred", {
@@ -3341,6 +3352,7 @@ ipcMain.handle(
         }
         finally {
             dayClosingCriticalInProgress = false;
+            activeDayClosingUiAttemptId = null;
         }
 
     }

@@ -32,6 +32,16 @@ function validateWebAppUrl(value) {
     return url.toString();
 }
 
+function validateRemoteDashboardBaseUrl(value, label) {
+    let url;
+    try { url = new URL(String(value || "").trim()); }
+    catch (_) { throw new Error(`${label} must be a valid HTTPS URL.`); }
+    if (url.protocol !== "https:" || !url.hostname || url.username || url.password || url.hash) {
+        throw new Error(`${label} must be a valid HTTPS URL without credentials or a fragment.`);
+    }
+    return url.toString();
+}
+
 function validateEmailInput(input, hasExistingSecret) {
     const senderEmail = String(input.senderEmail || "").trim();
     const smtpHost = String(input.smtpHost || "").trim();
@@ -199,6 +209,27 @@ function createIntegrationConfigService(options) {
         writeStore(store);
         return getConfigurationDetails().dsr;
     }
+    function saveRemoteDashboard(input) {
+        const values = input || {};
+        const webAppBase = validateRemoteDashboardBaseUrl(values.webAppBase, "Apps Script Web App base URL");
+        const gatewayBase = validateRemoteDashboardBaseUrl(values.gatewayBase, "Remote Dashboard Gateway base URL");
+        const secret = String(values.secret || "");
+        if (!secret) throw new Error("Remote Dashboard installation secret is required.");
+        if (typeof values.enabled !== "boolean") throw new Error("Remote Dashboard enabled state must be boolean.");
+
+        // Validate and encrypt everything before replacing the existing store.
+        const encryptedSecret = encrypt(secret);
+        const store = readStore();
+        store.remoteDashboard = {
+            webAppBase,
+            gatewayBase,
+            enabled: values.enabled,
+            secret: encryptedSecret,
+            updatedAt: now().toISOString()
+        };
+        writeStore(store);
+        return { webAppBase, gatewayBase, enabled: values.enabled, configured: true };
+    }
     function resolveEmailRuntime() {
         const store = readStore();
         if (store.email) {
@@ -278,10 +309,13 @@ function createIntegrationConfigService(options) {
         return { migrated: true };
     }
     return {
-        getPublicConfig, getConfigurationDetails, saveEmail, saveDsr, resolveEmailRuntime, resolveDsrRuntime,
+        getPublicConfig, getConfigurationDetails, saveEmail, saveDsr, saveRemoteDashboard, resolveEmailRuntime, resolveDsrRuntime,
         resolveRemoteDashboardRuntime,
         recordTest, migrateLegacyEmail
     };
 }
 
-module.exports = { createIntegrationConfigService, extractSheetId, validateWebAppUrl, validateEmailInput };
+module.exports = {
+    createIntegrationConfigService, extractSheetId, validateWebAppUrl, validateEmailInput,
+    validateRemoteDashboardBaseUrl
+};

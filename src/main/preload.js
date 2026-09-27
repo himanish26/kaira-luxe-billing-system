@@ -158,11 +158,12 @@ saveReturn: (returnData) =>
 
     ),
 
-closeBusinessDay: () =>
+closeBusinessDay: attemptId =>
 
     ipcRenderer.invoke(
 
-        "close-business-day"
+        "close-business-day",
+        attemptId
 
     ),
 
@@ -170,7 +171,7 @@ onDayClosingProgress: callback =>
     ipcRenderer.on("day-closing:progress", (_event, payload) => callback(payload)),
 
 onDayClosingExitBlocked: callback =>
-    ipcRenderer.on("day-closing:exit-blocked", () => callback()),
+    ipcRenderer.on("day-closing:exit-blocked", (_event, attemptId) => callback(attemptId)),
 
 closeAfterDayClosing: () =>
     ipcRenderer.invoke("app:close-after-day-closing"),

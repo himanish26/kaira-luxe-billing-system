@@ -121,6 +121,7 @@ margin-bottom:50px;
 .integration-outbox-status { font-size:12px; background:transparent; }
 .integration-outbox-status.success { color:#23753f; background:transparent !important; }
 .integration-outbox-status.pending { color:#9a6a00; background:transparent; }
+.integration-outbox-status.failed { color:#c62828; background:transparent; }
 .integration-outbox-empty { display:flex; flex-direction:column; gap:5px; padding:18px 4px 4px; color:#23753f; }
 .integration-outbox-empty span { color:#4b5563; font-size:14px; }
 .integration-summary-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; margin:16px auto; }
@@ -2239,21 +2240,25 @@ body{
     display:none;
     align-items:center;
     justify-content:center;
-    padding:32px;
-    background:var(--bg);
+    overflow:auto;
+    padding:24px;
+    background:rgba(20, 24, 30, .56);
+    backdrop-filter:blur(2px);
     color:var(--text);
 }
 
 .dc-lifecycle-overlay.is-visible{ display:flex; }
 
 .dc-lifecycle-shell{
-    width:min(760px, 100%);
-    padding:38px 42px;
+    width:min(720px, 100%);
+    max-height:calc(100vh - 48px);
+    overflow:auto;
+    padding:28px 34px;
     background:var(--card);
     border:1px solid var(--border);
     border-top:6px solid var(--primary);
     border-radius:var(--radius-xl);
-    box-shadow:var(--shadow-lg);
+    box-shadow:0 24px 70px rgba(0,0,0,.28);
 }
 
 .dc-lifecycle-brand{
@@ -2282,7 +2287,7 @@ body{
 .dc-lifecycle-shell h1.is-error{ color:var(--danger); }
 
 #dcLifecycleSubtitle{
-    margin:0 0 24px;
+    margin:0 0 16px;
     color:var(--text-light);
     font-size:14px;
     line-height:1.55;
@@ -2300,8 +2305,8 @@ body{
     grid-template-columns:34px minmax(0,1fr) auto;
     align-items:center;
     gap:12px;
-    min-height:54px;
-    padding:9px 16px;
+    min-height:46px;
+    padding:7px 14px;
     border-bottom:1px solid #eeeeee;
 }
 
@@ -2346,6 +2351,14 @@ body{
     color:var(--primary);
 }
 
+.dc-lifecycle-stage.is-active .dc-lifecycle-stage-icon{
+    animation:dc-lifecycle-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes dc-lifecycle-pulse{
+    50%{ opacity:.58; }
+}
+
 .dc-lifecycle-stage.is-complete .dc-lifecycle-stage-icon{
     background:var(--success);
     color:#fff;
@@ -2356,17 +2369,21 @@ body{
 }
 
 .dc-lifecycle-stage.is-pending{
-    background:#fffaf0;
+    background:#f8f9fb;
 }
 
 .dc-lifecycle-stage.is-pending .dc-lifecycle-stage-icon{
-    background:#fff0c7;
-    color:var(--warning);
+    background:#eef0f2;
+    color:var(--text-muted);
 }
 
 .dc-lifecycle-stage.is-pending .dc-lifecycle-stage-state{
-    color:var(--warning);
+    color:var(--text-muted);
 }
+
+.dc-lifecycle-stage.is-warning{ background:#fff8e8; }
+.dc-lifecycle-stage.is-warning .dc-lifecycle-stage-icon,
+.dc-lifecycle-stage.is-warning .dc-lifecycle-stage-state{ color:#8a5b00; }
 
 .dc-lifecycle-notice{
     margin-top:16px;
@@ -2415,7 +2432,7 @@ body{
 
 @media (max-width:700px){
     .dc-lifecycle-overlay{ padding:16px; }
-    .dc-lifecycle-shell{ padding:28px 22px; }
+    .dc-lifecycle-shell{ max-height:calc(100vh - 32px); padding:24px 20px; }
     .dc-lifecycle-stage{ grid-template-columns:32px minmax(0,1fr); }
     .dc-lifecycle-stage-state{ grid-column:2; text-align:left; }
     .dc-lifecycle-actions{ flex-direction:column-reverse; }

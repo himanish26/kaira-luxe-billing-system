@@ -15,6 +15,9 @@ const RECONCILIATION_MODES = Object.freeze([
 ]);
 const SUCCESS_ACTIONS = new Set(["INSERTED", "UPDATED", "UNCHANGED", "STALE"]);
 const ERROR_ACTIONS = new Set(["REJECTED", "AUTHENTICATION_FAILED", "CONFLICT"]);
+const SUCCESS_RESPONSE_KEYS = new Set(["ok", "transportVersion", "action", "businessDate", "closingId", "closeSequence", "payloadHash", "receivedAt"]);
+const FAILURE_RESPONSE_KEYS = new Set(["ok", "transportVersion", "action", "errorCode", "message", "reasonCode"]);
+const REASON_CODE_PATTERN = /^C4D_E_[A-Z0-9_]{1,64}$/;
 
 class ConsolidatedTransportError extends Error {
     constructor(code, message) {
@@ -178,6 +181,14 @@ function responseIdentityMatches(response, expected) {
         response.payloadHash === expected.payloadHash;
 }
 
+function responseKeysAllowed(response, allowedKeys) {
+    return Object.keys(response).every(key => allowedKeys.has(key));
+}
+
+function validReasonCode(value) {
+    return typeof value === "string" && REASON_CODE_PATTERN.test(value);
+}
+
 function invalidResponse(message = "Receiver response is invalid.") {
     return {
         ok: false,
@@ -200,7 +211,8 @@ function validateReceiverResponse(response, submitted) {
     if (!isPlainObject(response) || response.transportVersion !== TRANSPORT_VERSION) return invalidResponse();
 
     if (response.ok === true && SUCCESS_ACTIONS.has(response.action)) {
-        if (!responseIdentityMatches(response, expected) || !isValidUtcIsoTimestamp(response.receivedAt)) {
+        if (!responseKeysAllowed(response, SUCCESS_RESPONSE_KEYS) || Object.prototype.hasOwnProperty.call(response, "reasonCode") ||
+            !responseIdentityMatches(response, expected) || !isValidUtcIsoTimestamp(response.receivedAt)) {
             return invalidResponse("Receiver response identity, hash, or timestamp is invalid.");
         }
         if (response.action === "STALE") {
@@ -236,8 +248,10 @@ function validateReceiverResponse(response, submitted) {
     }
 
     if (response.ok === false && ERROR_ACTIONS.has(response.action) &&
+        responseKeysAllowed(response, FAILURE_RESPONSE_KEYS) &&
         typeof response.errorCode === "string" && /^[A-Z0-9_]+$/.test(response.errorCode) &&
-        typeof response.message === "string") {
+        typeof response.message === "string" &&
+        (!Object.prototype.hasOwnProperty.call(response, "reasonCode") || validReasonCode(response.reasonCode))) {
         const code = response.action === "CONFLICT"
             ? "CONFLICT"
             : response.action === "AUTHENTICATION_FAILED" ? "AUTHENTICATION_FAILED" : "REJECTED";
@@ -252,6 +266,7 @@ function validateReceiverResponse(response, submitted) {
             message,
             classification: code,
             action: response.action,
+            ...(response.reasonCode ? { reasonCode: response.reasonCode } : {}),
             retryable: false,
             delivered: false
         };
@@ -288,6 +303,7 @@ module.exports = {
     SEMANTIC_CONTRACT_VERSION,
     SEMANTIC_SNAPSHOT_VERSION,
     RECONCILIATION_MODES,
+    REASON_CODE_PATTERN,
     ConsolidatedTransportError,
     isValidUtcIsoTimestamp,
     sha256Utf8,

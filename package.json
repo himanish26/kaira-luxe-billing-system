@@ -10,7 +10,8 @@
     "dist": "electron-builder",
     "manifest": "node updates/generateUpdateManifest.js",
     "release": "npm run dist && npm run manifest",
-    "test:remote-dashboard": "node scripts/v11-remote-dashboard-integration-test.js"
+    "test:remote-dashboard": "node scripts/v11-remote-dashboard-integration-test.js",
+    "provision:remote-dashboard": "electron scripts/provision-remote-dashboard.js"
   },
   "author": "Himanish Patnaik",
   "license": "Single Device Commercial",

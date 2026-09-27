@@ -534,26 +534,9 @@ async function showDayClosingPage() {
 
 
 let dayClosingLifecycleListenerBound = false;
-
-const DAY_CLOSING_STAGE_ORDER = [
-    "FINALIZING_ACCOUNTS",
-    "BUSINESS_DAY_CLOSED",
-    "CREATING_BACKUP",
-    "VERIFYING_BACKUP",
-    "UPDATING_DSR",
-    "SENDING_EMAIL",
-    "COMPLETING_DAY_CLOSING"
-];
-
-const DAY_CLOSING_STAGE_LABELS = {
-    FINALIZING_ACCOUNTS: "Finalizing accounts",
-    BUSINESS_DAY_CLOSED: "Business Day CLOSED",
-    CREATING_BACKUP: "Creating backup",
-    VERIFYING_BACKUP: "Verifying backup",
-    UPDATING_DSR: "Updating DSR",
-    SENDING_EMAIL: "Sending email",
-    COMPLETING_DAY_CLOSING: "Completing Day Closing"
-};
+let activeDayClosingAttemptId = null;
+const dayClosingLifecycleState = window.createDayClosingLifecycleState();
+const DAY_CLOSING_STAGE_ORDER = dayClosingLifecycleState.order;
 
 function ensureDayClosingLifecycleOverlay() {
     let overlay = document.getElementById("dayClosingLifecycleOverlay");
@@ -563,17 +546,18 @@ function ensureDayClosingLifecycleOverlay() {
     overlay.id = "dayClosingLifecycleOverlay";
     overlay.className = "dc-lifecycle-overlay";
     overlay.setAttribute("aria-live", "polite");
+    overlay.setAttribute("role", "presentation");
     overlay.innerHTML = `
-        <div class="dc-lifecycle-shell">
+        <section class="dc-lifecycle-shell" role="dialog" aria-modal="true" aria-labelledby="dcLifecycleTitle">
             <div class="dc-lifecycle-brand">KAIRA LUXE</div>
             <div class="dc-lifecycle-kicker">DAY CLOSING</div>
             <h1 id="dcLifecycleTitle">Closing Business Day</h1>
             <p id="dcLifecycleSubtitle">Please keep KLBS open while the mandatory closing work completes.</p>
             <div id="dcLifecycleStages" class="dc-lifecycle-stages">
                 ${DAY_CLOSING_STAGE_ORDER.map((stage, index) => `
-                    <div class="dc-lifecycle-stage" data-stage="${stage}">
-                        <span class="dc-lifecycle-stage-icon">${index + 1}</span>
-                        <span class="dc-lifecycle-stage-label">${DAY_CLOSING_STAGE_LABELS[stage]}</span>
+                    <div class="dc-lifecycle-stage is-pending" data-stage="${stage}" aria-label="${stage}">
+                        <span class="dc-lifecycle-stage-icon" aria-hidden="true">${index + 1}</span>
+                        <span class="dc-lifecycle-stage-label"></span>
                         <span class="dc-lifecycle-stage-state">Waiting</span>
                     </div>
                 `).join("")}
@@ -583,18 +567,13 @@ function ensureDayClosingLifecycleOverlay() {
                 <button id="dcLifecycleReturnBtn" class="klbs-cancel-btn" hidden>RETURN TO DAY CLOSING</button>
                 <button id="dcLifecycleCloseBtn" class="klbs-primary-btn" disabled>CLOSE KLBS</button>
             </div>
-        </div>
+        </section>
     `;
     document.body.appendChild(overlay);
 
-    overlay.addEventListener("keydown", event => {
-        if (event.key === "Escape") {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-    }, true);
-
     document.getElementById("dcLifecycleReturnBtn").addEventListener("click", async () => {
+        if (activeDayClosingAttemptId !== null) dayClosingLifecycleState.invalidate(activeDayClosingAttemptId);
+        activeDayClosingAttemptId = null;
         overlay.classList.remove("is-visible");
         await showDayClosingPage();
     });
@@ -616,11 +595,18 @@ function ensureDayClosingLifecycleOverlay() {
 
     if (!dayClosingLifecycleListenerBound) {
         dayClosingLifecycleListenerBound = true;
+        document.addEventListener("keydown", event => {
+            if (event.key === "Escape" && document.getElementById("dayClosingLifecycleOverlay")?.classList.contains("is-visible")) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+            }
+        }, true);
         window.electronAPI.onDayClosingProgress(payload => {
-            if (!payload || !payload.stage) return;
-            updateDayClosingLifecycleStage(payload.stage);
+            if (!payload || !payload.stage || payload.attemptId !== activeDayClosingAttemptId) return;
+            updateDayClosingLifecycleStage(payload.stage, payload.attemptId);
         });
-        window.electronAPI.onDayClosingExitBlocked(() => {
+        window.electronAPI.onDayClosingExitBlocked(attemptId => {
+            if (attemptId !== activeDayClosingAttemptId) return;
             const notice = document.getElementById("dcLifecycleNotice");
             if (!notice) return;
             notice.hidden = false;
@@ -631,131 +617,54 @@ function ensureDayClosingLifecycleOverlay() {
     return overlay;
 }
 
-function resetDayClosingLifecycle() {
+function renderDayClosingLifecycleState(state) {
+    if (!state) return;
     const overlay = ensureDayClosingLifecycleOverlay();
+    const title = document.getElementById("dcLifecycleTitle");
+    title.textContent = state.title;
+    title.className = state.outcome === "success" ? "is-success" : state.outcome === "failure" ? "is-error" : "";
+    document.getElementById("dcLifecycleSubtitle").textContent = state.subtitle;
+    const notice = document.getElementById("dcLifecycleNotice");
+    notice.hidden = !state.notice;
+    notice.className = `dc-lifecycle-notice${state.noticeType ? ` is-${state.noticeType}` : ""}`;
+    notice.textContent = state.notice;
+    const closeButton = document.getElementById("dcLifecycleCloseBtn");
+    closeButton.disabled = !state.closeEnabled;
+    closeButton.textContent = "CLOSE KLBS";
+    document.getElementById("dcLifecycleReturnBtn").hidden = !state.returnVisible;
     overlay.classList.add("is-visible");
     overlay.tabIndex = -1;
     overlay.focus();
-
-    document.getElementById("dcLifecycleTitle").textContent = "Closing Business Day";
-    document.getElementById("dcLifecycleTitle").className = "";
-    document.getElementById("dcLifecycleSubtitle").textContent =
-        "Please keep KLBS open while the mandatory closing work completes.";
-    const notice = document.getElementById("dcLifecycleNotice");
-    notice.hidden = true;
-    notice.className = "dc-lifecycle-notice";
-    notice.textContent = "";
-    const closeButton = document.getElementById("dcLifecycleCloseBtn");
-    closeButton.disabled = true;
-    closeButton.textContent = "CLOSE KLBS";
-    document.getElementById("dcLifecycleReturnBtn").hidden = true;
-
-    overlay.querySelectorAll(".dc-lifecycle-stage").forEach((row, index) => {
-        row.className = "dc-lifecycle-stage";
-        row.querySelector(".dc-lifecycle-stage-icon").textContent = String(index + 1);
-        row.querySelector(".dc-lifecycle-stage-state").textContent = "Waiting";
-    });
-}
-
-function updateDayClosingLifecycleStage(stage) {
-    if (stage === "BACKUP_VERIFIED") {
-        const verify = document.querySelector('.dc-lifecycle-stage[data-stage="VERIFYING_BACKUP"]');
-        if (verify) {
-            verify.classList.remove("is-active");
-            verify.classList.add("is-complete");
-            verify.querySelector(".dc-lifecycle-stage-icon").textContent = "✓";
-            verify.querySelector(".dc-lifecycle-stage-state").textContent = "Complete";
-        }
-        return;
-    }
-    if (stage === "ONLINE_TASKS_QUEUED" || stage === "DAY_CLOSING_COMPLETE") return;
-
-    const index = DAY_CLOSING_STAGE_ORDER.indexOf(stage);
-    if (index < 0) return;
-    document.querySelectorAll(".dc-lifecycle-stage").forEach((row, rowIndex) => {
-        if (rowIndex < index) {
-            row.classList.remove("is-active");
-            row.classList.add("is-complete");
-            row.querySelector(".dc-lifecycle-stage-icon").textContent = "✓";
-            row.querySelector(".dc-lifecycle-stage-state").textContent = "Complete";
-        }
-        else if (rowIndex === index) {
-            row.classList.add("is-active");
-            row.querySelector(".dc-lifecycle-stage-state").textContent = "In progress";
-        }
-    });
-}
-
-function finishDayClosingLifecycle(result, warnings = []) {
-    const online = result.onlineDelivery && result.onlineDelivery.online;
-    const dsrStatus = result.onlineDelivery && result.onlineDelivery.dsrStatus;
-    const emailStatus = result.onlineDelivery && result.onlineDelivery.emailStatus;
-
-    const setDeliveryStage = (stage, delivered, label) => {
-        const row = document.querySelector('.dc-lifecycle-stage[data-stage="' + stage + '"]');
+    state.stages.forEach((stage, index) => {
+        const row = overlay.querySelector(`.dc-lifecycle-stage[data-stage="${stage.stage}"]`);
         if (!row) return;
-        row.classList.remove("is-active");
-        if (delivered) {
-            row.classList.add("is-complete");
-            row.querySelector(".dc-lifecycle-stage-icon").textContent = "✓";
-            row.querySelector(".dc-lifecycle-stage-state").textContent = "Complete";
-        }
-        else {
-            row.classList.add("is-pending");
-            row.querySelector(".dc-lifecycle-stage-icon").textContent = "⏳";
-            row.querySelector(".dc-lifecycle-stage-state").textContent = label;
-        }
-    };
-
-    if (result.consolidatedReportingJob) {
-        setDeliveryStage("UPDATING_DSR", dsrStatus === "DELIVERED", online ? "Queued for retry" : "Pending • will update when online");
-        setDeliveryStage("SENDING_EMAIL", emailStatus === "DELIVERED", online ? "Queued for retry" : "Pending • will send when online");
-    }
-
-    const complete = document.querySelector('.dc-lifecycle-stage[data-stage="COMPLETING_DAY_CLOSING"]');
-    if (complete) {
-        complete.classList.remove("is-active");
-        complete.classList.add("is-complete");
-        complete.querySelector(".dc-lifecycle-stage-icon").textContent = "✓";
-        complete.querySelector(".dc-lifecycle-stage-state").textContent = "Complete";
-    }
-
-    const title = document.getElementById("dcLifecycleTitle");
-    title.textContent = "DAY CLOSING SUCCESSFUL";
-    title.className = "is-success";
-    document.getElementById("dcLifecycleSubtitle").textContent =
-        "Business Day is closed and the mandatory backup is verified.";
-
-    const pendingCount = [dsrStatus, emailStatus].filter(status =>
-        result.consolidatedReportingJob && status !== "DELIVERED"
-    ).length;
-    const notice = document.getElementById("dcLifecycleNotice");
-    if (pendingCount || warnings.length) {
-        notice.hidden = false;
-        notice.className = "dc-lifecycle-notice is-warning";
-        const queueText = pendingCount
-            ? pendingCount + " online task" + (pendingCount === 1 ? " is" : "s are") +
-              " safely queued and will continue automatically."
-            : "";
-        notice.textContent = [queueText, ...warnings].filter(Boolean).join(" ");
-    }
-
-    document.getElementById("dcLifecycleCloseBtn").disabled = false;
+        row.className = `dc-lifecycle-stage is-${stage.status}`;
+        row.querySelector(".dc-lifecycle-stage-icon").textContent = stage.status === "complete" ? "✓" : stage.status === "active" ? "●" : stage.status === "warning" ? "!" : String(index + 1);
+        row.querySelector(".dc-lifecycle-stage-label").textContent = stage.label;
+        row.querySelector(".dc-lifecycle-stage-state").textContent = stage.detail;
+    });
 }
 
-function failDayClosingLifecycle(message, dayClosed = false) {
-    const title = document.getElementById("dcLifecycleTitle");
-    title.textContent = dayClosed ? "BACKUP VERIFICATION FAILED" : "DAY CLOSING FAILED";
-    title.className = "is-error";
-    document.getElementById("dcLifecycleSubtitle").textContent = dayClosed
-        ? "The accounting day is CLOSED, but Safe Exit is blocked until a verified backup is available."
-        : "The Business Day was not closed safely.";
-    const notice = document.getElementById("dcLifecycleNotice");
-    notice.hidden = false;
-    notice.className = "dc-lifecycle-notice is-error";
-    notice.textContent = message || "Day Closing could not be completed.";
-    document.getElementById("dcLifecycleCloseBtn").disabled = true;
-    document.getElementById("dcLifecycleReturnBtn").hidden = false;
+function resetDayClosingLifecycle() {
+    const state = dayClosingLifecycleState.begin();
+    activeDayClosingAttemptId = state.attemptId;
+    renderDayClosingLifecycleState(state);
+    return state.attemptId;
+}
+
+function updateDayClosingLifecycleStage(stage, attemptId) {
+    const state = dayClosingLifecycleState.progress(attemptId, stage);
+    if (state) renderDayClosingLifecycleState(state);
+}
+
+function finishDayClosingLifecycle(result, warnings = [], attemptId = activeDayClosingAttemptId) {
+    const state = dayClosingLifecycleState.finish(attemptId, result, warnings);
+    if (state) renderDayClosingLifecycleState(state);
+}
+
+function failDayClosingLifecycle(message, dayClosed = false, attemptId = activeDayClosingAttemptId) {
+    const state = dayClosingLifecycleState.fail(attemptId, message, dayClosed);
+    if (state) renderDayClosingLifecycleState(state);
 }
 
 async function startDayClosing() {
@@ -774,10 +683,12 @@ async function startDayClosing() {
 
         closeButton.disabled = true;
         closeButton.textContent = "CLOSING IN PROGRESS";
-        resetDayClosingLifecycle();
-
-        const result = await window.electronAPI.closeBusinessDay();
+        const attemptId = resetDayClosingLifecycle();
+        const result = await window.electronAPI.closeBusinessDay(attemptId);
+        if (!dayClosingLifecycleState.isCurrent(attemptId)) return;
         if (result.alreadyClosed || result.alreadyClosing) {
+            dayClosingLifecycleState.invalidate(attemptId);
+            activeDayClosingAttemptId = null;
             ensureDayClosingLifecycleOverlay().classList.remove("is-visible");
             await window.electronAPI.showMessageBox({
                 type: "info",
@@ -802,6 +713,7 @@ async function startDayClosing() {
         renderDayClosingSummary(result.snapshot);
         let printWarning = null;
         const printResult = await window.electronAPI.printDayClosing(result.snapshotId);
+        if (!dayClosingLifecycleState.isCurrent(attemptId)) return;
         if (!printResult.success) {
             printWarning = "Receipt printing failed: " + (printResult.error || "Printer unavailable.");
         }
@@ -809,11 +721,12 @@ async function startDayClosing() {
         const warnings = [];
         if (printWarning) warnings.push(printWarning);
         if (result.activityWarning) warnings.push("Activity Log warning: " + result.activityWarning);
-        finishDayClosingLifecycle(result, warnings);
+        finishDayClosingLifecycle(result, warnings, attemptId);
         await window.refreshNewBillBusinessDayState?.();
     }
     catch (error) {
         console.error("Day Closing Error:", error);
+        if (activeDayClosingAttemptId === null || !dayClosingLifecycleState.isCurrent(activeDayClosingAttemptId)) return;
         if (closeButton) closeButton.disabled = false;
         ensureDayClosingLifecycleOverlay();
         failDayClosingLifecycle(error.message, false);
