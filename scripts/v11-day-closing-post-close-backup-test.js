@@ -101,6 +101,63 @@ const close = db => new Promise(resolve => db.close(resolve));
     assert.strictEqual(day.state, "CLOSED");
 
     await close(db);
+
+    const failureDb = new sqlite3.Database(":memory:");
+    await exec(failureDb, CREATE_DAY_CLOSING_SNAPSHOTS_SQL);
+    await exec(failureDb, `
+        CREATE TABLE business_day_state (
+            business_date TEXT PRIMARY KEY, state TEXT NOT NULL,
+            opened_at TEXT NOT NULL, closed_at TEXT, updated_at TEXT NOT NULL
+        );
+        CREATE TABLE bills (
+            id INTEGER PRIMARY KEY, bill_no TEXT, bill_date TEXT, total_qty INTEGER,
+            gross_amount REAL, discount_amount REAL, net_amount REAL,
+            cash_amount REAL, upi_amount REAL, card_amount REAL,
+            store_credit_amount REAL, gift_voucher_amount REAL
+        );
+        CREATE TABLE bill_items (
+            id INTEGER PRIMARY KEY, bill_no TEXT, qty INTEGER,
+            business_segment TEXT, net_amount REAL
+        );
+        CREATE TABLE returns (
+            id INTEGER PRIMARY KEY, net_reversal REAL, accounting_status TEXT,
+            credit_note_no TEXT, accounting_snapshot_version INTEGER, business_date TEXT
+        );
+        CREATE TABLE return_items (return_id INTEGER, quantity INTEGER);
+        CREATE TABLE customer_credit_transactions (
+            id INTEGER PRIMARY KEY, transaction_type TEXT, amount REAL, created_at TEXT
+        );
+    `);
+    await run(failureDb, "INSERT INTO business_day_state VALUES (?,?,?,?,?)", [
+        "2026-09-28", "OPEN", "2026-09-28T04:00:00.000Z", null, "2026-09-28T04:00:00.000Z"
+    ]);
+
+    const failureService = createDayClosingService({
+        database: failureDb,
+        now: () => new Date("2026-09-28T12:00:00.000Z"),
+        getBusinessDate: () => "2026-09-28",
+        reportingMode: "CONSOLIDATED_V2",
+        consolidatedReportingPersistence: {
+            async createFrozenJobWithinTransaction() {
+                throw new Error("Reporting must not be reached after mandatory backup failure.");
+            }
+        },
+        createBackup: async () => {
+            throw new Error("DISPOSABLE_BACKUP_FAILURE");
+        },
+        validateBackup: async () => ({ success: true })
+    });
+
+    const failed = await failureService.closeBusinessDay("2026-09-28");
+    assert.strictEqual(failed.success, false);
+    assert.strictEqual(failed.dayClosed, true);
+    assert.strictEqual(failed.backupFailed, true);
+    const failedSnapshot = await get(failureDb, "SELECT close_status, backup_status FROM day_closing_snapshots WHERE business_date='2026-09-28'");
+    const failedDay = await get(failureDb, "SELECT state FROM business_day_state WHERE business_date='2026-09-28'");
+    assert.deepStrictEqual(failedSnapshot, { close_status: "CLOSED", backup_status: "FAILED" });
+    assert.strictEqual(failedDay.state, "CLOSED");
+    await close(failureDb);
+
     console.log("V1.1 Day Closing post-close backup regression test: PASS");
 })().catch(error => {
     console.error(error);
