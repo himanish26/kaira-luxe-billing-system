@@ -3027,6 +3027,27 @@ try {
             }
         });
 
+        // Final operational gate after every schema migration.
+        await assertAuthoritativeDatabaseConnection(db);
+        const finalIntegrity = await new Promise((resolve, reject) => {
+            db.get("PRAGMA integrity_check", [], (error, row) => {
+                if (error) return reject(error);
+                resolve(row && row.integrity_check);
+            });
+        });
+        if (finalIntegrity !== "ok") {
+            throw new Error("KLBS final startup SQLite integrity_check failed.");
+        }
+        const finalForeignKeyViolations = await new Promise((resolve, reject) => {
+            db.all("PRAGMA foreign_key_check", [], (error, rows) => {
+                if (error) return reject(error);
+                resolve(rows || []);
+            });
+        });
+        if (finalForeignKeyViolations.length > 0) {
+            throw new Error("KLBS final startup foreign_key_check failed.");
+        }
+
     console.log(
         '✓ Database Initialization Complete'
     );
