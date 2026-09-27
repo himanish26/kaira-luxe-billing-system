@@ -9,11 +9,15 @@ const headers = [
     "Barcode", "SKU", "Brand", "Segment", "Business Segment", "Category", "Season",
     "Collection", "Product Name", "Style Code", "Size", "Colour", "MRP",
     "Discount", "Selling Price", "Cost Price", "GST Rate", "HSN Code",
-    "Opening Stock", "Reorder Level", "Supplier", "Active"
+    "Opening Stock", "Reorder Level", "Supplier", "Active", "Variable Value"
 ];
 
-function writeFixture(filePath, rows) {
-    const sheet = XLSX.utils.json_to_sheet(rows, { header: headers });
+function writeFixture(filePath, rows, fixtureHeaders = headers) {
+    const selectedRows = rows.map(row => Object.fromEntries(
+        fixtureHeaders.filter(header => Object.prototype.hasOwnProperty.call(row, header))
+            .map(header => [header, row[header]])
+    ));
+    const sheet = XLSX.utils.json_to_sheet(selectedRows, { header: fixtureHeaders });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, "Product Master");
     XLSX.writeFile(workbook, filePath);
@@ -41,7 +45,7 @@ function baseRow(barcode, overrides = {}) {
         Category: "Top", Season: "SS26", Collection: "Core", "Product Name": `Product ${barcode}`,
         "Style Code": "STYLE-1", Size: "M", Colour: "Blue", MRP: 100, Discount: 10,
         "Selling Price": 90, "Cost Price": 50, "GST Rate": 5, "HSN Code": "6109",
-        "Opening Stock": 0, "Reorder Level": 1, Supplier: "Test Supplier", Active: true,
+        "Opening Stock": 0, "Reorder Level": 1, Supplier: "Test Supplier", Active: true, "Variable Value": "NO",
         ...overrides
     };
 }
@@ -52,6 +56,10 @@ async function child(tempRoot) {
     process.env.KLBS_DEV_DATABASE_PATH = path.join(tempRoot, "billing.db");
     const db = require("../src/database/database");
     await db.databaseReady;
+    const productColumns = await new Promise((resolve, reject) => db.all("PRAGMA table_info(products)", (error, rows) => error ? reject(error) : resolve(rows)));
+    const billItemColumns = await new Promise((resolve, reject) => db.all("PRAGMA table_info(bill_items)", (error, rows) => error ? reject(error) : resolve(rows)));
+    assert(productColumns.some(column => column.name === "variable_value" && column.notnull === 1 && String(column.dflt_value) === "0"));
+    assert(billItemColumns.some(column => column.name === "gross_amount"));
     const { importProducts } = require("../src/database/importProducts");
     const { getProductByBarcode } = require("../src/database/productService");
     let sequence = 0;
@@ -77,6 +85,13 @@ async function child(tempRoot) {
         , ["missing Business Segment", { "Business Segment": "" }, "business_segment"]
         , ["invalid Business Segment", { "Business Segment": "Men" }, "business_segment"]
         , ["SIS Business Segment", { "Business Segment": "SIS" }, "business_segment"]
+        , ["invalid Variable Value Y", { "Variable Value": "Y" }, "variable_value"]
+        , ["invalid Variable Value N", { "Variable Value": "N" }, "variable_value"]
+        , ["invalid Variable Value TRUE", { "Variable Value": "TRUE" }, "variable_value"]
+        , ["invalid Variable Value FALSE", { "Variable Value": "FALSE" }, "variable_value"]
+        , ["invalid Variable Value 1", { "Variable Value": "1" }, "variable_value"]
+        , ["invalid Variable Value 0", { "Variable Value": "0" }, "variable_value"]
+        , ["invalid Variable Value VARIABLE", { "Variable Value": "VARIABLE" }, "variable_value"]
     ];
     const validationResults = [];
     for (const [name, overrides, field] of invalidCases) {
@@ -105,7 +120,44 @@ async function child(tempRoot) {
     assert.strictEqual(active.business_segment, "KL");
     assert.strictEqual(active.current_stock, 0);
     assert.strictEqual(inactive.current_stock, 4);
+    assert.strictEqual(active.variable_value, 0);
+    assert.strictEqual(inactive.variable_value, 0);
     assert.strictEqual(await openingCount(), 1);
+
+    assert.strictEqual((await importRows([baseRow("8909900010", { "Variable Value": " yEs " })])).success, true);
+    assert.strictEqual((await getProductByBarcode("8909900010")).variable_value, 1);
+    assert.strictEqual((await importRows([baseRow("8909900011", { "Variable Value": " nO " })])).success, true);
+    assert.strictEqual((await getProductByBarcode("8909900011")).variable_value, 0);
+    assert.strictEqual((await importRows([baseRow("8909900012", { "Variable Value": " " })])).success, true);
+    assert.strictEqual((await getProductByBarcode("8909900012")).variable_value, 0);
+
+    assert.strictEqual((await importRows([baseRow("8909900013", { "Variable Value": "YES" })])).success, true);
+    const legacyHeaders = headers.filter(header => header !== "Variable Value");
+    const legacyWorkbookPath = path.join(tempRoot, `fixture-${++sequence}.xlsx`);
+    writeFixture(legacyWorkbookPath, [baseRow("8909900013")], legacyHeaders);
+    assert.strictEqual((await importProducts(legacyWorkbookPath)).success, true);
+    assert.strictEqual((await getProductByBarcode("8909900013")).variable_value, 1);
+    assert.strictEqual((await importRows([baseRow("8909900013", { "Variable Value": "" })])).success, true);
+    assert.strictEqual((await getProductByBarcode("8909900013")).variable_value, 0);
+
+    assert.strictEqual((await importRows([baseRow("8909900014", { "Variable Value": "NO" })])).success, true);
+    assert.strictEqual((await importRows([baseRow("8909900014", { "Variable Value": "YES" })])).success, true);
+    assert.strictEqual((await getProductByBarcode("8909900014")).variable_value, 1);
+
+    const noHeaderNewPath = path.join(tempRoot, `fixture-${++sequence}.xlsx`);
+    writeFixture(noHeaderNewPath, [baseRow("8909900015")], legacyHeaders);
+    assert.strictEqual((await importProducts(noHeaderNewPath)).success, true);
+    assert.strictEqual((await getProductByBarcode("8909900015")).variable_value, 0);
+
+    assert.strictEqual((await importRows([baseRow("8909900016", { MRP: 1, "Variable Value": "NO" })])).success, true);
+    assert.strictEqual((await getProductByBarcode("8909900016")).variable_value, 0);
+
+    const templatePath = path.join(tempRoot, "product-master-template.xlsx");
+    await require("../src/database/productMasterExporter").downloadProductMasterTemplate(templatePath);
+    const templateWorkbook = XLSX.readFile(templatePath);
+    const templateRows = XLSX.utils.sheet_to_json(templateWorkbook.Sheets["Product Master"], { defval: "" });
+    assert.strictEqual(templateRows[0]["Variable Value"], "NO");
+    assert(XLSX.utils.sheet_to_json(templateWorkbook.Sheets.Instructions, { header: 1 }).flat().some(value => String(value).includes("Variable Value") && String(value).includes("YES or NO")));
 
     const beforeAtomicProducts = await productCount();
     const beforeAtomicOpening = await openingCount();
@@ -166,26 +218,29 @@ async function child(tempRoot) {
     app.exit(0);
 }
 
-if (process.argv.includes("--child")) {
-    child(process.argv[process.argv.indexOf("--child") + 1]).catch(error => {
-        console.error(error.stack || error);
-        try { require("electron").app.exit(1); } catch (_) {}
-        process.exitCode = 1;
-    });
-} else if (process.versions.electron) {
-    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-pm-validation-"));
-    process.env.KLBS_DEV_DATABASE_PATH = path.join(tempRoot, "billing.db");
+if (process.argv.includes("--node-child")) {
+    const tempRoot = process.argv[process.argv.indexOf("--node-child") + 1];
+    const Module = require("module");
+    const originalLoad = Module._load;
+    const app = {
+        isPackaged: false,
+        setPath() {},
+        getPath: () => path.join(tempRoot, "user data"),
+        exit: code => process.exit(code)
+    };
+    Module._load = function(request, parent, isMain) {
+        if (request === "electron") return { app };
+        return originalLoad.call(this, request, parent, isMain);
+    };
     child(tempRoot).catch(error => {
         console.error(error.stack || error);
-        try { require("electron").app.exit(1); } catch (_) {}
         process.exitCode = 1;
     });
 } else {
-    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-pm-validation-"));
-    const electronBinary = require("electron");
+    const tempRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "klbs-pm-validation-"));
     const result = spawnSync(
-        electronBinary,
-        ["--disable-gpu", "--in-process-gpu", __filename, "--child", tempRoot],
+        process.execPath,
+        [__filename, "--node-child", tempRoot],
         {
             cwd: path.resolve(__dirname, ".."),
             env: { ...process.env, KLBS_DEV_DATABASE_PATH: path.join(tempRoot, "billing.db") },

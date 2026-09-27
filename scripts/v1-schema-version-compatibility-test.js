@@ -9,6 +9,7 @@ const {
     UnsupportedDatabaseSchemaError,
     prepareDatabaseSchema,
     migrateBusinessSegmentColumns,
+    migrateVariableValueBillingFoundation,
     readSchemaVersion,
     runForwardMigrations
 } = require("../src/database/schemaVersion");
@@ -41,35 +42,67 @@ const metadata = database => get(database,
 const prepare = (database, options = {}) => prepareDatabaseSchema({
     database,
     currentVersion: CURRENT_DB_SCHEMA_VERSION,
-    runCurrentMigrations: options.runCurrentMigrations || (async () => migrateBusinessSegmentColumns(database)),
+    runCurrentMigrations: options.runCurrentMigrations || (async () => {
+        await migrateBusinessSegmentColumns(database);
+        await migrateVariableValueBillingFoundation(database);
+    }),
     migrations: options.migrations || []
 });
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 3);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 4);
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-schema-version-"));
     try {
         // 1, 2, 7: fresh initialization, legacy adoption, and data preservation.
         const legacyPath = path.join(temporary, "legacy.db");
         let database = await createDatabase(legacyPath);
         await run(database, "INSERT INTO products VALUES (7, 'Test Product')");
+        await run(database, "INSERT INTO bill_items VALUES (11, 'OLD-BILL')");
         await run(database, "INSERT INTO bills VALUES (8, 'TEST-BILL')");
         await run(database, "INSERT INTO inventory_transactions VALUES (9, 3)");
         await run(database, "INSERT INTO day_closing VALUES (10, '2026-09-06')");
         await prepare(database);
         assert.strictEqual(await readSchemaVersion(database), CURRENT_DB_SCHEMA_VERSION);
+        assert.strictEqual((await get(database, "SELECT variable_value FROM products WHERE id = 7")).variable_value, 0);
+        assert.strictEqual((await get(database, "SELECT gross_amount FROM bill_items WHERE id = 11")).gross_amount, null);
         assert.strictEqual((await get(database, "SELECT product_name FROM products WHERE id = 7")).product_name, "Test Product");
         assert.strictEqual((await get(database, "SELECT bill_no FROM bills WHERE id = 8")).bill_no, "TEST-BILL");
         assert.strictEqual((await get(database, "SELECT quantity FROM inventory_transactions WHERE id = 9")).quantity, 3);
         assert.strictEqual((await get(database, "SELECT business_date FROM day_closing WHERE id = 10")).business_date, "2026-09-06");
         await prepare(database);
         assert.strictEqual((await metadata(database)).schema_version, CURRENT_DB_SCHEMA_VERSION);
+        const productColumns = await new Promise((resolve, reject) => database.all("PRAGMA table_info(products)", (error, rows) => error ? reject(error) : resolve(rows)));
+        const billItemColumns = await new Promise((resolve, reject) => database.all("PRAGMA table_info(bill_items)", (error, rows) => error ? reject(error) : resolve(rows)));
+        assert.strictEqual(productColumns.filter(column => column.name === "variable_value").length, 1);
+        assert.strictEqual(billItemColumns.filter(column => column.name === "gross_amount").length, 1);
         await close(database);
 
         // 1: fresh disposable database receives the current version.
-        database = await createDatabase(path.join(temporary, "fresh.db"));
+        database = open(path.join(temporary, "fresh.db"));
+        await exec(database, `
+            CREATE TABLE products (id INTEGER PRIMARY KEY, product_name TEXT, variable_value INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE bill_items (id INTEGER PRIMARY KEY, bill_no TEXT, gross_amount REAL);
+            CREATE TABLE bills (id INTEGER PRIMARY KEY, bill_no TEXT);
+            CREATE TABLE settings (id INTEGER PRIMARY KEY);
+            CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, quantity INTEGER);
+            CREATE TABLE day_closing (id INTEGER PRIMARY KEY, business_date TEXT);
+        `);
         await prepare(database);
         assert.strictEqual(await readSchemaVersion(database), CURRENT_DB_SCHEMA_VERSION);
+        assert((await new Promise((resolve, reject) => database.all("PRAGMA table_info(products)", (error, rows) => error ? reject(error) : resolve(rows)))).some(column => column.name === "variable_value"));
+        assert((await new Promise((resolve, reject) => database.all("PRAGMA table_info(bill_items)", (error, rows) => error ? reject(error) : resolve(rows)))).some(column => column.name === "gross_amount"));
+        await close(database);
+
+        // 9: a versioned schema-3 database upgrades additively to schema 4.
+        database = await createDatabase(path.join(temporary, "versioned-v3.db"));
+        await run(database, `CREATE TABLE ${SCHEMA_METADATA_TABLE} (id INTEGER PRIMARY KEY CHECK (id = 1), schema_version INTEGER NOT NULL)`);
+        await run(database, `INSERT INTO ${SCHEMA_METADATA_TABLE} VALUES (1, 3)`);
+        await run(database, "INSERT INTO products VALUES (12, 'Versioned Product')");
+        await run(database, "INSERT INTO bill_items VALUES (13, 'VERSIONED-BILL')");
+        await prepare(database);
+        assert.strictEqual(await readSchemaVersion(database), 4);
+        assert.strictEqual((await get(database, "SELECT variable_value FROM products WHERE id = 12")).variable_value, 0);
+        assert.strictEqual((await get(database, "SELECT gross_amount FROM bill_items WHERE id = 13")).gross_amount, null);
         await close(database);
 
         // 3: current databases reconcile idempotent release-level migrations

@@ -291,6 +291,7 @@ function renderInventoryProducts(products) {
             <td>${Number(product.discount || 0)}%</td>
             <td>${Number(product.gst_rate || 0)}%</td>
             <td>₹${Number(product.selling_price || 0).toFixed(2)}</td>
+            <td>${Number(product.variable_value) === 1 ? "YES" : "NO"}</td>
         </tr>
         `
     ).join("");

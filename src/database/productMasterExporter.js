@@ -33,7 +33,8 @@ async function downloadProductMasterTemplate(filePath) {
         { header: "Opening Stock", key: "opening_stock", width: 15 },
         { header: "Reorder Level", key: "reorder_level", width: 15 },
         { header: "Supplier", key: "supplier", width: 20 },
-        { header: "Active", key: "active", width: 10 }
+        { header: "Active", key: "active", width: 10 },
+        { header: "Variable Value", key: "variable_value", width: 16 }
 
     ];
 
@@ -63,7 +64,8 @@ selling_price: 399,
     opening_stock: 25,
     reorder_level: 5,
     supplier: "Jockey India",
-    active: true
+    active: true,
+    variable_value: "NO"
 });
 
 sheet.addRow({
@@ -87,7 +89,8 @@ sheet.addRow({
     opening_stock: 20,
     reorder_level: 5,
     supplier: "Jockey India",
-    active: true
+    active: true,
+    variable_value: "NO"
 });
 
 sheet.addRow({
@@ -112,7 +115,8 @@ sheet.addRow({
     opening_stock: 18,
     reorder_level: 5,
     supplier: "Jockey India",
-    active: true
+    active: true,
+    variable_value: "NO"
 });
 
 sheet.addRow({
@@ -137,7 +141,8 @@ sheet.addRow({
     opening_stock: 40,
     reorder_level: 10,
     supplier: "Jockey India",
-    active: true
+    active: true,
+    variable_value: "NO"
 });
 
 sheet.addRow({
@@ -162,7 +167,8 @@ sheet.addRow({
     opening_stock: 30,
     reorder_level: 8,
     supplier: "Zivame",
-    active: true
+    active: true,
+    variable_value: "NO"
 });
 
 sheet.addRow({
@@ -187,7 +193,8 @@ sheet.addRow({
     opening_stock: 15,
     reorder_level: 5,
     supplier: "Loveable India",
-    active: true
+    active: true,
+    variable_value: "NO"
 });
 
 sheet.addRow({
@@ -212,7 +219,8 @@ sheet.addRow({
     opening_stock: 28,
     reorder_level: 8,
     supplier: "Loveable India",
-    active: true
+    active: true,
+    variable_value: "NO"
 });
 
 
@@ -320,6 +328,10 @@ instructions.addRow([
 
 instructions.addRow([
     "• Active"
+]);
+
+instructions.addRow([
+    "• Variable Value (optional): enter YES or NO; blank means NO."
 ]);
 
 instructions.addRow([]);

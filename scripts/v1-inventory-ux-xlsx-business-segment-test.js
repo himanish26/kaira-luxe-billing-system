@@ -10,7 +10,7 @@ const {
     exportProductSalesReport
 } = require("../src/database/excelExporter");
 
-const inventorySource = fs.readFileSync(
+    const inventorySource = fs.readFileSync(
     path.join(__dirname, "../src/renderer/modules/inventory.js"),
     "utf8"
 );
@@ -66,6 +66,8 @@ async function run() {
     assert(!inventorySource.includes("searchBox.value = inventoryKeyword"));
     assert(inventorySource.includes("inventoryPage = 1"));
     assert(inventorySource.includes("if (keyword === \"\")"));
+    assert(productMasterTemplate.includes("<th>Variable Value</th>"));
+    assert(inventorySource.includes('Number(product.variable_value) === 1 ? "YES" : "NO"'));
 
     assert(reportServiceSource.includes("bi.business_segment"));
     assert(reportServiceSource.includes("obi.business_segment"));
@@ -83,19 +85,19 @@ async function run() {
         const inventoryProducts = [
             {
                 barcode: "A", sku: "KL001", brand: "Brand A",
-                business_segment: "KL", segment: "L'Oréal Men", category: "Top",
+                business_segment: "KL", segment: "L'Oréal Men", category: "Top", variable_value: 1, hsn_code: "6109",
                 product_name: "Product A", current_stock: 4, mrp: 100,
                 discount: 0, selling_price: 100, gst_rate: 5, active: 1
             },
             {
                 barcode: "B", sku: "KL002", brand: "Brand B",
-                business_segment: "KL", segment: "L'Oréal Woman", category: "Top",
+                business_segment: "KL", segment: "L'Oréal Woman", category: "Top", variable_value: 0, hsn_code: "6110",
                 product_name: "Product B", current_stock: 5, mrp: 200,
                 discount: 0, selling_price: 200, gst_rate: 5, active: 1
             },
             {
                 barcode: "C", sku: "KL003", brand: "Brand C",
-                business_segment: "KL", segment: "Perfumes", category: "Top",
+                business_segment: "KL", segment: "Perfumes", category: "Top", variable_value: null, hsn_code: "3303",
                 product_name: "Product C", current_stock: 6, mrp: 300,
                 discount: 0, selling_price: 300, gst_rate: 5, active: 1
             },
@@ -139,6 +141,8 @@ async function run() {
             4
         );
         assert.strictEqual(inventoryHeaders.get("Segment"), 5);
+        assert(inventoryHeaders.has("Variable Value"));
+        assert(inventoryHeaders.has("HSN Code"));
         assert.strictEqual(
             inventorySheet.getRow(1).values.filter(value => value === "Segment").length,
             1
@@ -152,6 +156,10 @@ async function run() {
             1
         );
         assert.strictEqual(cellText(inventorySheet.getRow(2), 4), "KL");
+        assert.strictEqual(cellText(inventorySheet.getRow(2), inventoryHeaders.get("Variable Value")), "YES");
+        assert.strictEqual(cellText(inventorySheet.getRow(3), inventoryHeaders.get("Variable Value")), "NO");
+        assert.strictEqual(cellText(inventorySheet.getRow(4), inventoryHeaders.get("Variable Value")), "NO");
+        assert.strictEqual(cellText(inventorySheet.getRow(2), inventoryHeaders.get("HSN Code")), "6109");
         assert.strictEqual(cellText(inventorySheet.getRow(3), 4), "KL");
         assert.strictEqual(cellText(inventorySheet.getRow(4), 4), "KL");
         assert.strictEqual(cellText(inventorySheet.getRow(5), 4), "KL");

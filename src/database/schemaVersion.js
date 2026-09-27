@@ -1,4 +1,4 @@
-const CURRENT_DB_SCHEMA_VERSION = 3;
+const CURRENT_DB_SCHEMA_VERSION = 4;
 const SCHEMA_METADATA_TABLE = "klbs_schema_metadata";
 
 function run(database, sql, params = []) {
@@ -110,6 +110,34 @@ function migrateBusinessSegmentColumns(database) {
     });
 }
 
+async function migrateVariableValueBillingFoundation(database) {
+    const [productColumns, billItemColumns] = await Promise.all([
+        all(database, "PRAGMA table_info(products)"),
+        all(database, "PRAGMA table_info(bill_items)")
+    ]);
+    const productNames = new Set(productColumns.map(column => column.name));
+    const billItemNames = new Set(billItemColumns.map(column => column.name));
+
+    if (!productNames.has("variable_value")) {
+        await run(database,
+            "ALTER TABLE products ADD COLUMN variable_value INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!billItemNames.has("gross_amount")) {
+        await run(database,
+            "ALTER TABLE bill_items ADD COLUMN gross_amount REAL");
+    }
+
+    const [verifiedProductColumns, verifiedBillItemColumns] = await Promise.all([
+        all(database, "PRAGMA table_info(products)"),
+        all(database, "PRAGMA table_info(bill_items)")
+    ]);
+    const variableValue = verifiedProductColumns.find(column => column.name === "variable_value");
+    const grossAmount = verifiedBillItemColumns.find(column => column.name === "gross_amount");
+    if (!variableValue || Number(variableValue.notnull) !== 1 || String(variableValue.dflt_value) !== "0" || !grossAmount) {
+        throw new Error("Variable-Value billing foundation migration verification failed.");
+    }
+}
+
 async function runForwardMigrations(database, sourceVersion, targetVersion, steps = [], logger = null) {
     if (sourceVersion === null || sourceVersion === targetVersion) return sourceVersion;
     if (!Number.isInteger(sourceVersion) || sourceVersion > targetVersion) {
@@ -189,7 +217,8 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
         }
         const defaultMigrations = [
             { from: 1, to: 2, name: "automatic_backup_settings", up: migrateAutomaticBackupSettings },
-            { from: 2, to: 3, name: "business_segment_columns", up: migrateBusinessSegmentColumns }
+            { from: 2, to: 3, name: "business_segment_columns", up: migrateBusinessSegmentColumns },
+            { from: 3, to: 4, name: "variable_value_billing_foundation", up: migrateVariableValueBillingFoundation }
         ];
         await runForwardMigrations(
             database,
@@ -236,5 +265,6 @@ module.exports = {
     validateCurrentSchema,
     prepareDatabaseSchema,
     migrateBusinessSegmentColumns,
+    migrateVariableValueBillingFoundation,
     _test: { run, get, all }
 };

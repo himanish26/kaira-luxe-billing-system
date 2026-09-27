@@ -144,6 +144,7 @@ window.productMasterTemplate = `
                 <th>Disc%</th>
                 <th>GST%</th>
                 <th>Selling Price</th>
+                <th>Variable Value</th>
 
             </tr>
 

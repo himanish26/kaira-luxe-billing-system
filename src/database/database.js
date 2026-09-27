@@ -24,7 +24,8 @@ const {
     CURRENT_DB_SCHEMA_VERSION,
     SCHEMA_METADATA_TABLE,
     prepareDatabaseSchema,
-    migrateBusinessSegmentColumns
+    migrateBusinessSegmentColumns,
+    migrateVariableValueBillingFoundation
 } = require("./schemaVersion");
 const {
     recoverInterruptedRestoreAtStartup,
@@ -182,7 +183,9 @@ function createTables() {
 
     active INTEGER DEFAULT 1,
 
-    business_segment TEXT
+    business_segment TEXT,
+
+    variable_value INTEGER NOT NULL DEFAULT 0
 
 )
         `);
@@ -275,7 +278,9 @@ function createTables() {
 
     net_amount REAL,
 
-    business_segment TEXT
+    business_segment TEXT,
+
+    gross_amount REAL
 
 )
         `);
@@ -3019,6 +3024,8 @@ try {
         await runNamedMigration("opening_stock", () => initializeOpeningStock());
 
         await runNamedMigration("business_segment_columns", () => migrateBusinessSegmentColumns(db));
+
+        await runNamedMigration("variable_value_billing_foundation", () => migrateVariableValueBillingFoundation(db));
 
         await runNamedMigration("segment_dsr_outbox", () => migrateSegmentDsrOutbox(db));
 

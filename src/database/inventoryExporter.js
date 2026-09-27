@@ -23,7 +23,8 @@ const INVENTORY_EXPORT_COLUMNS = [
     { header: "Current Stock", key: "current_stock", width: 15 },
     { header: "Reorder Level", key: "reorder_level", width: 15 },
     { header: "Supplier", key: "supplier", width: 20 },
-    { header: "Active", key: "active", width: 10 }
+    { header: "Active", key: "active", width: 10 },
+    { header: "Variable Value", key: "variable_value", width: 16 }
 ];
 
 async function exportInventory(products, filePath) {
@@ -34,7 +35,10 @@ async function exportInventory(products, filePath) {
     sheet.columns = INVENTORY_EXPORT_COLUMNS;
 
     products.forEach(product => {
-        sheet.addRow(product);
+        sheet.addRow({
+            ...product,
+            variable_value: Number(product.variable_value) === 1 ? "YES" : "NO"
+        });
     });
 
     await workbook.xlsx.writeFile(filePath);

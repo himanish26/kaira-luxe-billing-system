@@ -33,8 +33,17 @@ const PRODUCT_MASTER_FIELDS = new Set([
     "opening_stock",
     "reorder_level",
     "supplier",
-    "active"
+    "active",
+    "variable_value"
 ]);
+
+function normalizeProductMasterHeader(header) {
+    return String(header)
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+}
 
 
 function normalizeProductMasterRow(row) {
@@ -43,11 +52,7 @@ function normalizeProductMasterRow(row) {
 
     Object.entries(row).forEach(([header, value]) => {
 
-        const field = String(header)
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "_")
-            .replace(/^_+|_+$/g, "");
+        const field = normalizeProductMasterHeader(header);
 
         if (PRODUCT_MASTER_FIELDS.has(field)) {
             normalized[field] = value;
@@ -78,12 +83,21 @@ function importProductsAttempt(filePath) {
                     workbook.SheetNames[0]
                 ];
 
+            const headerRow = XLSX.utils.sheet_to_json(sheet, {
+                header: 1,
+                range: 0,
+                blankrows: false
+            })[0] || [];
+            const hasVariableValueHeader = headerRow.some(header =>
+                normalizeProductMasterHeader(header) === "variable_value");
+
             const products =
                 XLSX.utils
                     .sheet_to_json(sheet)
                     .map((row, index) => {
                         const normalized = normalizeProductMasterRow(row);
                         normalized.__rowNumber = index + 2;
+                        normalized.__variableValueHeaderPresent = hasVariableValueHeader;
                         return normalized;
                     });
 
@@ -142,8 +156,26 @@ function importProductsAttempt(filePath) {
                 }
             }
 
+            function normalizeVariableValue(value, rowNumber) {
+                if (value === undefined || value === null || String(value).trim() === "") {
+                    return 0;
+                }
+                const normalized = String(value).trim().toUpperCase();
+                if (normalized === "YES") return 1;
+                if (normalized === "NO") return 0;
+                validationErrors.push(
+                    `Row ${rowNumber}: variable_value must be YES or NO.`
+                );
+                return 0;
+            }
+
                 products.forEach((product) => {
                 const rowNumber = product.__rowNumber;
+
+                product.variable_value = normalizeVariableValue(
+                    product.variable_value,
+                    rowNumber
+                );
 
                     requiredTextFields.forEach((field) => {
                     if (isBlank(product[field])) {
@@ -691,12 +723,13 @@ function importProductsAttempt(filePath) {
                                                     reorder_level,
                                                     supplier,
                                                     active,
-                                                    business_segment
+                                                    business_segment,
+                                                    variable_value
                                                 )
                                                 VALUES
                                                 (
                                                     ?,?,?,?,?,?,?,?,?,?,
-                                                    ?,?,?,?,?,?,?,?,?,?,?,?
+                                                    ?,?,?,?,?,?,?,?,?,?,?,?,?
                                                 )
                                                 `,
                                                 [
@@ -747,7 +780,9 @@ function importProductsAttempt(filePath) {
                                                     product.active ??
                                                     1,
 
-                                                    product.business_segment
+                                                    product.business_segment,
+
+                                                    product.variable_value
                                                 ],
 
                                                 function(
@@ -950,7 +985,12 @@ function importProductsAttempt(filePath) {
 
                                                 active = ?,
 
-                                                business_segment = ?
+                                                business_segment = ?,
+
+                                                variable_value = CASE
+                                                    WHEN ? = 1 THEN ?
+                                                    ELSE variable_value
+                                                END
 
                                             WHERE barcode = ?
                                             `,
@@ -999,6 +1039,10 @@ function importProductsAttempt(filePath) {
                                                 1,
 
                                                 product.business_segment,
+
+                                                hasVariableValueHeader ? 1 : 0,
+
+                                                product.variable_value,
 
                                                 barcode
                                             ],

@@ -42,7 +42,9 @@ CREATE TABLE products (
 
     active INTEGER DEFAULT 1,
 
-    business_segment TEXT
+    business_segment TEXT,
+
+    variable_value INTEGER NOT NULL DEFAULT 0
 
 );
 CREATE TABLE day_closing (
@@ -756,7 +758,9 @@ CREATE TABLE bill_items (
 
     net_amount REAL,
 
-    business_segment TEXT
+    business_segment TEXT,
+
+    gross_amount REAL
 
 );
 CREATE TABLE users (
