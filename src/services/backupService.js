@@ -814,6 +814,84 @@ const settingsExists = entries.some(
 
 }
 
+
+async function validateDayClosingBackup(zipPath, expected = {}) {
+    const generic = await validateBackup(zipPath);
+    if (!generic || generic.success !== true) return generic;
+
+    const zip = new AdmZip(zipPath);
+    const databaseEntry = zip.getEntries().find(entry => entry.entryName === "Database/billing.db");
+    if (!databaseEntry) return { success: false, message: "Database not found in Day Closing backup." };
+
+    const verificationPath = path.join(
+        app.getPath("temp"),
+        "klbs_day_close_verify_" + process.pid + "_" + Date.now() + "_" + crypto.randomBytes(6).toString("hex") + ".db"
+    );
+    const readOne = (db, sql, params = []) => new Promise((resolve, reject) =>
+        db.get(sql, params, (error, row) => error ? reject(error) : resolve(row || null))
+    );
+
+    try {
+        fs.writeFileSync(verificationPath, databaseEntry.getData(), { flag: "wx" });
+        await validateSQLiteDatabase(verificationPath);
+        const db = await new Promise((resolve, reject) => {
+            const opened = new sqlite3.Database(verificationPath, sqlite3.OPEN_READONLY, error =>
+                error ? reject(error) : resolve(opened)
+            );
+        });
+        try {
+            const day = await readOne(
+                db,
+                "SELECT state FROM business_day_state WHERE business_date = ?",
+                [expected.business_date]
+            );
+            if (!day || day.state !== "CLOSED") {
+                throw new Error("Day Closing backup does not contain the expected CLOSED business-day state.");
+            }
+
+            const snapshot = await readOne(
+                db,
+                "SELECT * FROM day_closing_snapshots WHERE id = ? AND business_date = ? AND close_sequence = ?",
+                [expected.id, expected.business_date, expected.close_sequence]
+            );
+            if (!snapshot || snapshot.close_status !== "CLOSED") {
+                throw new Error("Day Closing backup does not contain the expected CLOSED snapshot.");
+            }
+
+            const accountingColumns = [
+                "total_bills", "qty_sold", "gross_sales_paise", "total_discount_paise",
+                "net_billing_paise", "credit_note_count", "qty_returned", "return_cn_value_paise",
+                "net_sales_after_returns_paise", "cash_paise", "upi_paise", "card_paise",
+                "store_credit_redeemed_paise", "gift_voucher_redeemed_paise",
+                "settlement_total_paise", "actual_money_collection_paise", "store_credit_issued_paise",
+                "settlement_difference_paise", "store_credit_ledger_redeemed_paise",
+                "store_credit_ledger_difference_paise"
+            ];
+            for (const column of accountingColumns) {
+                if (Number(snapshot[column] || 0) !== Number(expected[column] || 0)) {
+                    throw new Error("Day Closing backup accounting mismatch: " + column + ".");
+                }
+            }
+        }
+        finally {
+            await new Promise(resolve => db.close(() => resolve()));
+        }
+        return {
+            ...generic,
+            dayClosingVerified: true,
+            businessDate: expected.business_date,
+            snapshotId: expected.id,
+            closeSequence: expected.close_sequence
+        };
+    }
+    catch (error) {
+        return { success: false, message: error.message };
+    }
+    finally {
+        removeOwnArtifact(verificationPath);
+    }
+}
+
 async function restoreBackupInternal(zipPath) {
     let liveDatabase = null;
     let recoveryDatabase = null;
@@ -949,6 +1027,8 @@ module.exports = {
     getBackupHistory,
 
     validateBackup,
+
+    validateDayClosingBackup,
 
     restoreBackup,
 
