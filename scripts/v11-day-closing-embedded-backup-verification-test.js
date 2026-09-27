@@ -7,6 +7,8 @@ const AdmZip = require("adm-zip");
 const sqlite3 = require("sqlite3").verbose();
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-v11-day-close-backup-"));
+fs.mkdirSync(path.join(tempRoot, "temp"), { recursive: true });
+fs.mkdirSync(path.join(tempRoot, "userData"), { recursive: true });
 const originalLoad = Module._load;
 Module._load = function(request, parent, isMain) {
     if (parent && parent.filename.endsWith("backupService.js")) {
