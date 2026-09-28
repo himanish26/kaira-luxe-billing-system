@@ -141,7 +141,7 @@ text(
                 .trim()
                 .toLowerCase();
 
-        if (normalized === "success") {
+        if (normalized === "success" || normalized === "sent") {
             element.classList.add("dc-status-success");
         }
         else if (normalized === "failed") {
@@ -603,7 +603,15 @@ function ensureDayClosingLifecycleOverlay() {
         }, true);
         window.electronAPI.onDayClosingProgress(payload => {
             if (!payload || !payload.stage || payload.attemptId !== activeDayClosingAttemptId) return;
-            updateDayClosingLifecycleStage(payload.stage, payload.attemptId);
+            updateDayClosingLifecycleStage(payload.stage, payload.attemptId, payload);
+            if (payload.stage === "EMAIL_RESULT" && payload.status === "DELIVERED" && payload.refresh) {
+                const emailStatus = document.getElementById("dcEmailStatus");
+                if (emailStatus) {
+                    emailStatus.textContent = "Sent";
+                    emailStatus.classList.remove("dc-status-pending", "dc-status-failed");
+                    emailStatus.classList.add("dc-status-success");
+                }
+            }
         });
         window.electronAPI.onDayClosingExitBlocked(attemptId => {
             if (attemptId !== activeDayClosingAttemptId) return;
@@ -622,7 +630,9 @@ function renderDayClosingLifecycleState(state) {
     const overlay = ensureDayClosingLifecycleOverlay();
     const title = document.getElementById("dcLifecycleTitle");
     title.textContent = state.title;
-    title.className = state.outcome === "success" ? "is-success" : state.outcome === "failure" ? "is-error" : "";
+    title.className = state.outcome === "success" ? "is-success"
+        : state.outcome === "pending" ? "is-warning"
+            : state.outcome === "failure" || state.outcome === "attention" ? "is-error" : "";
     document.getElementById("dcLifecycleSubtitle").textContent = state.subtitle;
     const notice = document.getElementById("dcLifecycleNotice");
     notice.hidden = !state.notice;
@@ -639,7 +649,7 @@ function renderDayClosingLifecycleState(state) {
         const row = overlay.querySelector(`.dc-lifecycle-stage[data-stage="${stage.stage}"]`);
         if (!row) return;
         row.className = `dc-lifecycle-stage is-${stage.status}`;
-        row.querySelector(".dc-lifecycle-stage-icon").textContent = stage.status === "complete" ? "✓" : stage.status === "active" ? "●" : stage.status === "warning" ? "!" : String(index + 1);
+        row.querySelector(".dc-lifecycle-stage-icon").textContent = stage.status === "complete" ? "✓" : stage.status === "active" ? "●" : stage.status === "warning" || stage.status === "error" ? "!" : String(index + 1);
         row.querySelector(".dc-lifecycle-stage-label").textContent = stage.label;
         row.querySelector(".dc-lifecycle-stage-state").textContent = stage.detail;
     });
@@ -652,13 +662,13 @@ function resetDayClosingLifecycle() {
     return state.attemptId;
 }
 
-function updateDayClosingLifecycleStage(stage, attemptId) {
-    const state = dayClosingLifecycleState.progress(attemptId, stage);
+function updateDayClosingLifecycleStage(stage, attemptId, detail = {}) {
+    const state = dayClosingLifecycleState.progress(attemptId, stage, detail);
     if (state) renderDayClosingLifecycleState(state);
 }
 
-function finishDayClosingLifecycle(result, warnings = [], attemptId = activeDayClosingAttemptId) {
-    const state = dayClosingLifecycleState.finish(attemptId, result, warnings);
+function finishDayClosingLifecycle(result, printResult, warnings = [], attemptId = activeDayClosingAttemptId) {
+    const state = dayClosingLifecycleState.finish(attemptId, result, printResult, warnings);
     if (state) renderDayClosingLifecycleState(state);
 }
 
@@ -710,18 +720,56 @@ async function startDayClosing() {
             return;
         }
 
-        renderDayClosingSummary(result.snapshot);
-        let printWarning = null;
-        const printResult = await window.electronAPI.printDayClosing(result.snapshotId);
-        if (!dayClosingLifecycleState.isCurrent(attemptId)) return;
-        if (!printResult.success) {
-            printWarning = "Receipt printing failed: " + (printResult.error || "Printer unavailable.");
+        if (!result.onlineDelivery || result.onlineDelivery.durable !== true) {
+            failDayClosingLifecycle("Final online delivery state could not be confirmed.", true, attemptId);
+            return;
         }
+        // The returned verified result also reconciles any progress IPC events
+        // that arrived after the invoke response.
+        for (const stage of ["CLOSING_BUSINESS_DAY", "BUSINESS_DAY_CLOSED", "CREATING_BACKUP",
+            "VERIFYING_BACKUP", "BACKUP_VERIFIED"]) {
+            updateDayClosingLifecycleStage(stage, attemptId);
+        }
+        updateDayClosingLifecycleStage("UPDATING_DSR", attemptId);
+        updateDayClosingLifecycleStage("DSR_RESULT", attemptId, {
+            status: result.onlineDelivery.dsrStatus, durable: true
+        });
+        updateDayClosingLifecycleStage("SENDING_EMAIL", attemptId);
+        updateDayClosingLifecycleStage("EMAIL_RESULT", attemptId, {
+            status: result.onlineDelivery.emailStatus, durable: true
+        });
+        updateDayClosingLifecycleStage("COMPLETING_DAY_CLOSING", attemptId);
+        updateDayClosingLifecycleStage("DAY_CLOSING_COMPLETE", attemptId);
+        updateDayClosingLifecycleStage("PRINTING_DAY_CLOSING_SUMMARY", attemptId);
+        let printResult;
+        try {
+            printResult = await window.electronAPI.printDayClosing(result.snapshotId);
+        } catch (error) {
+            printResult = { success: false, error: error.message || "Printer unavailable." };
+        }
+        if (!dayClosingLifecycleState.isCurrent(attemptId)) return;
+        if (printResult.onlineDelivery && printResult.onlineDelivery.durable === true) {
+            result.onlineDelivery = { ...result.onlineDelivery, ...printResult.onlineDelivery };
+            updateDayClosingLifecycleStage("DSR_RESULT", attemptId, {
+                status: result.onlineDelivery.dsrStatus, durable: true, refresh: true
+            });
+            updateDayClosingLifecycleStage("EMAIL_RESULT", attemptId, {
+                status: result.onlineDelivery.emailStatus, durable: true, refresh: true
+            });
+        }
+        updateDayClosingLifecycleStage("PRINT_RESULT", attemptId, { success: printResult.success === true });
+
+        const finalSnapshot = printResult.snapshot || result.snapshot;
+        renderDayClosingSummary({
+            ...finalSnapshot,
+            emailStatus: result.onlineDelivery.emailStatus === "DELIVERED" ? "Sent"
+                : result.onlineDelivery.emailStatus === "PENDING" ? "Retry queued" : "Failed"
+        });
 
         const warnings = [];
-        if (printWarning) warnings.push(printWarning);
+        if (!printResult.success) warnings.push("Receipt printing failed: " + (printResult.error || "Printer unavailable."));
         if (result.activityWarning) warnings.push("Activity Log warning: " + result.activityWarning);
-        finishDayClosingLifecycle(result, warnings, attemptId);
+        finishDayClosingLifecycle(result, printResult, warnings, attemptId);
         await window.refreshNewBillBusinessDayState?.();
     }
     catch (error) {

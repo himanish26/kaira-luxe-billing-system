@@ -43,7 +43,8 @@ async function main() {
     const mainSource = fs.readFileSync("src/main/main.js", "utf8");
     const rendererSource = fs.readFileSync("src/renderer/modules/system/dayClosingHistory.js", "utf8");
     assert(mainSource.includes("Only the final Day Closing sequence can be printed."));
-    assert(mainSource.includes("await printDayClosingReceipt(snapshot)"));
+    assert(mainSource.includes("await printDayClosingReceipt(dayClosingReceiptWithDelivery(snapshot, delivery))"));
+    assert(mainSource.includes("await dayClosingDeliveryCoordinator.observeForPrint(job.id)"));
     assert(rendererSource.includes("getBusinessDayStatus()"));
     assert(rendererSource.includes("date.max = historyMaximumDate"));
     assert(rendererSource.includes("value > historyMaximumDate"));

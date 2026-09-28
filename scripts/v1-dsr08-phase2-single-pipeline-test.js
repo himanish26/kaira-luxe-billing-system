@@ -102,8 +102,8 @@ async function setupJobsDb() {
     )`);
     return db;
 }
-async function insertJob(db, { id, sequence = 1, status = "PENDING", emailStatus = "PENDING", backupReference = `backup-${id}.zip` }) {
-    const payload = payloadFor({ closingId: id, closeSequence: String(sequence) });
+async function insertJob(db, { id, sequence = 1, businessDate = "2026-09-24", status = "PENDING", emailStatus = "PENDING", backupReference = `backup-${id}.zip` }) {
+    const payload = payloadFor({ closingId: id, businessDate, closeSequence: String(sequence) });
     const payloadJson = JSON.stringify(payload);
     await run(db, `INSERT INTO day_closing_snapshots (id,business_date,close_sequence,close_status,closed_at,backup_status,backup_reference,email_status,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?)`, [id, payload.businessDate, sequence, "CLOSED", NOW, "SUCCESS", backupReference, "PENDING", NOW]);
@@ -208,6 +208,45 @@ async function testPendingOldSequenceIsSupersededAndNewBackupUsed() {
     await close(db);
 }
 
+async function testCurrentClosingJobIsTargeted() {
+    const db = await setupJobsDb();
+    await insertJob(db, { id: 41, businessDate: "2026-09-23" });
+    await insertJob(db, { id: 42, businessDate: "2026-09-24" });
+    const current = await get(db, "SELECT id FROM consolidated_reporting_jobs WHERE closing_id=42");
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-dsr08-current-"));
+    fs.writeFileSync(path.join(temp, "backup-42.zip"), "current verified backup");
+    let sheetSends = 0;
+    let emailSends = 0;
+    const outcomes = [];
+    const sheet = createConsolidatedSheetDeliveryWorker({
+        database: db, now: () => new Date(NOW),
+        onOutcome: outcome => outcomes.push({ channel: "sheet", ...outcome }),
+        configProvider: () => ({ endpoint: "https://fixture.invalid/c4d", secret: "fixture-secret" }),
+        httpClient: { post: async (_, envelope) => { sheetSends += 1; return response("INSERTED", envelope); } }
+    });
+    const email = createConsolidatedReportingEmailWorker({
+        database: db, now: () => new Date(NOW),
+        onOutcome: outcome => outcomes.push({ channel: "email", ...outcome }),
+        sendEmail: async () => { emailSends += 1; },
+        getEmailConfiguration: async () => ({ automaticEmailBackup: true, recipients: ["fixture@example.invalid"] }),
+        getBackupPath: async reference => path.join(temp, reference),
+        validateBackup: async () => ({ success: true })
+    });
+    assert.strictEqual((await sheet.processForJob(current.id)).status, "DELIVERED");
+    assert.strictEqual((await email.processForJob(current.id)).status, "DELIVERED");
+    assert.deepStrictEqual([sheetSends, emailSends], [1, 1]);
+    assert.deepStrictEqual(outcomes, [
+        { channel: "sheet", jobId: current.id, status: "DELIVERED" },
+        { channel: "email", jobId: current.id, status: "DELIVERED" }
+    ]);
+    const old = await get(db, "SELECT sheet_status,email_status FROM consolidated_reporting_jobs WHERE closing_id=41");
+    const now = await get(db, "SELECT sheet_status,email_status FROM consolidated_reporting_jobs WHERE closing_id=42");
+    assert.deepStrictEqual(old, { sheet_status: "PENDING", email_status: "PENDING" });
+    assert.deepStrictEqual(now, { sheet_status: "DELIVERED", email_status: "DELIVERED" });
+    fs.rmSync(temp, { recursive: true, force: true });
+    await close(db);
+}
+
 async function testMissingExactBackupDoesNotFallback() {
     const db = await setupJobsDb();
     await insertJob(db, { id: 31, backupReference: "missing-exact.zip" });
@@ -232,6 +271,7 @@ async function main() {
     await testModeAndDayCloseGate();
     await testSheetAndEmailUseFrozenJobAndExactBackup();
     await testPendingOldSequenceIsSupersededAndNewBackupUsed();
+    await testCurrentClosingJobIsTargeted();
     await testMissingExactBackupDoesNotFallback();
     console.log("DSR-08 Phase 2 single-pipeline fixture tests: PASS");
 }

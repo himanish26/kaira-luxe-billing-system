@@ -44,7 +44,8 @@ async function migrationTests() {
     await migrateDayClosingSnapshots(db); await migrateDayClosingSnapshots(db);
     assert((await all(db, "SELECT name FROM sqlite_master WHERE type='table' AND name='business_day_state'")).length === 1);
     const outbox = await all(db, "SELECT closing_id,delivery_type FROM integration_outbox ORDER BY closing_id,delivery_type");
-    assert.deepStrictEqual(outbox, [{ closing_id: 2, delivery_type: "DSR_DAY_CLOSING" }, { closing_id: 2, delivery_type: "EMAIL_DAY_CLOSING" }, { closing_id: 3, delivery_type: "DSR_DAY_CLOSING" }]);
+    assert.deepStrictEqual(outbox, [{ closing_id: 2, delivery_type: "EMAIL_DAY_CLOSING" }],
+        "startup migration must not recreate legacy DSR delivery in Consolidated V2");
     await close(db);
 }
 

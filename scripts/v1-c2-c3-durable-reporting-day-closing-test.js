@@ -142,14 +142,40 @@ async function testC3AtomicCloseReopenReclose() {
     await close(db);
 }
 
-async function testC3PersistenceFailureRollback() {
+async function testC3PersistenceFailureAfterClosedBoundary() {
     const db = await createClosingDb();
     await addBill(db, 1, "B1");
     const failingPersistence = { createFrozenJobWithinTransaction: async () => { throw new Error("injected consolidated job insert failure"); } };
     const service = createClosingService(db, failingPersistence);
     await assert.rejects(() => service.closeBusinessDay("2026-09-21"), /injected consolidated job insert failure/);
+    const snapshot = await get(db, "SELECT close_status, backup_status FROM day_closing_snapshots WHERE business_date='2026-09-21'");
+    assert.deepStrictEqual(snapshot, { close_status: "CLOSED", backup_status: "PENDING" },
+        "post-close reporting persistence failure must not reopen the authoritative day");
+    assert.strictEqual((await get(db, "SELECT state FROM business_day_state WHERE business_date='2026-09-21'")).state, "CLOSED");
+    assert.strictEqual((await get(db, "SELECT COUNT(*) AS value FROM consolidated_reporting_jobs")).value, 0);
+    await close(db);
+}
+
+async function testAuthoritativeCloseFailureStopsLaterWork() {
+    const db = await createClosingDb();
+    await addBill(db, 1, "B1");
+    const stages = [];
+    const originalRun = db.run.bind(db);
+    db.run = function(sql, params, callback) {
+        if (String(sql).includes("SET close_status = 'CLOSED'")) {
+            queueMicrotask(() => callback(new Error("injected authoritative close failure")));
+            return this;
+        }
+        return originalRun(sql, params, callback);
+    };
+    const service = createClosingService(db, createConsolidatedReportingPersistenceService({ database: db }), {
+        onProgress: stage => stages.push(stage),
+        createBackup: async () => { throw new Error("backup must not run after close failure"); }
+    });
+    await assert.rejects(() => service.closeBusinessDay("2026-09-21"), /injected authoritative close failure/);
     assert.strictEqual((await get(db, "SELECT close_status FROM day_closing_snapshots WHERE business_date='2026-09-21'")).close_status, "FAILED");
     assert.strictEqual((await get(db, "SELECT state FROM business_day_state WHERE business_date='2026-09-21'")).state, "OPEN");
+    assert.deepStrictEqual(stages, ["FINALIZING_ACCOUNTS", "CLOSING_BUSINESS_DAY"]);
     assert.strictEqual((await get(db, "SELECT COUNT(*) AS value FROM consolidated_reporting_jobs")).value, 0);
     await close(db);
 }
@@ -178,7 +204,8 @@ async function testC3MissingPersistenceFailsSafely() {
 (async () => {
     await testC2Persistence();
     await testC3AtomicCloseReopenReclose();
-    await testC3PersistenceFailureRollback();
+    await testC3PersistenceFailureAfterClosedBoundary();
+    await testAuthoritativeCloseFailureStopsLaterWork();
     await testC3MissingPersistenceFailsSafely();
-    console.log("C2/C3 durable reporting and atomic Day Closing tests: PASS (41 focused assertions/case groups)");
+    console.log("C2/C3 durable reporting and Day Closing boundary tests: PASS");
 })().catch(error => { console.error(error.stack || error.message); process.exitCode = 1; });

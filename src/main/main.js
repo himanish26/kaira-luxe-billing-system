@@ -369,7 +369,9 @@ const { createBusinessSegmentDsrSyncService } = require("../services/businessSeg
 const { createConsolidatedReportingPersistenceService } = require("../services/consolidatedReportingPersistenceService");
 const { createConsolidatedSheetDeliveryWorker } = require("../services/consolidatedSheetDeliveryWorker");
 const { createConsolidatedReportingEmailWorker } = require("../services/consolidatedReportingEmailWorker");
+const { createDayClosingDeliveryCoordinator } = require("./dayClosingDeliveryCoordinator");
 let activeDayClosingUiAttemptId = null;
+let dayClosingFeedback = null;
 const reportingMode = resolveReportingMode();
 const dsrSyncService = createDsrSyncService({
     configProvider: () => integrationConfig.resolveDsrRuntime()
@@ -406,7 +408,15 @@ const consolidatedSheetDeliveryWorker = createConsolidatedSheetDeliveryWorker({
     database,
     integrationConfigProvider: () => integrationConfig.resolveDsrRuntime(),
     logActivity,
-    technicalLogger
+    technicalLogger,
+    onOutcome: ({ jobId, status }) => {
+        if (dayClosingFeedback && dayClosingFeedback.jobId === jobId && mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("day-closing:progress", {
+                stage: "DSR_RESULT", attemptId: dayClosingFeedback.attemptId,
+                status, durable: true, refresh: true
+            });
+        }
+    }
 });
 const consolidatedReportingEmailWorker = createConsolidatedReportingEmailWorker({
     database,
@@ -415,7 +425,20 @@ const consolidatedReportingEmailWorker = createConsolidatedReportingEmailWorker(
     getBackupPath: async fileName => path.join(await getBackupFolder(), fileName),
     validateBackup,
     logActivity,
-    technicalLogger
+    technicalLogger,
+    onOutcome: ({ jobId, status }) => {
+        if (dayClosingFeedback && dayClosingFeedback.jobId === jobId && mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("day-closing:progress", {
+                stage: "EMAIL_RESULT", attemptId: dayClosingFeedback.attemptId,
+                status, durable: true, refresh: true
+            });
+        }
+    }
+});
+const dayClosingDeliveryCoordinator = createDayClosingDeliveryCoordinator({
+    database,
+    sheetWorker: consolidatedSheetDeliveryWorker,
+    emailWorker: consolidatedReportingEmailWorker
 });
 const remoteDashboard = createRemoteDashboardService({
     database,
@@ -472,12 +495,24 @@ const {
 });
 const dayClosingHistory = createDayClosingHistoryService({ database });
 
+function dayClosingReceiptWithDelivery(snapshot, delivery) {
+    if (!delivery) return snapshot;
+    return {
+        ...snapshot,
+        emailStatus: delivery.emailStatus === "DELIVERED" ? "Sent"
+            : delivery.emailStatus === "PENDING" ? "Retry queued" : "Failed",
+        dsrDeliveryStatus: delivery.dsrStatus === "DELIVERED" ? "Complete"
+            : delivery.dsrStatus === "PENDING" ? "Retry queued" : "Failed"
+    };
+}
+
 let splashShownAt = 0;
 let startupSecuritySetupInProgress = false;
 
 let isAppQuitting = false;
 let orderlyShutdownLogged = false;
 let dayClosingCriticalInProgress = false;
+let dayClosingPrintPending = null;
 
 function attachWindowDiagnostics(window, component) {
     window.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
@@ -552,8 +587,9 @@ function createWindow() {
 
             event.preventDefault();
 
-            if (dayClosingCriticalInProgress) {
-                mainWindow.webContents.send("day-closing:exit-blocked", activeDayClosingUiAttemptId);
+            if (dayClosingCriticalInProgress || dayClosingPrintPending) {
+                mainWindow.webContents.send("day-closing:exit-blocked",
+                    activeDayClosingUiAttemptId || dayClosingPrintPending && dayClosingPrintPending.attemptId);
                 return;
             }
 
@@ -1910,23 +1946,38 @@ ipcMain.handle(
 
     ) => {
 
+        let dayClosingData = null;
+        let onlineDelivery = null;
+        let ownsPrint = false;
         try {
 
-            const dayClosingData =
-                await getDayClosingSnapshot(snapshotId);
+            if (!dayClosingPrintPending || dayClosingPrintPending.snapshotId !== snapshotId ||
+                dayClosingPrintPending.printStarted) {
+                throw new Error("Day Closing printing is unavailable before final delivery results.");
+            }
+            dayClosingPrintPending.printStarted = true;
+            ownsPrint = true;
+
+            if (dayClosingPrintPending.jobId) {
+                onlineDelivery = await dayClosingDeliveryCoordinator.observeForPrint(dayClosingPrintPending.jobId);
+            }
+            dayClosingData = await getDayClosingSnapshot(snapshotId);
 
             if (
                 !dayClosingData ||
-                dayClosingData.closeStatus !== "CLOSED"
+                dayClosingData.closeStatus !== "CLOSED" ||
+                dayClosingData.backupStatus !== "SUCCESS"
             ) {
-                throw new Error("A valid closed Day Closing snapshot is required for printing.");
+                throw new Error("A CLOSED Day Closing snapshot with verified backup is required for printing.");
             }
 
-            await printDayClosingReceipt(dayClosingData);
+            await printDayClosingReceipt(dayClosingReceiptWithDelivery(dayClosingData, onlineDelivery));
 
             return {
 
-                success: true
+                success: true,
+                snapshot: dayClosingData,
+                onlineDelivery
 
             };
 
@@ -1939,11 +1990,17 @@ ipcMain.handle(
             return {
 
                 success: false,
-
-                error: error.message
+                error: error.message,
+                snapshot: dayClosingData,
+                onlineDelivery
 
             };
 
+        }
+        finally {
+            if (ownsPrint && dayClosingPrintPending && dayClosingPrintPending.snapshotId === snapshotId) {
+                dayClosingPrintPending = null;
+            }
         }
 
     }
@@ -3256,7 +3313,9 @@ ipcMain.handle("day-closing-history:print", async (event, snapshotId) => {
     if (!latest || latest.snapshotId !== snapshot.snapshotId || latest.closeSequence !== snapshot.closeSequence) {
         return { success: false, error: "Only the final Day Closing sequence can be printed." };
     }
-    await printDayClosingReceipt(snapshot);
+    const job = await consolidatedReportingPersistence.getByClosingId(snapshotId);
+    const delivery = job ? await dayClosingDeliveryCoordinator.observeForPrint(job.id) : null;
+    await printDayClosingReceipt(dayClosingReceiptWithDelivery(snapshot, delivery));
     return { success: true };
 });
 
@@ -3270,10 +3329,11 @@ ipcMain.handle(
             return { success: false, error: "Day Closing attempt identifier is invalid." };
         }
 
-        if (dayClosingCriticalInProgress) {
+        if (dayClosingCriticalInProgress || dayClosingPrintPending) {
             return { success: false, alreadyClosing: true, message: "Business Day closing is already in progress." };
         }
         activeDayClosingUiAttemptId = attemptId;
+        dayClosingFeedback = null;
         dayClosingCriticalInProgress = true;
         try {
 
@@ -3282,7 +3342,19 @@ ipcMain.handle(
                 try { await remoteDashboard.queueDayClosed(result); }
                 catch (_) { technicalLogger.warn("REMOTE_DASHBOARD", "DAY_CLOSED event could not be queued", { classification: "OUTBOX_QUEUE_FAILED" }); }
 
+                if (!result.consolidatedReportingJob || !result.consolidatedReportingJob.jobId) {
+                    throw new Error("The durable Day Closing reporting job is unavailable.");
+                }
+                dayClosingFeedback = { attemptId, jobId: result.consolidatedReportingJob.jobId };
                 if (result.consolidatedReportingJob && result.consolidatedReportingJob.jobId) {
+                    const jobId = result.consolidatedReportingJob.jobId;
+                    const sendProgress = (stage, details = {}) => {
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            mainWindow.webContents.send("day-closing:progress", {
+                                stage, attemptId: activeDayClosingUiAttemptId, ...details
+                            });
+                        }
+                    };
                     let online = false;
                     try {
                         const systemStatus = await getSystemStatus();
@@ -3290,41 +3362,31 @@ ipcMain.handle(
                     }
                     catch (_) {}
 
-                    if (online) {
-                        mainWindow && !mainWindow.isDestroyed() &&
-                            mainWindow.webContents.send("day-closing:progress", { stage: "UPDATING_DSR", attemptId: activeDayClosingUiAttemptId });
-                        try { await consolidatedSheetDeliveryWorker.drain(); }
-                        catch (error) {
-                            technicalLogger.warn("CONSOLIDATED_SHEET", "Immediate Day Closing DSR delivery deferred", {
-                                classification: String(error.message || "").slice(0, 300)
-                            });
-                        }
-
-                        mainWindow && !mainWindow.isDestroyed() &&
-                            mainWindow.webContents.send("day-closing:progress", { stage: "SENDING_EMAIL", attemptId: activeDayClosingUiAttemptId });
-                        try { await consolidatedReportingEmailWorker.processNext(); }
-                        catch (error) {
-                            technicalLogger.warn("CONSOLIDATED_EMAIL", "Immediate Day Closing email delivery deferred", {
-                                classification: String(error.message || "").slice(0, 300)
-                            });
-                        }
-                    }
-
-                    const delivery = await new Promise((resolve, reject) => database.get(
-                        "SELECT sheet_status, email_status, sheet_last_error, email_last_error FROM consolidated_reporting_jobs WHERE id = ?",
-                        [result.consolidatedReportingJob.jobId],
-                        (error, row) => error ? reject(error) : resolve(row || null)
-                    )).catch(() => null);
+                    sendProgress("UPDATING_DSR");
+                    const dsr = await dayClosingDeliveryCoordinator.settle(jobId, "sheet", online,
+                        () => sendProgress("DSR_RETRYING"));
+                    sendProgress("DSR_RESULT", { status: dsr.status, durable: dsr.durable });
+                    sendProgress("SENDING_EMAIL");
+                    const email = await dayClosingDeliveryCoordinator.settle(jobId, "email", online,
+                        () => sendProgress("EMAIL_RETRYING"));
+                    sendProgress("EMAIL_RESULT", { status: email.status, durable: email.durable });
                     result.onlineDelivery = {
                         online,
-                        dsrStatus: delivery && delivery.sheet_status || "PENDING",
-                        emailStatus: delivery && delivery.email_status || "PENDING",
-                        dsrError: delivery && delivery.sheet_last_error || null,
-                        emailError: delivery && delivery.email_last_error || null
+                        dsrStatus: dsr.status,
+                        emailStatus: email.status,
+                        dsrError: dsr.lastError || null,
+                        emailError: email.lastError || null,
+                        durable: dsr.durable && email.durable
                     };
+                    sendProgress("COMPLETING_DAY_CLOSING");
+                    sendProgress("DAY_CLOSING_COMPLETE");
                 }
-                mainWindow && !mainWindow.isDestroyed() &&
-                    mainWindow.webContents.send("day-closing:progress", { stage: "DAY_CLOSING_COMPLETE" });
+                dayClosingPrintPending = {
+                    attemptId,
+                    snapshotId: result.snapshotId,
+                    jobId: result.consolidatedReportingJob && result.consolidatedReportingJob.jobId || null,
+                    printStarted: false
+                };
             }
             return result;
 
@@ -3340,7 +3402,7 @@ ipcMain.handle(
             return {
 
                 success: false,
-
+                dayClosed: Boolean((await getBusinessDayState().catch(() => null))?.closed),
                 error: error.message
 
             };
@@ -3359,7 +3421,7 @@ ipcMain.handle("app:close-after-day-closing", async event => {
     if (!mainWindow || event.sender !== mainWindow.webContents) {
         throw new Error("Close KLBS request rejected.");
     }
-    if (dayClosingCriticalInProgress) {
+    if (dayClosingCriticalInProgress || dayClosingPrintPending) {
         return { success: false, error: "Day Closing is still in progress." };
     }
 

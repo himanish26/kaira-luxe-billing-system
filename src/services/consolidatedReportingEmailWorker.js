@@ -51,6 +51,7 @@ function createConsolidatedReportingEmailWorker(options = {}) {
     const getBackupPath = options.getBackupPath;
     const validateBackup = options.validateBackup;
     const logActivity = options.logActivity || (async () => {});
+    const onOutcome = typeof options.onOutcome === "function" ? options.onOutcome : () => {};
     const technicalLogger = options.technicalLogger || { warn: () => {}, error: () => {} };
     if (typeof sendEmail !== "function") throw new Error("Consolidated email worker sendEmail dependency is required.");
     if (typeof getBackupPath !== "function") throw new Error("Consolidated email worker backup path dependency is required.");
@@ -233,12 +234,12 @@ function createConsolidatedReportingEmailWorker(options = {}) {
         return recovered;
     }
 
-    async function claimNext() {
+    async function claimNext(jobId = null) {
         let transactionStarted = false;
         try {
             await run("BEGIN IMMEDIATE TRANSACTION");
             transactionStarted = true;
-            const rows = await all(`SELECT * FROM consolidated_reporting_jobs WHERE email_status='PENDING' ORDER BY business_date, close_sequence, id`);
+            const rows = await all(`SELECT * FROM consolidated_reporting_jobs WHERE email_status='PENDING' ${jobId === null ? "" : "AND id=?"} ORDER BY business_date, close_sequence, id`, jobId === null ? [] : [jobId]);
             for (const row of rows) {
                 if (row.email_last_attempt_at && now().getTime() - Date.parse(row.email_last_attempt_at) < RETRY_COOLDOWN_MS) continue;
                 const snapshot = await get("SELECT * FROM day_closing_snapshots WHERE id = ?", [row.closing_id]);
@@ -274,6 +275,7 @@ function createConsolidatedReportingEmailWorker(options = {}) {
             await recordActivity(claimed.snapshot, "DSR_SYNC_SUCCEEDED", "SUCCESS", `Consolidated Daily DSR email delivered; Close sequence: ${claimed.close_sequence}.`);
         }
         else if (!outcome.retryable) await recordActivity(claimed.snapshot, "DSR_SYNC_FAILED", "FAILED", `Consolidated Daily DSR email failed; Close sequence: ${claimed.close_sequence}. ${outcome.message}`);
+        try { onOutcome({ jobId: claimed.id, status }); } catch (_) {}
         return { ...outcome, status, jobId: claimed.id, attemptCount: claimed.email_attempt_count, deliveredAt: completedAt };
     }
 
@@ -312,12 +314,20 @@ function createConsolidatedReportingEmailWorker(options = {}) {
         return processClaimed(claimed);
     }
 
+    async function processForJob(jobId) {
+        if (!Number.isSafeInteger(jobId) || jobId <= 0) throw new Error("Consolidated email job identifier is invalid.");
+        await recoverStaleProcessing();
+        const claimed = await claimNext(jobId);
+        if (!claimed) return { processed: false, jobId };
+        return processClaimed(claimed);
+    }
+
     async function retryForClosing(closingId) {
         const result = await run(`UPDATE consolidated_reporting_jobs SET email_status='PENDING', email_processing_started_at=NULL, email_last_error=NULL WHERE closing_id=? AND email_status='FAILED' AND email_delivered_at IS NULL AND email_last_error NOT LIKE 'STALE_SUPERSEDED:%'`, [closingId]);
         return { requeued: result.changes === 1, closingId, code: result.changes === 1 ? null : "EMAIL_JOB_NOT_REQUEUEABLE" };
     }
 
-    return { recoverStaleProcessing, claimNext, processClaimed, processNext, retryForClosing, buildEmailText, resolveAttachment };
+    return { recoverStaleProcessing, claimNext, processClaimed, processNext, processForJob, retryForClosing, buildEmailText, resolveAttachment };
 }
 
 module.exports = {

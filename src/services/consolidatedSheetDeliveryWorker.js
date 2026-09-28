@@ -31,6 +31,7 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
     const now = options.now || (() => new Date());
     const httpClient = options.httpClient || axios;
     const logActivity = options.logActivity || (async () => {});
+    const onOutcome = typeof options.onOutcome === "function" ? options.onOutcome : () => {};
     const technicalLogger = options.technicalLogger || { info: () => {}, warn: () => {} };
     const configProvider = options.configProvider || (() => resolveConsolidatedDsrConfiguration({
         integrationConfigProvider: options.integrationConfigProvider
@@ -119,7 +120,7 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
         }
     }
 
-    async function claimNext() {
+    async function claimNext(jobId = null) {
         let transactionStarted = false;
         try {
             await run("BEGIN IMMEDIATE TRANSACTION");
@@ -127,8 +128,9 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
             const rows = await all(`
                 SELECT * FROM consolidated_reporting_jobs
                 WHERE sheet_status = 'PENDING'
+                  ${jobId === null ? "" : "AND id = ?"}
                 ORDER BY business_date ASC, close_sequence ASC, id ASC
-            `);
+            `, jobId === null ? [] : [jobId]);
             for (const row of rows) {
                 if (row.sheet_last_attempt_at && now().getTime() - Date.parse(row.sheet_last_attempt_at) < RETRY_COOLDOWN_MS) continue;
                 if (await hasDayClosingSnapshotsTable()) {
@@ -225,6 +227,7 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
             });
         }
         catch (_) {}
+        try { onOutcome({ jobId: claimed.id, status: nextStatus }); } catch (_) {}
         return {
             ...outcome,
             status: nextStatus,
@@ -322,6 +325,14 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
         return persistOutcome(claimed, outcome);
     }
 
+    async function processForJob(jobId) {
+        if (!Number.isSafeInteger(jobId) || jobId <= 0) throw new Error("Consolidated Sheet job identifier is invalid.");
+        await recoverStaleProcessing();
+        const claimed = await claimNext(jobId);
+        if (!claimed) return { processed: false, jobId };
+        return persistOutcome(claimed, await sendClaimed(claimed));
+    }
+
     async function drain() {
         return processNext();
     }
@@ -341,6 +352,7 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
         requeueFailedJob,
         recoverStaleProcessing,
         processNext,
+        processForJob,
         drain,
         retryForClosing,
         processClaimed: async claimed => persistOutcome(claimed, await sendClaimed(claimed)),

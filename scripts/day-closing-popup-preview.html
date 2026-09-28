@@ -48,14 +48,16 @@
     <script>
         const lifecycle = window.createDayClosingLifecycleState();
         let state = null;
-        let stageIndex = 0;
+        let eventIndex = 0;
         const order = lifecycle.order;
-        const labels = {
-            FINALIZING_ACCOUNTS:"Finalizing accounts", BUSINESS_DAY_CLOSED:"Business Day CLOSED",
-            CREATING_BACKUP:"Creating backup", VERIFYING_BACKUP:"Verifying backup",
-            UPDATING_DSR:"Updating DSR", SENDING_EMAIL:"Sending email",
-            COMPLETING_DAY_CLOSING:"Completing Day Closing"
-        };
+        const events = [
+            ["CLOSING_BUSINESS_DAY"], ["BUSINESS_DAY_CLOSED"], ["CREATING_BACKUP"],
+            ["VERIFYING_BACKUP"], ["BACKUP_VERIFIED"], ["UPDATING_DSR"],
+            ["DSR_RESULT", {status:"DELIVERED",durable:true}], ["SENDING_EMAIL"],
+            ["EMAIL_RESULT", {status:"DELIVERED",durable:true}], ["COMPLETING_DAY_CLOSING"],
+            ["DAY_CLOSING_COMPLETE"], ["PRINTING_DAY_CLOSING_SUMMARY"],
+            ["PRINT_RESULT", {success:true}]
+        ];
         document.getElementById("dcLifecycleStages").innerHTML = order.map((stage,index) =>
             `<div class="dc-lifecycle-stage" data-stage="${stage}"><span class="dc-lifecycle-stage-icon" aria-hidden="true">${index+1}</span><span class="dc-lifecycle-stage-label"></span><span class="dc-lifecycle-stage-state"></span></div>`
         ).join("");
@@ -75,14 +77,21 @@
                 row.querySelector(".dc-lifecycle-stage-state").textContent=item.detail;
             });
         }
-        function reset(){state=lifecycle.begin();stageIndex=0;render();}
+        function reset(){state=lifecycle.begin();eventIndex=0;render();}
+        function nextEvent(){
+            if(eventIndex>=events.length)return;
+            const [stage,detail]=events[eventIndex++];
+            state=lifecycle.progress(state.attemptId,stage,detail);
+            render();
+        }
         reset();
         document.addEventListener("keydown",event=>{
             const key=event.key.toLowerCase();
             if(key==="r"){reset();return;}
-            if(key==="arrowright"&&state.outcome==="running"&&stageIndex<order.length-1){stageIndex+=1;state=lifecycle.progress(state.attemptId,order[stageIndex]);render();}
+            if(key==="arrowright"&&state.outcome==="running")nextEvent();
             if(key==="s"&&state.outcome==="running"){
-                state=lifecycle.finish(state.attemptId,{success:true,backupStatus:"SUCCESS",consolidatedReportingJob:{jobId:1},onlineDelivery:{online:true,dsrStatus:"PENDING",emailStatus:"DELIVERED"}});render();
+                while(eventIndex<events.length)nextEvent();
+                state=lifecycle.finish(state.attemptId,{success:true,backupStatus:"SUCCESS"},{success:true});render();
             }
             if(key==="f"&&state.outcome==="running"){state=lifecycle.fail(state.attemptId,"Mock mandatory backup verification failure",true);render();}
         });

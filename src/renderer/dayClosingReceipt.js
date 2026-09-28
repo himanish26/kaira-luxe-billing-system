@@ -73,6 +73,7 @@ function loadDayClosingReceipt() {
         ${receiptRow("Payment Round Off", data.settlementDifference, true)}
         <div class="line-dashed"></div>
         ${receiptRow("Backup", data.backupStatus || "UNKNOWN")}
+        ${receiptRow("DSR", data.dsrDeliveryStatus || data.dsrSyncStatus || "UNKNOWN")}
         ${receiptRow("Email", data.emailStatus || "UNKNOWN")}
         <div class="line-solid"></div>
         <div class="footer">DAY CLOSED</div>

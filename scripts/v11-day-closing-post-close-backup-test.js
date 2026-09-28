@@ -49,6 +49,14 @@ const close = db => new Promise(resolve => db.close(resolve));
     ]);
 
     const observed = [];
+    let releaseBackup;
+    let releaseVerification;
+    let signalBackupStarted;
+    let signalVerificationStarted;
+    const backupGate = new Promise(resolve => { releaseBackup = resolve; });
+    const verificationGate = new Promise(resolve => { releaseVerification = resolve; });
+    const backupStarted = new Promise(resolve => { signalBackupStarted = resolve; });
+    const verificationStarted = new Promise(resolve => { signalVerificationStarted = resolve; });
     const persistence = {
         async createFrozenJobWithinTransaction(snapshot) {
             observed.push("REPORT_FROZEN");
@@ -70,6 +78,8 @@ const close = db => new Promise(resolve => db.close(resolve));
         reportingMode: "CONSOLIDATED_V2",
         consolidatedReportingPersistence: persistence,
         createBackup: async () => {
+            signalBackupStarted();
+            await backupGate;
             const snapshot = await get(db, "SELECT close_status,backup_status,backup_reference FROM day_closing_snapshots WHERE business_date='2026-09-27' ORDER BY id DESC LIMIT 1");
             const day = await get(db, "SELECT state FROM business_day_state WHERE business_date='2026-09-27'");
             observed.push("BACKUP_CREATED");
@@ -82,12 +92,21 @@ const close = db => new Promise(resolve => db.close(resolve));
             return { backupFileName: "post-close.zip", backupFilePath: "/tmp/post-close.zip" };
         },
         validateBackup: async () => {
+            signalVerificationStarted();
+            await verificationGate;
             observed.push("BACKUP_VERIFIED");
             return { success: true };
         }
     });
 
-    const result = await service.closeBusinessDay("2026-09-27");
+    const closePromise = service.closeBusinessDay("2026-09-27");
+    await backupStarted;
+    assert.deepStrictEqual(observed, [], "slow backup must block verification and reporting");
+    releaseBackup();
+    await verificationStarted;
+    assert.deepStrictEqual(observed, ["BACKUP_CREATED"], "slow verification must block reporting");
+    releaseVerification();
+    const result = await closePromise;
     assert.strictEqual(result.success, true);
     assert.deepStrictEqual(observed, ["BACKUP_CREATED", "BACKUP_VERIFIED", "REPORT_FROZEN"]);
 
@@ -132,11 +151,13 @@ const close = db => new Promise(resolve => db.close(resolve));
         "2026-09-28", "OPEN", "2026-09-28T04:00:00.000Z", null, "2026-09-28T04:00:00.000Z"
     ]);
 
+    const failureStages = [];
     const failureService = createDayClosingService({
         database: failureDb,
         now: () => new Date("2026-09-28T12:00:00.000Z"),
         getBusinessDate: () => "2026-09-28",
         reportingMode: "CONSOLIDATED_V2",
+        onProgress: stage => failureStages.push(stage),
         consolidatedReportingPersistence: {
             async createFrozenJobWithinTransaction() {
                 throw new Error("Reporting must not be reached after mandatory backup failure.");
@@ -156,6 +177,8 @@ const close = db => new Promise(resolve => db.close(resolve));
     const failedDay = await get(failureDb, "SELECT state FROM business_day_state WHERE business_date='2026-09-28'");
     assert.deepStrictEqual(failedSnapshot, { close_status: "CLOSED", backup_status: "FAILED" });
     assert.strictEqual(failedDay.state, "CLOSED");
+    assert(!failureStages.includes("UPDATING_DSR") && !failureStages.includes("SENDING_EMAIL"));
+    assert(!failureStages.includes("COMPLETING_DAY_CLOSING"), "backup failure must stop final success work");
     await close(failureDb);
 
     console.log("V1.1 Day Closing post-close backup regression test: PASS");

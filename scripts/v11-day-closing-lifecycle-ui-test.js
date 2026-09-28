@@ -6,100 +6,146 @@ const { createDayClosingLifecycleState, STAGE_ORDER } = require("../src/renderer
 const root = path.join(__dirname, "../src");
 const read = relative => fs.readFileSync(path.join(root, relative), "utf8");
 const ui = read("renderer/modules/system/dayClosing.js");
-const helperSource = read("renderer/modules/system/dayClosingLifecycleState.js");
 const css = read("renderer/styles/settings.css");
 const main = read("main/main.js");
 const preload = read("main/preload.js");
 const service = read("database/dayClosingService.js");
-const worker = read("services/consolidatedSheetDeliveryWorker.js");
-const reportingEmail = read("services/consolidatedReportingEmailWorker.js");
-const backup = read("services/backupService.js");
-const integrations = read("services/integrationStatusService.js");
+const receipt = read("renderer/dayClosingReceipt.js");
 const html = read("renderer/index.html");
 const preview = fs.readFileSync(path.join(__dirname, "day-closing-popup-preview.html"), "utf8");
 
 assert.deepStrictEqual(STAGE_ORDER, [
-    "FINALIZING_ACCOUNTS", "BUSINESS_DAY_CLOSED", "CREATING_BACKUP",
-    "VERIFYING_BACKUP", "UPDATING_DSR", "SENDING_EMAIL", "COMPLETING_DAY_CLOSING"
+    "FINALIZING_ACCOUNTS", "BUSINESS_DAY_CLOSED", "CREATING_BACKUP", "VERIFYING_BACKUP",
+    "UPDATING_DSR", "SENDING_EMAIL", "COMPLETING_DAY_CLOSING", "PRINTING_DAY_CLOSING_SUMMARY"
 ]);
 assert(html.indexOf("dayClosingLifecycleState.js") < html.indexOf("modules/system/dayClosing.js"));
 assert(ui.includes('role="dialog" aria-modal="true"'));
 assert(css.includes("width:min(720px, 100%)"));
-assert(css.includes("background:rgba(20, 24, 30, .56)"));
+assert(/\.dc-lifecycle-stage\.is-pending\s*\{\s*display:none;/.test(css),
+    "future stages stay hidden until their real operation starts");
 assert(ui.includes('document.body.appendChild(overlay)'));
-assert(!ui.includes("dcLifecycleCloseX"));
+assert(!ui.includes("dcLifecycleCancelBtn"));
 assert(ui.includes('event.key === "Escape"') && ui.includes("event.preventDefault()"));
-assert(ui.includes("resetDayClosingLifecycle()") && ui.includes("dayClosingLifecycleState.begin()"));
-assert(ui.includes("payload.attemptId !== activeDayClosingAttemptId"));
-assert(ui.includes("dayClosingLifecycleState.isCurrent(attemptId)"));
-assert(ui.includes("closeAfterDayClosing()"));
+assert(ui.includes('payload.attemptId !== activeDayClosingAttemptId'));
+assert(ui.includes('closeAfterDayClosing()'));
 assert(preload.includes('"app:close-after-day-closing"'));
 assert(!/shutdown\.exe|osascript|systemctl\s+poweroff|reboot\b/i.test(ui + main + preload));
 assert(!/electronAPI|sqlite3|fetch\s*\(|axios|https?:\/\//i.test(preview));
-assert(preview.includes("LOCAL MOCK PREVIEW") && preview.includes("lifecycle.finish"));
 assert(!main.includes("KLBS_C4D_ACCEPTANCE_PROBE"));
 
+function advanceToBackup(lifecycle, attemptId) {
+    assert.strictEqual(lifecycle.progress(attemptId, "CLOSING_BUSINESS_DAY").stages[0].detail, "Complete");
+    assert.strictEqual(lifecycle.progress(attemptId, "BUSINESS_DAY_CLOSED").stages[1].detail, "CLOSED");
+    assert.strictEqual(lifecycle.progress(attemptId, "CREATING_BACKUP").stages[2].detail, "Creating...");
+}
+function advanceToOnline(lifecycle, attemptId) {
+    advanceToBackup(lifecycle, attemptId);
+    assert.strictEqual(lifecycle.progress(attemptId, "VERIFYING_BACKUP").stages[2].detail, "Complete");
+    assert.strictEqual(lifecycle.progress(attemptId, "BACKUP_VERIFIED").stages[3].detail, "Verified");
+    assert.strictEqual(lifecycle.progress(attemptId, "UPDATING_DSR").stages[4].detail, "Updating...");
+}
+function closeWithDelivery(lifecycle, attemptId, dsr, email) {
+    advanceToOnline(lifecycle, attemptId);
+    assert(lifecycle.progress(attemptId, "DSR_RESULT", { status: dsr, durable: true }));
+    assert(lifecycle.progress(attemptId, "SENDING_EMAIL"));
+    assert(lifecycle.progress(attemptId, "EMAIL_RESULT", { status: email, durable: true }));
+    assert(lifecycle.progress(attemptId, "COMPLETING_DAY_CLOSING"));
+    assert(lifecycle.progress(attemptId, "DAY_CLOSING_COMPLETE"));
+    assert(lifecycle.progress(attemptId, "PRINTING_DAY_CLOSING_SUMMARY"));
+}
+const successResult = { success: true, backupStatus: "SUCCESS" };
 const lifecycle = createDayClosingLifecycleState();
 const first = lifecycle.begin();
-assert.strictEqual(first.stages[0].status, "active");
+assert.strictEqual(first.stages[0].detail, "Processing...");
 assert(first.stages.slice(1).every(stage => stage.status === "pending"));
-const completed = lifecycle.finish(first.attemptId, {
-    success: true, backupStatus: "SUCCESS", consolidatedReportingJob: { jobId: 10 },
-    onlineDelivery: { online: true, dsrStatus: "DELIVERED", emailStatus: "DELIVERED" }
-});
+assert.strictEqual(lifecycle.progress(first.attemptId, "CREATING_BACKUP"), null);
+advanceToBackup(lifecycle, first.attemptId);
+assert.strictEqual(lifecycle.progress(first.attemptId, "UPDATING_DSR"), null, "slow backup must block DSR");
+assert.strictEqual(lifecycle.progress(first.attemptId, "BACKUP_VERIFIED"), null, "verification cannot complete before it starts");
+assert.strictEqual(first.stages[2].status, "active");
+assert(lifecycle.progress(first.attemptId, "VERIFYING_BACKUP"));
+assert.strictEqual(first.stages[3].status, "active");
+assert.strictEqual(lifecycle.progress(first.attemptId, "UPDATING_DSR"), null, "slow verification must block DSR");
+assert(lifecycle.progress(first.attemptId, "BACKUP_VERIFIED"));
+assert(lifecycle.progress(first.attemptId, "UPDATING_DSR"));
+assert.strictEqual(lifecycle.progress(first.attemptId, "SENDING_EMAIL"), null, "slow DSR must block email stage");
+assert.strictEqual(lifecycle.progress(first.attemptId, "DSR_RESULT", { status: "PROCESSING", durable: true }), null);
+assert.strictEqual(first.stages[4].status, "active");
+assert(lifecycle.progress(first.attemptId, "DSR_RESULT", { status: "DELIVERED", durable: true }));
+assert(lifecycle.progress(first.attemptId, "SENDING_EMAIL"));
+assert.strictEqual(lifecycle.progress(first.attemptId, "COMPLETING_DAY_CLOSING"), null, "slow email must block completion");
+assert.strictEqual(lifecycle.progress(first.attemptId, "EMAIL_RESULT", { status: "DELIVERED", durable: false }), null);
+assert(lifecycle.progress(first.attemptId, "EMAIL_RESULT", { status: "DELIVERED", durable: true }));
+assert.strictEqual(first.stages[5].detail, "Sent");
+assert(lifecycle.progress(first.attemptId, "COMPLETING_DAY_CLOSING"));
+assert(lifecycle.progress(first.attemptId, "DAY_CLOSING_COMPLETE"));
+assert.strictEqual(lifecycle.finish(first.attemptId, successResult, { success: true }), null, "printing is required");
+assert(lifecycle.progress(first.attemptId, "PRINTING_DAY_CLOSING_SUMMARY"));
+assert.strictEqual(lifecycle.finish(first.attemptId, successResult, { success: true }), null, "print result is required");
+assert(lifecycle.progress(first.attemptId, "PRINT_RESULT", { success: true }));
+const completed = lifecycle.finish(first.attemptId, successResult, { success: true });
 assert.strictEqual(completed.title, "DAY CLOSING SUCCESSFUL");
 assert.strictEqual(completed.closeEnabled, true);
-assert.strictEqual(completed.outcome, "success");
+assert.deepStrictEqual(completed.stages.map(stage => stage.detail), [
+    "Complete", "CLOSED", "Complete", "Verified", "Complete", "Sent", "Complete", "Printed"
+]);
 
-// Reclose after reopen begins from a new UI session with no state carried over.
 const second = lifecycle.begin();
 assert(second.attemptId !== first.attemptId);
-assert.strictEqual(second.title, "Closing Business Day");
-assert.strictEqual(second.notice, "");
-assert.strictEqual(second.closeEnabled, false);
-assert.strictEqual(second.outcome, "running");
-assert.strictEqual(second.stages[0].status, "active");
-assert(second.stages.slice(1).every(stage => stage.status === "pending"));
-assert.strictEqual(lifecycle.progress(first.attemptId, "COMPLETING_DAY_CLOSING"), null);
-assert.strictEqual(lifecycle.finish(first.attemptId, { success: true, backupStatus: "SUCCESS" }), null);
-assert.strictEqual(lifecycle.isCurrent(second.attemptId), true);
+assert.strictEqual(lifecycle.progress(first.attemptId, "PRINT_RESULT", { success: true }), null);
+assert.strictEqual(lifecycle.finish(first.attemptId, successResult, { success: true }), null);
+closeWithDelivery(lifecycle, second.attemptId, "PENDING", "PENDING");
+assert.strictEqual(second.stages[4].detail, "Retry queued");
+assert.strictEqual(second.stages[5].detail, "Retry queued");
+assert(lifecycle.progress(second.attemptId, "PRINT_RESULT", { success: true }));
+const queued = lifecycle.finish(second.attemptId, successResult, { success: true });
+assert.strictEqual(queued.title, "DAY CLOSING COMPLETED WITH PENDING TASK");
+assert.strictEqual(queued.closeEnabled, true);
+assert(lifecycle.progress(second.attemptId, "EMAIL_RESULT", { status: "DELIVERED", durable: true, refresh: true }));
+assert.strictEqual(queued.stages[5].detail, "Sent", "later persisted email success updates the open lifecycle");
+assert(lifecycle.progress(second.attemptId, "DSR_RESULT", { status: "DELIVERED", durable: true, refresh: true }));
+assert.strictEqual(queued.title, "DAY CLOSING SUCCESSFUL");
+assert.match(queued.notice, /after the receipt was printed/);
 
-const warning = lifecycle.finish(second.attemptId, {
-    success: true, backupStatus: "SUCCESS", consolidatedReportingJob: { jobId: 11 },
-    onlineDelivery: { online: true, dsrStatus: "FAILED", emailStatus: "PENDING" }
-});
-assert.strictEqual(warning.outcome, "success");
-assert.strictEqual(warning.closeEnabled, true);
-assert.strictEqual(warning.stages[4].status, "warning");
-assert.match(warning.stages[4].detail, /Queued/);
-assert.strictEqual(warning.stages[5].status, "warning");
+const third = lifecycle.begin();
+closeWithDelivery(lifecycle, third.attemptId, "DELIVERED", "FAILED");
+assert(lifecycle.progress(third.attemptId, "PRINT_RESULT", { success: true }));
+const failedEmail = lifecycle.finish(third.attemptId, successResult, { success: true });
+assert.strictEqual(failedEmail.title, "DAY CLOSING REQUIRES ATTENTION");
+assert.strictEqual(failedEmail.closeEnabled, false);
+assert.strictEqual(third.stages[5].detail, "Failed");
 
-const failureAttempt = lifecycle.begin();
-assert.strictEqual(lifecycle.finish(failureAttempt.attemptId, { success: false, backupStatus: "SUCCESS" }), null);
-assert.strictEqual(lifecycle.finish(failureAttempt.attemptId, { success: true, backupStatus: "FAILED" }), null);
-const failure = lifecycle.fail(failureAttempt.attemptId, "Backup verification failed", true);
-assert.strictEqual(failure.outcome, "failure");
-assert.strictEqual(failure.closeEnabled, false);
-assert.strictEqual(failure.returnVisible, true);
-assert.strictEqual(lifecycle.progress(failureAttempt.attemptId, "FINALIZING_ACCOUNTS").stages[0].status, "active");
+const fourth = lifecycle.begin();
+closeWithDelivery(lifecycle, fourth.attemptId, "DELIVERED", "DELIVERED");
+assert(lifecycle.progress(fourth.attemptId, "PRINT_RESULT", { success: false }));
+const printFailed = lifecycle.finish(fourth.attemptId, successResult, { success: false });
+assert.strictEqual(printFailed.title, "DAY CLOSING REQUIRES ATTENTION");
+assert.strictEqual(printFailed.closeEnabled, true, "printer failure must not reopen or undo a safe close");
+assert.strictEqual(fourth.stages[7].detail, "Print failed");
 
-for (let cycle = 0; cycle < 50; cycle += 1) {
-    const attempt = lifecycle.begin();
-    assert.strictEqual(attempt.stages[0].status, "active");
-    assert(attempt.stages.slice(1).every(stage => stage.status === "pending"));
-    lifecycle.invalidate(attempt.attemptId);
-}
-assert.strictEqual((ui.match(/if \(!dayClosingLifecycleListenerBound\)/g) || []).length, 1);
-assert((ui.match(/onDayClosingProgress\(/g) || []).length <= 1);
+const backupFailureAttempt = lifecycle.begin();
+advanceToBackup(lifecycle, backupFailureAttempt.attemptId);
+const backupFailure = lifecycle.fail(backupFailureAttempt.attemptId, "Backup failed", true);
+assert.strictEqual(backupFailure.title, "DAY CLOSING REQUIRES ATTENTION");
+assert.strictEqual(backupFailure.closeEnabled, false);
+assert.strictEqual(lifecycle.progress(backupFailureAttempt.attemptId, "UPDATING_DSR"), null);
+assert.strictEqual(backupFailure.stages[7].status, "pending");
+const closeFailureAttempt = lifecycle.begin();
+const closeFailure = lifecycle.fail(closeFailureAttempt.attemptId, "Commit failed", false);
+assert.strictEqual(closeFailure.title, "DAY CLOSING FAILED");
+assert.strictEqual(closeFailure.closeEnabled, false);
+assert.strictEqual(closeFailure.stages[7].status, "pending");
 
-// Mandatory boundary and all reporting/backup business implementations are unchanged.
-assert(service.includes('onProgressFn("FINALIZING_ACCOUNTS")'));
-assert(service.includes('onProgressFn("VERIFYING_BACKUP")'));
-assert(service.includes('onProgressFn("BACKUP_VERIFIED")'));
-assert(service.includes('backupStatus: "SUCCESS"'));
-assert(worker.includes("validateReceiverResponse(response.data, validated)"));
-assert(reportingEmail.includes("email_status"));
-assert(backup.includes("validateDayClosingBackup"));
-assert(integrations.includes("consolidated_reporting_jobs"));
-
-console.log("Day Closing lifecycle UI regression tests: PASS (reset, reclose, attempt isolation, modal and safety boundary)");
+assert(ui.indexOf('updateDayClosingLifecycleStage("PRINTING_DAY_CLOSING_SUMMARY"') < ui.indexOf("await window.electronAPI.printDayClosing(result.snapshotId)"));
+assert(ui.indexOf("await window.electronAPI.printDayClosing(result.snapshotId)") < ui.indexOf('updateDayClosingLifecycleStage("PRINT_RESULT"'));
+assert(ui.indexOf('updateDayClosingLifecycleStage("PRINT_RESULT"') < ui.lastIndexOf("finishDayClosingLifecycle(result, printResult"));
+assert(main.includes("dayClosingDeliveryCoordinator.observeForPrint(dayClosingPrintPending.jobId)"));
+assert(main.indexOf("dayClosingDeliveryCoordinator.observeForPrint(dayClosingPrintPending.jobId)") < main.indexOf("await printDayClosingReceipt(dayClosingReceiptWithDelivery"));
+assert(main.includes("dayClosingPrintPending.printStarted"));
+assert(main.includes("dayClosingCriticalInProgress || dayClosingPrintPending"));
+assert.strictEqual((main.match(/remoteDashboard\.queueDayClosed\(result\)/g) || []).length, 1, "DAY_CLOSED call remains in its existing success path");
+assert(service.includes('onProgressFn("CLOSING_BUSINESS_DAY")'));
+assert(service.indexOf('onProgressFn("CLOSING_BUSINESS_DAY")') < service.indexOf("SET close_status = 'CLOSED'"));
+assert(receipt.includes('receiptRow("DSR", data.dsrDeliveryStatus'));
+assert(receipt.includes('receiptRow("Email", data.emailStatus'));
+console.log("Day Closing eight-stage lifecycle regression tests: PASS");

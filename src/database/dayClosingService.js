@@ -593,6 +593,7 @@ function createDayClosingService(options = {}) {
         // Accounting closure is authoritative before any backup snapshot is taken.
         // This guarantees that a successfully verified Day Closing backup restores
         // the same CLOSED business-day state rather than the earlier PREPARING state.
+        onProgressFn("CLOSING_BUSINESS_DAY");
         const closedAt = now().toISOString();
         try {
             await run("BEGIN IMMEDIATE TRANSACTION");
@@ -779,7 +780,7 @@ function createDayClosingService(options = {}) {
         }
 
         summary = await getDayClosingSnapshot(reservation.snapshotId);
-        onProgressFn("UPDATING_DSR");
+        if (!consolidatedV2) onProgressFn("UPDATING_DSR");
         if (segmentDsrOutbox && !consolidatedV2) {
             try {
                 await segmentDsrOutbox.enqueue(reservation.snapshotId);
@@ -798,8 +799,10 @@ function createDayClosingService(options = {}) {
             dsrResult = await attemptDsrSync(reservation.snapshotId);
         }
         summary = await getDayClosingSnapshot(reservation.snapshotId);
-        onProgressFn("ONLINE_TASKS_QUEUED");
-        onProgressFn("COMPLETING_DAY_CLOSING");
+        if (!consolidatedV2) {
+            onProgressFn("ONLINE_TASKS_QUEUED");
+            onProgressFn("COMPLETING_DAY_CLOSING");
+        }
         return {
             success: true,
             snapshotId: reservation.snapshotId,
