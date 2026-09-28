@@ -1428,11 +1428,23 @@
 .variable-value-product-name {
     margin: 0 0 5px;
     color: var(--primary);
-    font-size: 23px;
+    font-size: 27px;
     font-weight: 800;
     line-height: 1.25;
     text-transform: uppercase;
     overflow-wrap: anywhere;
+}
+
+.variable-value-dialog-box #variableValueError {
+    box-sizing: border-box;
+    flex: 0 0 22px;
+    height: 22px;
+    min-height: 22px;
+    max-height: 22px;
+    margin: 0;
+    overflow: hidden;
+    line-height: 22px;
+    white-space: nowrap;
 }
 
 .variable-value-available-stock {

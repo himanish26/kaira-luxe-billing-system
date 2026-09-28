@@ -25,7 +25,8 @@ assert.match(html, /id="variableValueQuantity" type="text" inputmode="numeric" m
 assert.match(html, /id="variableValueAmount" type="text" inputmode="numeric" min="1" max="9999" step="1"/);
 assert.match(css, /\.variable-value-dialog-box\s*\{[^}]*background:\s*#fff\s*!important/s);
 assert.match(css, /\.variable-value-dialog-box h2\s*\{[^}]*font-size:\s*25px[^}]*font-weight:\s*800/s);
-assert.match(css, /\.variable-value-product-name\s*\{[^}]*font-size:\s*23px[^}]*font-weight:\s*800/s);
+assert.match(css, /\.variable-value-product-name\s*\{[^}]*font-size:\s*27px[^}]*font-weight:\s*800/s);
+assert.match(css, /\.variable-value-dialog-box #variableValueError\s*\{[^}]*flex:\s*0 0 22px[^}]*height:\s*22px[^}]*min-height:\s*22px[^}]*max-height:\s*22px/s);
 assert.match(css, /\.variable-value-product-name\s*\{[^}]*color:\s*var\(--primary\)/s);
 assert.match(css, /\.variable-value-dialog-box label\s*\{[^}]*font-size:\s*18px[^}]*font-weight:\s*800/s);
 assert.match(css, /\.variable-value-dialog-box input\s*\{[^}]*font-size:\s*22px/s);

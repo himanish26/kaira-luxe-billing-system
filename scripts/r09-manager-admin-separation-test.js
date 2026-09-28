@@ -13,6 +13,14 @@ const {
     ADMIN_PIN_AUDIT_POLICY
 } = require("../src/services/administratorSecurityService");
 
+const root = path.resolve(__dirname, "..");
+const settingsCss = fs.readFileSync(path.join(root, "src/renderer/styles/settings.css"), "utf8");
+const managerModalCss = fs.readFileSync(path.join(root, "src/renderer/style.css"), "utf8");
+assert.match(settingsCss, /\.admin-error\s*\{[^}]*height:\s*22px[^}]*min-height:\s*22px[^}]*max-height:\s*22px/s);
+assert.match(managerModalCss, /#ffPinError\s*\{[^}]*height:\s*22px[^}]*min-height:\s*22px[^}]*max-height:\s*22px[^}]*margin:\s*0 0 12px/s);
+assert.match(managerModalCss, /#ffPinDialog \.ff-pin-box\s*\{[^}]*height:\s*60px[^}]*margin-top:\s*-5px[^}]*margin-bottom:\s*20px/s);
+assert.match(managerModalCss, /#ffPinDialog \.modal-buttons button\s*\{[^}]*height:\s*50px/s);
+
 const openMemory = () => new sqlite3.Database(":memory:");
 const run = (db, sql, params = []) => new Promise((resolve, reject) => {
     db.run(sql, params, function(error) { error ? reject(error) : resolve(this); });

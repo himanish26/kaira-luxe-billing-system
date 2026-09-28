@@ -699,7 +699,19 @@ margin-bottom:10px;
 
 .admin-error{
 
+box-sizing:border-box;
+
 height:22px;
+
+min-height:22px;
+
+max-height:22px;
+
+line-height:22px;
+
+overflow:hidden;
+
+white-space:nowrap;
 
 margin-bottom:12px;
 

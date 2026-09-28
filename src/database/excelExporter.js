@@ -413,6 +413,77 @@ function addGSTCreditNoteSheets(
     }
 }
 
+function getPaymentMode(row) {
+    const components = [
+        ["Cash", row.cash_amount],
+        ["UPI", row.upi_amount],
+        ["Card", row.card_amount],
+        ["Store Credit", row.store_credit_amount],
+        ["Gift Voucher", row.gift_voucher_amount]
+    ].filter(([, amount]) => Number(amount || 0) > 0);
+
+    if (components.length === 0) return "";
+    if (components.length > 1) return "Mixed";
+    return components[0][0];
+}
+
+function addGSTPaymentReconciliationSheet(workbook, paymentRows) {
+    const sheet = workbook.addWorksheet("Payment Reconciliation");
+    sheet.columns = [
+        { key: "bill_no", width: 18 },
+        { key: "bill_date", width: 16 },
+        { key: "payment_mode", width: 20 },
+        { key: "cash_amount", width: 16 },
+        { key: "upi_amount", width: 16 },
+        { key: "card_amount", width: 16 },
+        { key: "store_credit_amount", width: 18 },
+        { key: "gift_voucher_amount", width: 18 },
+        { key: "total_settlement", width: 20 }
+    ];
+
+    sheet.getRow(1).values = [
+        "Bill No", "Bill Date", "Payment Mode", "Cash", "UPI", "Card",
+        "Store Credit", "Gift Voucher", "Total Settlement"
+    ];
+    styleNewRegister(sheet, 1);
+    sheet.views = [{ state: "frozen", ySplit: 1 }];
+
+    const amountColumns = [4, 5, 6, 7, 8, 9];
+    for (let index = 0; index < paymentRows.length; index += 1) {
+        const row = paymentRows[index];
+        const cash = fromPaise(toPaise(row.cash_amount));
+        const upi = fromPaise(toPaise(row.upi_amount));
+        const card = fromPaise(toPaise(row.card_amount));
+        const storeCredit = fromPaise(toPaise(row.store_credit_amount));
+        const giftVoucher = fromPaise(toPaise(row.gift_voucher_amount));
+        const totalSettlementPaise = [
+            row.cash_amount,
+            row.upi_amount,
+            row.card_amount,
+            row.store_credit_amount,
+            row.gift_voucher_amount
+        ].reduce((total, amount) => addPaise(total, amount), 0);
+
+        sheet.getRow(index + 2).values = [
+            row.bill_no,
+            row.bill_date,
+            getPaymentMode(row),
+            cash,
+            upi,
+            card,
+            storeCredit,
+            giftVoucher,
+            fromPaise(totalSettlementPaise)
+        ];
+    }
+
+    for (const column of amountColumns) {
+        sheet.getColumn(column).numFmt =
+            '"₹"#,##0.00;[Red]("₹"#,##0.00);-';
+    }
+    sheet.getColumn(1).numFmt = "@";
+}
+
 /* ===========================================
    BUSINESS REPORT
 =========================================== */
@@ -701,7 +772,8 @@ async function exportGSTReport(
     creditNoteGST,
     filePath,
     fromDate,
-    toDate
+    toDate,
+    paymentReconciliation = []
 ) {
 
     const totalColumns = 8;
@@ -846,6 +918,11 @@ worksheet.getRow(currentRow).font = {
         creditNoteGST,
         fromDate,
         toDate
+    );
+
+    addGSTPaymentReconciliationSheet(
+        workbook,
+        paymentReconciliation
     );
 
     await workbook.xlsx.writeFile(filePath);

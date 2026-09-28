@@ -217,6 +217,41 @@ async function getGSTReport(fromDate, toDate) {
 
 }
 
+async function getGSTPaymentReconciliation(fromDate, toDate) {
+
+    return new Promise((resolve, reject) => {
+
+        const sql = `
+            SELECT
+                b.bill_no,
+                b.bill_date,
+                COALESCE(b.cash_amount, 0) AS cash_amount,
+                COALESCE(b.upi_amount, 0) AS upi_amount,
+                COALESCE(b.card_amount, 0) AS card_amount,
+                COALESCE(b.store_credit_amount, 0) AS store_credit_amount,
+                COALESCE(b.gift_voucher_amount, 0) AS gift_voucher_amount
+            FROM bills b
+            WHERE DATE(b.bill_date) BETWEEN ? AND ?
+              AND EXISTS (
+                  SELECT 1
+                  FROM bill_items bi
+                  WHERE bi.bill_no = b.bill_no
+              )
+            ORDER BY b.bill_date, b.bill_time, b.bill_no
+        `;
+
+        db.all(sql, [fromDate, toDate], (error, rows) => {
+            if (error) {
+                reject(error);
+                return;
+            }
+            resolve(rows || []);
+        });
+
+    });
+
+}
+
 /* ===========================================
    AUTHORITATIVE CREDIT NOTE REPORT DATA
 =========================================== */
@@ -656,13 +691,17 @@ async function exportReport(
 
         case "gst": {
 
-            const [data, creditNoteItems] =
+            const [data, creditNoteItems, paymentReconciliation] =
                 await Promise.all([
                     getGSTReport(
                     request.fromDate,
                     request.toDate
                     ),
                     getCompletedCreditNoteItems(
+                        request.fromDate,
+                        request.toDate
+                    ),
+                    getGSTPaymentReconciliation(
                         request.fromDate,
                         request.toDate
                     )
@@ -673,7 +712,8 @@ async function exportReport(
     groupCreditNoteGSTReversals(creditNoteItems),
     filePath,
     request.fromDate,
-    request.toDate
+    request.toDate,
+    paymentReconciliation
 );
 
         }

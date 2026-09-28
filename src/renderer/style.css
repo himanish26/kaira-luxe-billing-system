@@ -1068,25 +1068,29 @@ transform:rotate(360deg);
 =========================================== */
 
 #ffPinError{
-    min-height:24px;
+    box-sizing:border-box;
+    height:22px;
+    min-height:22px;
+    max-height:22px;
 
     display:flex;
     align-items:center;
     justify-content:center;
 
-    margin:
-        8px
-        0
-        6px !important;
+    margin:0 0 12px !important;
 
     padding:0 !important;
 
     color:#d32f2f !important;
 
-    font-size:18px !important;
+    font-size:15px !important;
     font-weight:800 !important;
 
-    line-height:1.25;
+    line-height:22px;
+
+    overflow:hidden;
+
+    white-space:nowrap;
 
     text-align:center;
 }
