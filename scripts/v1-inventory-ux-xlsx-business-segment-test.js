@@ -259,8 +259,23 @@ async function run() {
         const businessSummary = businessWorkbook.getWorksheet("Summary");
         assert.strictEqual(
             businessSummary.getCell("B12").value.formula,
-            "SUMPRODUCT('Business Report'!O12:O19,'Business Report'!P12:P19)"
+            "SUM('Business Report'!Z12:Z19)"
         );
+        const variableBusinessPath = path.join(tempDirectory, "variable-business-report.xlsx");
+        await exportBusinessReport([{
+            bill_no: "VV001", bill_date: "2026-09-21", bill_time: "10:00",
+            barcode: "VV", product_name: "Variable", business_segment: "KL",
+            quantity: 3, mrp: 1, gross_amount: 80, discount_amount: 0,
+            taxable_amount: 76.19, gst_rate: 5, cgst_amount: 1.9,
+            sgst_amount: 1.9, net_amount: 80, cash_amount: 80,
+            upi_amount: 0, card_amount: 0
+        }], [], variableBusinessPath, "2026-09-21", "2026-09-21");
+        const variableBusinessWorkbook = await readWorkbook(variableBusinessPath);
+        const variableBusinessSheet = variableBusinessWorkbook.getWorksheet("Business Report");
+        assert.strictEqual(cellText(variableBusinessSheet.getRow(12), 26), 80);
+        assert.strictEqual(variableBusinessSheet.getColumn(26).hidden, true);
+        const variableBusinessSummary = variableBusinessWorkbook.getWorksheet("Summary");
+        assert.strictEqual(variableBusinessSummary.getCell("B12").value.result, 80);
         const creditSheet = businessWorkbook.getWorksheet("Returns & Credit Notes");
         const creditHeaders = headerIndex(creditSheet.getRow(11));
         assert.strictEqual(creditHeaders.get("Segment"), 10);

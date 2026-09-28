@@ -147,6 +147,10 @@ const net =
     isNaN(Number(item.net_amount))
         ? 0
         : Number(item.net_amount);
+const rate =
+    Number(item.variable_value) === 1 && item.gross_amount != null
+        ? Number(item.gross_amount)
+        : Number(item.mrp) || 0;
 
 tr.innerHTML = `
 
@@ -171,7 +175,7 @@ ${item.brand} • ${item.size} • ${item.colour}
 
 <td>${item.qty}</td>
 
-<td>₹${Math.round(item.mrp)}</td>
+<td>₹${Math.round(rate)}</td>
 
 <td>₹${Math.round(net)}</td>
 

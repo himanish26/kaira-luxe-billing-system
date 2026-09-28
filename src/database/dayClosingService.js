@@ -913,7 +913,7 @@ function createDayClosingService(options = {}) {
 
         let activityWarning = null;
         try {
-            await logReopenedFn(businessDate);
+            await logReopenedFn(businessDate, normalizedReason);
         }
         catch (error) {
             activityWarning = error.message;

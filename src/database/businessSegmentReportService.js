@@ -148,7 +148,7 @@ function createBusinessSegmentReportService({ database }) {
                         bi.id AS bill_item_id,
                         bi.business_segment,
                         bi.qty AS quantity,
-                        ROUND(bi.mrp * bi.qty, 2) AS gross_sales,
+                        ROUND(COALESCE(bi.gross_amount, bi.mrp * bi.qty), 2) AS gross_sales,
                         ROUND(bi.discount_amount, 2) AS discount_amount,
                         ROUND(bi.taxable_amount, 2) AS taxable_value,
                         ROUND(bi.gst_amount, 2) AS gst_amount,

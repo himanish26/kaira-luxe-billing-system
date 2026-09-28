@@ -316,26 +316,22 @@ async function importProductMaster(grant){
     const downloadTemplateBtn =
     document.getElementById("downloadTemplateBtn");
 
-    const filePath =
-        await window.electronAPI.selectExcelFile();
+    try {
+        const filePath = await window.electronAPI.selectExcelFile();
 
-    if(!filePath){
+        if (filePath === null) {
+            return;
+        }
 
-    importBtn.disabled = false;
+        if (typeof filePath !== "string" || filePath.trim() === "") {
+            alert("The file picker returned an invalid file path. Please choose the Product Master file again.");
+            return;
+        }
 
-    importBtn.textContent =
-        "📥 Import Product Master";
+        const result = await window.electronAPI.importProducts(filePath, grant);
 
-    return;
-
-}
-    
-    const result =
-        await window.electronAPI.importProducts(filePath, grant);
-
-    if(result.success){
-
-    alert(
+        if (result.success) {
+            alert(
 `Import Completed
 
 New Products : ${result.imported}
@@ -343,25 +339,22 @@ New Products : ${result.imported}
 Duplicates Skipped : ${result.skipped}
 
 Rows Read : ${result.total}`
-    );
-
-    await refreshInventory();
-
-    importBtn.disabled = false;
-
-    importBtn.textContent =
-        "📥 Import Product Master";
-
-}else{
-
-    importBtn.disabled = false;
-
-    importBtn.textContent =
-        "📥 Import Product Master";
-
-    alert(result.error);
-
-}
+            );
+            await refreshInventory();
+        }
+        else {
+            alert(result.error);
+        }
+    }
+    catch (error) {
+        alert(error && typeof error.message === "string"
+            ? error.message
+            : "Product Master file selection or import failed.");
+    }
+    finally {
+        importBtn.disabled = false;
+        importBtn.textContent = "📥 Import Product Master";
+    }
 
 }
 

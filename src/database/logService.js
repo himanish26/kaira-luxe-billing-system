@@ -50,8 +50,8 @@ const logInvoiceGenerated = (billNumber, amount, items) => write(
     `Bill ${billNumber} | ₹${amount} | ${items} Item(s)`, "OPERATOR", "SUCCESS",
     { entity_type: "BILL", reference_no: billNumber }
 );
-const logPaymentCorrected = billNumber => write(
-    "BILLING", "PAYMENT_CORRECTED", `Bill ${billNumber}`, "ADMINISTRATOR", "SUCCESS",
+const logPaymentCorrected = (billNumber, reason) => write(
+    "BILLING", "PAYMENT_CORRECTED", `Bill ${billNumber} | Reason: ${String(reason || "").trim()}`, "ADMINISTRATOR", "SUCCESS",
     { entity_type: "BILL", reference_no: billNumber }
 );
 const logReturnCompleted = (
@@ -238,8 +238,8 @@ const logBusinessDayClosed = date => write(
     "DAY CLOSING", "BUSINESS_DAY_CLOSED", date, "ADMINISTRATOR", "SUCCESS",
     { entity_type: "BUSINESS_DAY", reference_no: date }
 );
-const logBusinessDayReopened = date => write(
-    "DAY CLOSING", "BUSINESS_DAY_REOPENED", date, "MANAGER", "SUCCESS",
+const logBusinessDayReopened = (date, reason) => write(
+    "DAY CLOSING", "BUSINESS_DAY_REOPENED", `Business Day Reopened: ${date} | Reason: ${String(reason || "").trim()}`, "MANAGER", "SUCCESS",
     { entity_type: "BUSINESS_DAY", reference_no: date }
 );
 const logDsrSyncSucceeded = (date, sequence, action) => write(

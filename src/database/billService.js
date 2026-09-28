@@ -243,7 +243,7 @@ function resolveAuthoritativeBillData(billData) {
 
                 const totals = authoritativeItems.reduce((summary, item) => {
 
-                    const gross = item.qty * item.mrp;
+                    const gross = item.gross_amount;
                     const discountAmount = gross * item.discount / 100;
                     const net = gross - discountAmount;
                     const taxable = net * 100 / (100 + item.gst_rate);
@@ -324,7 +324,8 @@ function resolveAuthoritativeBillData(billData) {
                     discount,
                     gst_rate,
                     active,
-                    business_segment
+                    business_segment,
+                    variable_value
                 FROM products
                 WHERE barcode = ?
                 `,
@@ -349,6 +350,8 @@ function resolveAuthoritativeBillData(billData) {
                     const mrp = Number(product.mrp);
                     const gstRate = Number(product.gst_rate);
                     const normalDiscount = Number(product.discount ?? 0);
+                    const isVariableValue = Number(product.variable_value) === 1;
+                    let grossAmount;
                     const hasFamilyFriendsOverride =
                         submittedItem.ff_discount !== null &&
                         submittedItem.ff_discount !== undefined;
@@ -356,8 +359,41 @@ function resolveAuthoritativeBillData(billData) {
                         ? Number(submittedItem.ff_discount)
                         : normalDiscount;
 
+                    if (isVariableValue && quantity > 99) {
+                        fail(`Variable-Value quantity cannot exceed 99 for barcode: ${barcode}`, "KLBS_BILL_QUANTITY_INVALID");
+                        return;
+                    }
+
                     if (!Number.isFinite(mrp) || mrp < 0) {
                         fail(`Invalid Product Master MRP for barcode: ${barcode}`, "KLBS_BILL_PRODUCT_DATA_INVALID");
+                        return;
+                    }
+
+                    if (isVariableValue) {
+                        const submittedGross = submittedItem && submittedItem.gross_amount;
+                        const numericGross = Number(submittedGross);
+                        if (
+                            submittedGross === null ||
+                            submittedGross === undefined ||
+                            (typeof submittedGross === "string" && submittedGross.trim() === "") ||
+                            !Number.isSafeInteger(numericGross) ||
+                            numericGross < 1 ||
+                            numericGross > 9999
+                        ) {
+                            fail(`Variable-Value line total must be whole rupees from ₹1 to ₹9,999 for barcode: ${barcode}`, "KLBS_BILL_GROSS_AMOUNT_INVALID");
+                            return;
+                        }
+                        grossAmount = numericGross;
+                    }
+                    else {
+                        grossAmount = quantity * mrp;
+                    }
+
+                    if (
+                        !Number.isFinite(grossAmount) ||
+                        (isVariableValue ? grossAmount <= 0 : grossAmount < 0)
+                    ) {
+                        fail(`Invalid line gross for barcode: ${barcode}`, "KLBS_BILL_GROSS_AMOUNT_INVALID");
                         return;
                     }
 
@@ -408,6 +444,8 @@ function resolveAuthoritativeBillData(billData) {
                         colour: product.colour || "",
                         qty: quantity,
                         mrp,
+                        variable_value: isVariableValue ? 1 : 0,
+                        gross_amount: grossAmount,
                         master_discount: normalDiscount,
                         discount: effectiveDiscount,
                         gst_rate: gstRate,
@@ -618,7 +656,7 @@ function saveBill(billData) {
                 billData.items.forEach(item=>{
 
                     const gross =
-                        item.qty * item.mrp;
+                        item.gross_amount;
 
                     const discountAmount =
                         gross * item.discount / 100;
@@ -647,6 +685,7 @@ function saveBill(billData) {
                             colour,
                             qty,
                             mrp,
+                            gross_amount,
                             discount_percent,
                             discount_amount,
                             taxable_amount,
@@ -656,7 +695,7 @@ function saveBill(billData) {
                             business_segment
                         )
                         VALUES
-                        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         `,
 
                         [
@@ -678,6 +717,8 @@ function saveBill(billData) {
                             item.qty,
 
                             item.mrp,
+
+                            gross,
 
                             item.discount,
 
@@ -1394,9 +1435,12 @@ function getBillDetails(billNo) {
                 db.all(
 
                     `
-                    SELECT *
-                    FROM bill_items
-                    WHERE bill_no = ?
+                    SELECT
+                        bi.*,
+                        COALESCE(p.variable_value, 0) AS variable_value
+                    FROM bill_items bi
+                    LEFT JOIN products p ON p.barcode = bi.barcode
+                    WHERE bi.bill_no = ?
                     `,
 
                     [billNo],
@@ -1688,7 +1732,9 @@ function updatePaymentAllocation(data) {
 
                 await logPaymentCorrected(
 
-                    data.bill_no
+                    data.bill_no,
+
+                    data.remarks
 
                 );
 

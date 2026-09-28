@@ -2288,6 +2288,36 @@ style="display:none;">
 
 </div>
 
+<!-- VARIABLE-VALUE SALE LINE POPUP -->
+<div
+    id="variableValueDialog"
+    class="custom-dialog"
+    style="display:none;"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="variableValueDialogTitle"
+>
+    <div class="custom-dialog-box variable-value-dialog-box">
+        <h2 id="variableValueDialogTitle">Variable-Value Sale</h2>
+        <div class="variable-value-product-detail">
+            <p id="variableValueProductName" class="variable-value-product-name"></p>
+            <p id="variableValueAvailableStock" class="variable-value-available-stock"></p>
+        </div>
+
+        <label for="variableValueQuantity">Quantity</label>
+        <input id="variableValueQuantity" type="text" inputmode="numeric" min="1" max="99" step="1" autocomplete="off">
+
+        <label for="variableValueAmount">Total Amount</label>
+        <input id="variableValueAmount" type="text" inputmode="numeric" min="1" max="9999" step="1" autocomplete="off">
+
+        <div id="variableValueError" class="dialog-error" role="alert"></div>
+        <div class="dialog-actions">
+            <button type="button" id="variableValueCancelBtn" class="klbs-cancel-btn">Cancel</button>
+            <button type="button" id="variableValueConfirmBtn" class="klbs-primary-btn">Add to Bill</button>
+        </div>
+    </div>
+</div>
+
 <!-- FAMILY & FRIENDS DISCOUNT POPUP -->
 <div
     id="ffDiscountDialog"
@@ -2325,7 +2355,7 @@ style="display:none;">
 
                         <th>Qty</th>
 
-                        <th>MRP</th>
+                        <th>MRP / Gross</th>
 
                         <th>
                             Current Disc%

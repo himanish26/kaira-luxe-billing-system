@@ -473,6 +473,21 @@ async function continueAfterStartupSecuritySetup() {
     return true;
 }
 
+function bindSecurityEnterToButton(inputIds, button) {
+    if (!button) return;
+
+    inputIds.forEach(inputId => {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+
+        input.addEventListener("keydown", event => {
+            if (event.key !== "Enter" || event.repeat) return;
+            event.preventDefault();
+            button.click();
+        });
+    });
+}
+
 async function showAdministratorSecurityPage() {
     const status = await window.electronAPI.administratorSecurity.getStatus();
     const startupMasterVerification = startupSecuritySetupActive && !startupSecuritySetupToken
@@ -780,6 +795,23 @@ if (result.success) {
             }
         }
     };
+
+    bindSecurityEnterToButton(
+        ["startupSecurityMasterPin"],
+        startupVerifyButton
+    );
+    bindSecurityEnterToButton(
+        ["securityCurrentPin", "securityNewPin", "securityConfirmPin"],
+        changeButton
+    );
+    bindSecurityEnterToButton(
+        ["securityManagerPin", "securityManagerConfirmPin"],
+        saveManagerButton
+    );
+    bindSecurityEnterToButton(
+        ["securityMasterPin", "securityRecoveryPin", "securityRecoveryConfirmPin"],
+        recoveryButton
+    );
 }
 
 if (storeCard){
@@ -2630,7 +2662,7 @@ gst_amount:
     billItems.map(item => {
 
         const gross =
-            item.qty * item.mrp;
+            getSaleLineGross(item);
 
         const discountAmount =
             gross * item.discount / 100;
@@ -3621,6 +3653,11 @@ async function revalidateCurrentBillProducts() {
             continue;
         }
 
+        if ((Number(item.variable_value) === 1) !== (Number(product.variable_value) === 1)) {
+            problems.push(`${item.barcode}: Variable Value setting changed in Product Master. Remove and rescan this line before payment.`);
+            continue;
+        }
+
         const hasAuthorizedFfDiscount =
             item.ff_discount !== null && item.ff_discount !== undefined;
 
@@ -3632,6 +3669,7 @@ async function revalidateCurrentBillProducts() {
             size: product.size,
             colour: product.colour,
             mrp: Number(product.mrp),
+            variable_value: Number(product.variable_value) === 1 ? 1 : 0,
             master_discount: Number(product.discount || 0),
             gst_rate: Number(product.gst_rate || 0),
             discount: hasAuthorizedFfDiscount
@@ -4367,22 +4405,12 @@ function openGiftVoucherDialog() {
         billItems.reduce(
             (total, item) => {
 
-                const qty =
-                    Number(item.qty || 0);
-
-                const mrp =
-                    Number(item.mrp || 0);
+                const gross = getSaleLineGross(item);
 
                 const discount =
                     Number(item.discount || 0);
 
-                const itemValue =
-                    qty *
-                    mrp *
-                    (
-                        1 -
-                        discount / 100
-                    );
+                const itemValue = gross * (1 - discount / 100);
 
                 return total + itemValue;
 
@@ -4473,24 +4501,14 @@ if (giftVoucherAmountInput) {
                 billItems.reduce(
                     (total, item) => {
 
-                        const qty =
-                            Number(item.qty || 0);
-
-                        const mrp =
-                            Number(item.mrp || 0);
+                        const gross = getSaleLineGross(item);
 
                         const discount =
                             Number(
                                 item.discount || 0
                             );
 
-                        const itemValue =
-                            qty *
-                            mrp *
-                            (
-                                1 -
-                                discount / 100
-                            );
+                        const itemValue = gross * (1 - discount / 100);
 
                         return total + itemValue;
 
@@ -4602,24 +4620,14 @@ if (giftVoucherApplyBtn) {
                 billItems.reduce(
                     (total, item) => {
 
-                        const qty =
-                            Number(item.qty || 0);
-
-                        const mrp =
-                            Number(item.mrp || 0);
+                        const gross = getSaleLineGross(item);
 
                         const discount =
                             Number(
                                 item.discount || 0
                             );
 
-                        const itemValue =
-                            qty *
-                            mrp *
-                            (
-                                1 -
-                                discount / 100
-                            );
+                        const itemValue = gross * (1 - discount / 100);
 
                         return total + itemValue;
 
@@ -4831,10 +4839,7 @@ function openFamilyFriendsDiscountDialog() {
                 item.qty || 0
             );
 
-        const mrp =
-            Number(
-                item.mrp || 0
-            );
+        const lineGross = getSaleLineGross(item);
 
         const currentDiscount =
             Number(
@@ -4846,15 +4851,7 @@ function openFamilyFriendsDiscountDialog() {
                 item.discount || 0
             );
 
-        const netAmount =
-            (
-                mrp *
-                qty *
-                (
-                    1 -
-                    currentFinalDiscount / 100
-                )
-            );
+        const netAmount = lineGross * (1 - currentFinalDiscount / 100);
 
 
         const row =
@@ -4880,7 +4877,7 @@ row.innerHTML = `
     </td>
 
     <td class="ff-money-cell">
-        ₹${mrp.toFixed(2)}
+        ₹${(Number(item.variable_value) === 1 ? lineGross : Number(item.mrp || 0)).toFixed(2)}
     </td>
 
     <td class="ff-center-cell">
@@ -4979,13 +4976,7 @@ if (
              * Calculate item Net using
              * F&F Final Discount.
              */
-            const updatedNet =
-                mrp *
-                qty *
-                (
-                    1 -
-                    finalDiscount / 100
-                );
+            const updatedNet = lineGross * (1 - finalDiscount / 100);
 
 
             netPreview.textContent =
@@ -5333,7 +5324,16 @@ if (!product) {
 }
 
 
-addProductToBill(product);
+            if (Number(product.variable_value) === 1) {
+                const existingItem = billItems.find(item => item.barcode === product.barcode);
+                const entry = await showVariableValueDialog(product, existingItem);
+                if (entry) {
+                    applyVariableValueEntry(product, entry, existingItem);
+                }
+            }
+            else {
+                addProductToBill(product);
+            }
 
 barcodeInput.value = "";
 
@@ -5349,6 +5349,187 @@ requestAnimationFrame(() => {
 );
 
 }
+function getSaleLineGross(item) {
+    if (Number(item && item.variable_value) === 1) {
+        return Number(item.gross_amount);
+    }
+    return Number(item && item.qty || 0) * Number(item && item.mrp || 0);
+}
+
+function validateVariableValueEntry(quantityValue, amountValue, availableStock) {
+    const quantityText = String(quantityValue ?? "").trim();
+    const amountText = String(amountValue ?? "").trim();
+    const quantity = Number(quantityText);
+    const grossAmount = Number(amountText);
+    const stock = Number(availableStock);
+
+    if (!/^\d+$/.test(quantityText) || !Number.isSafeInteger(quantity) || quantity < 1) {
+        return {
+            field: "quantity",
+            error: "Enter a whole-number Quantity from 1 to 99."
+        };
+    }
+    if (quantity > stock) {
+        return {
+            field: "quantity",
+            error: `Insufficient stock. Available stock: ${stock}.`
+        };
+    }
+    if (quantity > 99) {
+        return {
+            field: "quantity",
+            error: "Maximum Quantity is 99."
+        };
+    }
+    if (!/^\d+$/.test(amountText) || !Number.isSafeInteger(grossAmount) || grossAmount < 1 || grossAmount > 9999) {
+        return {
+            field: "amount",
+            error: "Enter a whole-rupee Total Amount from ₹1 to ₹9,999."
+        };
+    }
+    return { quantity, gross_amount: grossAmount };
+}
+
+function showVariableValueDialog(product, existingItem) {
+    const dialog = document.getElementById("variableValueDialog");
+    const qtyInput = document.getElementById("variableValueQuantity");
+    const amountInput = document.getElementById("variableValueAmount");
+    const productName = document.getElementById("variableValueProductName");
+    const availableStockNode = document.getElementById("variableValueAvailableStock");
+    const errorNode = document.getElementById("variableValueError");
+    const availableStock = Number(product.current_stock ?? product.opening_stock ?? 0);
+
+    productName.textContent = product.product_name || "Product";
+    availableStockNode.textContent = `Available stock: ${availableStock}`;
+    qtyInput.value = existingItem ? String(existingItem.qty) : "";
+    amountInput.value = existingItem ? String(existingItem.gross_amount) : "";
+    errorNode.textContent = "";
+    dialog.style.display = "flex";
+
+    return new Promise(resolve => {
+        let settled = false;
+        const submitButton = document.getElementById("variableValueConfirmBtn");
+        const cancelButton = document.getElementById("variableValueCancelBtn");
+        const finish = value => {
+            if (settled) return;
+            settled = true;
+            dialog.style.display = "none";
+            submitButton.removeEventListener("click", confirm);
+            cancelButton.removeEventListener("click", cancel);
+            dialog.removeEventListener("keydown", keyHandler);
+            resolve(value);
+        };
+        const cancel = () => finish(null);
+        const showValidationError = result => {
+            errorNode.textContent = result.error;
+            const invalidInput = result.field === "quantity" ? qtyInput : amountInput;
+            invalidInput.focus();
+            invalidInput.select();
+        };
+        const confirm = () => {
+            const result = validateVariableValueEntry(qtyInput.value, amountInput.value, availableStock);
+            if (result.error) {
+                showValidationError(result);
+                return;
+            }
+            finish(result);
+        };
+        const keyHandler = event => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                cancel();
+            }
+            else if (event.key === "Enter") {
+                event.preventDefault();
+                if (event.target === qtyInput) {
+                    const quantityResult = validateVariableValueEntry(
+                        qtyInput.value,
+                        "1",
+                        availableStock
+                    );
+                    if (quantityResult.error) {
+                        showValidationError(quantityResult);
+                        return;
+                    }
+                    errorNode.textContent = "";
+                    amountInput.focus();
+                    return;
+                }
+                confirm();
+            }
+        };
+        submitButton.addEventListener("click", confirm);
+        cancelButton.addEventListener("click", cancel);
+        dialog.addEventListener("keydown", keyHandler);
+        setTimeout(() => qtyInput.focus(), 0);
+    });
+}
+
+document.addEventListener("keydown", event => {
+    const dialog = document.getElementById("variableValueDialog");
+    if (!dialog || dialog.style.display !== "flex") return;
+    if (["F2", "F3", "F4", "F5", "F8", "F10", "F12"].includes(event.key)) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+    }
+}, true);
+
+function applyVariableValueEntry(product, entry, existingItem) {
+    const availableStock = Number(product.current_stock ?? product.opening_stock ?? 0);
+    const validated = validateVariableValueEntry(entry.quantity, entry.gross_amount, availableStock);
+    if (validated.error) {
+        showInsufficientStockDialog(product.product_name, availableStock, Number(entry.quantity) || 0);
+        return false;
+    }
+
+    if (existingItem) {
+        Object.assign(existingItem, {
+            brand: product.brand,
+            category: product.category,
+            product_name: product.product_name,
+            size: product.size,
+            colour: product.colour,
+            mrp: Number(product.mrp),
+            variable_value: 1,
+            qty: validated.quantity,
+            gross_amount: validated.gross_amount,
+            master_discount: Number(product.discount || 0),
+            gst_rate: Number(product.gst_rate || 0),
+            discount: existingItem.ff_discount === null || existingItem.ff_discount === undefined
+                ? Number(product.discount || 0)
+                : Number(existingItem.ff_discount)
+        });
+    }
+    else {
+        billItems.push({
+            barcode: product.barcode,
+            brand: product.brand,
+            category: product.category,
+            product_name: product.product_name,
+            size: product.size,
+            colour: product.colour,
+            mrp: Number(product.mrp),
+            variable_value: 1,
+            gross_amount: validated.gross_amount,
+            qty: validated.quantity,
+            master_discount: Number(product.discount || 0),
+            ff_discount: null,
+            discount: Number(product.discount || 0),
+            gst_rate: Number(product.gst_rate || 0)
+        });
+    }
+
+    renderBill();
+    loadPaymentSummary();
+    document.getElementById("cashAmount").value = 0;
+    document.getElementById("upiAmount").value = 0;
+    document.getElementById("cardAmount").value = 0;
+    calculatePayment();
+    return true;
+}
+
 function addProductToBill(product) {
 
     const availableStock =
@@ -5506,7 +5687,7 @@ if (tableHead) {
             document.createElement("tr");
 
         const gross =
-    item.qty * item.mrp;
+    saleType === "SALE" ? getSaleLineGross(item) : item.qty * item.mrp;
 
 const net =
     gross -
@@ -5855,7 +6036,7 @@ function updateSummary(){
         totalQty += qty;
 
         const lineGross =
-            qty * mrp;
+            saleType === "SALE" ? getSaleLineGross(item) : qty * mrp;
 
         const lineDiscount =
             lineGross *
@@ -7085,7 +7266,11 @@ details.items.forEach(item => {
 
     <td>${item.qty}</td>
 
-    <td>₹${Math.round(item.mrp)}</td>
+    <td>₹${Math.round(
+        Number(item.variable_value) === 1 && item.gross_amount != null
+            ? Number(item.gross_amount)
+            : Number(item.mrp) || 0
+    )}</td>
 
     <td>₹${Math.round(item.net_amount)}</td>
 `;

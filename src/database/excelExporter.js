@@ -207,7 +207,9 @@ function addBusinessCreditNoteSheets(
         (totals, row) => {
             totals.gross = addPaise(
                 totals.gross,
-                Number(row.mrp || 0) * Number(row.quantity || 0)
+                row.gross_amount == null
+                    ? Number(row.mrp || 0) * Number(row.quantity || 0)
+                    : Number(row.gross_amount)
             );
             totals.discount = addPaise(totals.discount, row.discount_amount);
             totals.net = addPaise(totals.net, row.net_amount);
@@ -253,7 +255,7 @@ function addBusinessCreditNoteSheets(
     const salesEnd = Math.max(12, 11 + salesData.length);
     const cnEnd = Math.max(12, creditNoteDataEnd);
     const rows = [
-        [12, "Gross Sales", `SUMPRODUCT('Business Report'!O12:O${salesEnd},'Business Report'!P12:P${salesEnd})`, salesTotals.gross],
+        [12, "Gross Sales", `SUM('Business Report'!Z12:Z${salesEnd})`, salesTotals.gross],
         [13, "Discount", `SUM('Business Report'!Q12:Q${salesEnd})`, salesTotals.discount],
         [14, "Net Billing", `SUM('Business Report'!V12:V${salesEnd})`, salesTotals.net],
         [18, "Returned Qty", `SUM('Returns & Credit Notes'!Q12:Q${cnEnd})`, creditTotals.qty, true],
@@ -489,7 +491,8 @@ worksheet.getCell("B9").value =
 
     { key: "cash_amount", width: 12 },
     { key: "upi_amount", width: 12 },
-    { key: "card_amount", width: 12 }
+    { key: "card_amount", width: 12 },
+    { key: "gross_amount", width: 16, hidden: true }
 
 ];
 
@@ -523,7 +526,8 @@ headerRow.values = [
 
     "Cash",
     "UPI",
-    "Card"
+    "Card",
+    "Gross Line Amount"
 ];
 
 let currentRow = 12;
@@ -585,7 +589,10 @@ worksheet.getRow(currentRow).values = [
 
     isNewBill ? row.cash_amount : "",
     isNewBill ? row.upi_amount : "",
-    isNewBill ? row.card_amount : ""
+    isNewBill ? row.card_amount : "",
+    row.gross_amount == null
+        ? Number(row.mrp || 0) * Number(row.quantity || 0)
+        : Number(row.gross_amount)
 
 ];
 

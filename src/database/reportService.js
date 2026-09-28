@@ -63,6 +63,7 @@ async function getBusinessReport(fromDate, toDate) {
 
                 bi.qty               AS quantity,
                 bi.mrp               AS mrp,
+                bi.gross_amount      AS gross_amount,
                 bi.discount_amount   AS discount_amount,
                 bi.taxable_amount    AS taxable_amount,
 
@@ -377,7 +378,7 @@ async function getProductBillSideReport(fromDate, toDate) {
                 bi.qty AS qty_sold,
 
                 ROUND(
-                    bi.mrp * bi.qty,
+                    COALESCE(bi.gross_amount, bi.mrp * bi.qty),
                     2
                 ) AS gross_sales,
 

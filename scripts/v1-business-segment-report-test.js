@@ -14,17 +14,17 @@ async function main() {
     const db = new sqlite3.Database(":memory:");
     await exec(db, `
         CREATE TABLE bills (id INTEGER PRIMARY KEY, bill_no TEXT, bill_date TEXT, total_qty INTEGER, gross_amount REAL, net_amount REAL);
-        CREATE TABLE bill_items (id INTEGER PRIMARY KEY, bill_no TEXT, barcode TEXT, qty INTEGER, mrp REAL, discount_amount REAL, taxable_amount REAL, gst_amount REAL, net_amount REAL, business_segment TEXT);
+        CREATE TABLE bill_items (id INTEGER PRIMARY KEY, bill_no TEXT, barcode TEXT, qty INTEGER, mrp REAL, gross_amount REAL, discount_amount REAL, taxable_amount REAL, gst_amount REAL, net_amount REAL, business_segment TEXT);
         CREATE TABLE products (barcode TEXT PRIMARY KEY, business_segment TEXT);
         CREATE TABLE returns (id INTEGER PRIMARY KEY, credit_note_no TEXT, business_date TEXT, accounting_status TEXT, accounting_snapshot_version INTEGER);
         CREATE TABLE return_items (id INTEGER PRIMARY KEY, return_id INTEGER, original_bill_item_id INTEGER, barcode TEXT, quantity INTEGER, net_reversal REAL);
     `);
     const bill = async (id, no, items, date = "2026-09-15") => {
         const totalQty = items.reduce((n, i) => n + i.qty, 0);
-        const gross = items.reduce((n, i) => n + i.mrp * i.qty, 0);
+        const gross = items.reduce((n, i) => n + (i.gross == null ? i.mrp * i.qty : i.gross), 0);
         const net = items.reduce((n, i) => n + i.net, 0);
         await run(db, "INSERT INTO bills VALUES (?, ?, ?, ?, ?, ?)", [id, no, date, totalQty, gross, net]);
-        for (const i of items) await run(db, "INSERT INTO bill_items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [i.id, no, i.barcode || `B${i.id}`, i.qty, i.mrp, i.discount || 0, i.taxable || i.net, i.gst || 0, i.net, i.segment]);
+        for (const i of items) await run(db, "INSERT INTO bill_items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [i.id, no, i.barcode || `B${i.id}`, i.qty, i.mrp, i.gross ?? null, i.discount || 0, i.taxable || i.net, i.gst || 0, i.net, i.segment]);
     };
     await bill(1, "S1", [{ id: 1, qty: 2, mrp: 100, net: 190, segment: "KL" }]);
     await bill(2, "S2", [{ id: 2, qty: 3, mrp: 100, net: 300, segment: "MENS" }]);
@@ -85,6 +85,11 @@ async function main() {
     assert.strictEqual(returnOnly.mensWear.upt, 0);
     assert(Number.isFinite(returnOnly.mensWear.atv));
     assert(Number.isFinite(returnOnly.mensWear.upt));
+    await bill(8, "VV1", [{ id: 11, qty: 3, mrp: 1, gross: 800, net: 720, discount: 80, segment: "KL" }], "2026-09-19");
+    const variableGross = await service.calculateBusinessSegmentReport("2026-09-19");
+    assert.strictEqual(variableGross.kairaLuxe.grossSales, 800);
+    assert.strictEqual(variableGross.kairaLuxe.discountAmount, 80);
+    assert.strictEqual(variableGross.kairaLuxe.netBilling, 720);
     await new Promise((resolve, reject) => db.close(error => error ? reject(error) : resolve()));
     console.log("Business Segment Stage 2 reporting tests: PASS");
 }

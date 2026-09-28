@@ -832,11 +832,7 @@ app.whenReady().then(async () => {
 
 ipcMain.handle(
     'select-excel-file',
-    async (_event, attemptId) => {
-
-        if (!Number.isSafeInteger(attemptId) || attemptId <= 0) {
-            return { success: false, error: "Day Closing attempt identifier is invalid." };
-        }
+    async () => {
 
         const result =
             await dialog.showOpenDialog({
@@ -861,7 +857,7 @@ ipcMain.handle(
 
         }
 
-        return result.filePaths[0];
+        return result.filePaths[0] || null;
 
     }
 );
