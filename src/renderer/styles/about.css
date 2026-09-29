@@ -104,9 +104,23 @@
 
     overflow-y:auto;
 
+    overflow-x:hidden;
+
     padding-right:15px;
 
     line-height:1.8;
+
+    font-family:inherit;
+
+    font-size:16px;
+
+    white-space:pre-wrap;
+
+    overflow-wrap:anywhere;
+
+    user-select:text;
+
+    box-sizing:border-box;
 
 }
 
@@ -169,4 +183,3 @@
     color:#333;
 
 }
-

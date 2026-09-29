@@ -20,6 +20,11 @@ contextBridge.exposeInMainWorld(
                     "get-app-info"
                 ),
 
+            getEulaText: () =>
+                ipcRenderer.invoke(
+                    "legal:get-eula-text"
+                ),
+
             searchProducts: (keyword, options) =>
     ipcRenderer.invoke(
         "search-products",

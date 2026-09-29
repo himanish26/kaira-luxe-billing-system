@@ -31,6 +31,120 @@ let presentationResolve = null;
 let presentationDone = Promise.resolve();
 const resolvedResults = new Map();
 
+function measureStartupSplashRequiredSize() {
+    const source = document.querySelector(".splash-shell");
+    if (!source) throw new Error("Startup splash composition is missing.");
+
+    const clone = source.cloneNode(true);
+    Object.assign(clone.style, {
+        position: "fixed",
+        left: "-10000px",
+        top: "0",
+        width: "680px",
+        height: "auto",
+        minHeight: "0",
+        maxHeight: "none",
+        margin: "0",
+        flex: "none",
+        overflow: "visible",
+        visibility: "hidden",
+        pointerEvents: "none"
+    });
+
+    const diagnostics = clone.querySelector(".diagnostics");
+    Object.assign(diagnostics.style, { flex: "0 0 auto", overflow: "visible" });
+
+    const actions = clone.querySelector("#actions");
+    const retry = clone.querySelector("#retryBtn");
+    const exit = clone.querySelector("#exitBtn");
+    const conditionalActions = [
+        clone.querySelector("#securitySetupBtn"),
+        clone.querySelector("#reopenBtn"),
+        clone.querySelector("#closePreviousBtn")
+    ];
+    const panels = [
+        clone.querySelector("#reopenPanel"),
+        clone.querySelector("#closePreviousPanel")
+    ];
+
+    document.body.appendChild(clone);
+
+    let requiredWidth = 680;
+    let requiredHeight = 0;
+    const measureComposition = () => {
+        const rect = clone.getBoundingClientRect();
+        requiredWidth = Math.max(requiredWidth, rect.width, clone.scrollWidth);
+        requiredHeight = Math.max(requiredHeight, rect.height, clone.scrollHeight);
+        const actionOverflow = Math.max(0, actions.scrollWidth - actions.clientWidth);
+        requiredWidth = Math.max(requiredWidth, rect.width + actionOverflow);
+    };
+
+    try {
+        actions.hidden = false;
+        retry.hidden = false;
+        exit.hidden = false;
+        conditionalActions.forEach(button => { button.hidden = true; });
+        measureComposition();
+
+        for (const button of conditionalActions) {
+            button.hidden = false;
+            measureComposition();
+            button.hidden = true;
+        }
+
+        for (const result of resolvedResults.values()) {
+            const row = clone.querySelector(`[data-check="${result.id}"]`);
+            if (!row) continue;
+            row.dataset.state = result.state;
+            row.classList.remove("active");
+            row.querySelector("strong").textContent = String(result.message || "Check unavailable").toUpperCase();
+            measureComposition();
+        }
+
+        const terminalStates = [
+            ["INITIATING SYSTEM DIAGNOSTICS", "READINESS RESULTS PENDING", "DASHBOARD HANDSHAKE ON STANDBY_"],
+            ["CRITICAL READINESS CONDITION DETECTED", "OPERATIONAL DASHBOARD REMAINS ISOLATED", "OPERATOR RECOVERY REQUIRED"],
+            ["INITIALIZING OPERATIONAL SERVICES", "VALIDATING BUSINESS DATE / SYNCHRONIZING SERVICES", "LOADING DASHBOARD CORE · RENDERER HANDSHAKE PENDING"]
+        ];
+        for (const lines of terminalStates) {
+            lines.forEach((line, index) => {
+                clone.querySelector(`#terminalLine${index + 1}`).textContent = `> ${line}`;
+            });
+            measureComposition();
+        }
+
+        for (const panel of panels) {
+            const computed = getComputedStyle(panel);
+            const top = Number.parseFloat(computed.top) || 0;
+            const bottom = Number.parseFloat(computed.bottom) || 0;
+            const left = Number.parseFloat(computed.left) || 0;
+            const right = Number.parseFloat(computed.right) || 0;
+            panel.hidden = false;
+            panel.style.height = "auto";
+            panel.style.bottom = "auto";
+            const panelRect = panel.getBoundingClientRect();
+            const panelHeight = Math.max(panelRect.height, panel.scrollHeight);
+            requiredHeight = Math.max(requiredHeight, top + panelHeight + bottom);
+            requiredWidth = Math.max(requiredWidth, left + Math.max(panelRect.width, panel.scrollWidth) + right);
+            panel.hidden = true;
+        }
+    }
+    finally {
+        clone.remove();
+    }
+
+    return {
+        width: Math.ceil(requiredWidth),
+        height: Math.ceil(requiredHeight)
+    };
+}
+
+window.measureStartupSplashRequiredSize = measureStartupSplashRequiredSize;
+
+function requestSplashFit() {
+    window.startupAPI.fitSplash().catch(() => {});
+}
+
 function previousBusinessDateDisplay(value) {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
     if (!match) return value || "—";
@@ -56,9 +170,13 @@ function activateCurrentRow() {
 
 function setCheck(result) {
     const row = checkRow(result.id);
+    const previousHeight = row.getBoundingClientRect().height;
     row.dataset.state = result.state;
     row.classList.remove("active");
     row.querySelector("strong").textContent = String(result.message || "Check unavailable").toUpperCase();
+    requestAnimationFrame(() => {
+        if (row.getBoundingClientRect().height > previousHeight + 0.5) requestSplashFit();
+    });
 }
 
 function advancePresentation() {
@@ -184,6 +302,7 @@ async function runChecks() {
         return result;
     }));
 
+    requestSplashFit();
     advancePresentation();
     await presentationDone;
 
@@ -221,6 +340,7 @@ if (failed) {
         }
         document.getElementById("securitySetupBtn").hidden = !securityIncomplete;
         if (securityIncomplete) await openSecuritySetup();
+        requestSplashFit();
         return;
     }
 
@@ -231,6 +351,7 @@ if (failed) {
     ]);
     finalStatus.className = "final-status ready";
     finalStatus.querySelector("span").textContent = "SYSTEM READY";
+    requestSplashFit();
     setTimeout(() => {
     window.startupAPI.ready();
 }, 1200);
@@ -285,6 +406,7 @@ document.getElementById("confirmReopenBtn").addEventListener("click", async () =
     document.getElementById("reopenPin").value = "";
     if (!result.success) {
         error.textContent = result.error || result.message || "Day Re-open failed.";
+        requestSplashFit();
         return;
     }
     error.textContent = "";
@@ -319,7 +441,7 @@ async function closePreviousDay() {
     if (!/^\d{4}$/.test(pinInput.value)) { error.textContent = "Enter a valid 4-digit Manager PIN."; return; }
     const result = await window.startupAPI.closePreviousDay({ businessDate: document.getElementById("closePreviousBtn").dataset.businessDate, pin: pinInput.value });
     pinInput.value = "";
-    if (!result.success) { error.textContent = result.error || result.message || "Previous business day could not be closed."; return; }
+    if (!result.success) { error.textContent = result.error || result.message || "Previous business day could not be closed."; requestSplashFit(); return; }
     await runChecks();
 }
 document.getElementById("confirmPreviousBtn").addEventListener("click", closePreviousDay);

@@ -8,6 +8,7 @@ const {
 
     dialog,
     safeStorage,
+    screen,
 
 } = require("electron");
 
@@ -86,6 +87,7 @@ app.on("second-instance", () => {
 });
 
 const path = require("path");
+const { calculateStartupSplashBounds } = require("./startupSplashGeometry");
 
 if (!app.isPackaged) {
     require("dotenv").config({
@@ -96,6 +98,7 @@ if (!app.isPackaged) {
 const fs = require("fs");
 const os = require("os");
 const technicalLogger = require("../services/technicalLogger");
+const { readAuthoritativeEula } = require("../services/eulaService");
 
 technicalLogger.initialize({
     logDirectory: path.join(app.getPath("userData"), "logs"),
@@ -653,9 +656,9 @@ function createWindow() {
 
 function createSplashWindow() {
     splashWindow = new BrowserWindow({
+        // Hidden staging bounds; measured work-area bounds are applied before first show.
         width: 680,
         height: 590,
-        center: true,
         frame: false,
         resizable: false,
         maximizable: false,
@@ -668,15 +671,34 @@ function createSplashWindow() {
     });
     splashWindow.loadFile(path.join(__dirname, "../renderer/startupSplash.html"));
     attachWindowDiagnostics(splashWindow, "STARTUP_SPLASH");
-    splashWindow.once("ready-to-show", () => {
-    splashShownAt = Date.now();
-    splashWindow.show();
-
-    splashWindow.webContents.send(
-        "startup:splash-shown"
-    );
-});
+    splashWindow.once("ready-to-show", async () => {
+        const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+        await fitSplashToWorkArea(display);
+        splashShownAt = Date.now();
+        splashWindow.show();
+        splashWindow.webContents.send("startup:splash-shown");
+    });
     splashWindow.on("closed", () => { splashWindow = null; });
+}
+
+async function fitSplashToWorkArea(display = null) {
+    if (!splashWindow || splashWindow.isDestroyed()) return null;
+
+    const requiredSize = await splashWindow.webContents.executeJavaScript(
+        "window.measureStartupSplashRequiredSize()",
+        true
+    );
+    const targetDisplay = display || screen.getDisplayMatching(splashWindow.getBounds());
+    const geometry = calculateStartupSplashBounds(requiredSize, targetDisplay.workArea);
+
+    splashWindow.webContents.setZoomFactor(geometry.scale);
+    splashWindow.setBounds({
+        x: geometry.x,
+        y: geometry.y,
+        width: geometry.width,
+        height: geometry.height
+    }, false);
+    return geometry;
 }
 
 let integrationOutboxTimer = null;
@@ -903,6 +925,13 @@ ipcMain.handle("startup:get-metadata", () => ({
     developer: "Himanish Patnaik",
     copyright: "© 2026 Himanish Patnaik"
 }));
+
+ipcMain.handle("startup:fit-splash", async event => {
+    if (!splashWindow || event.sender !== splashWindow.webContents) {
+        return { success: false, error: "Startup splash geometry request rejected." };
+    }
+    return fitSplashToWorkArea();
+});
 
 ipcMain.handle("startup:run-check", async (event, checkName) =>
     getStartupCheck(checkName, {
@@ -3317,6 +3346,19 @@ ipcMain.handle("day-closing-history:print", async (event, snapshotId) => {
     const delivery = job ? await dayClosingDeliveryCoordinator.observeForPrint(job.id) : null;
     await printDayClosingReceipt(dayClosingReceiptWithDelivery(snapshot, delivery));
     return { success: true };
+});
+
+ipcMain.handle("legal:get-eula-text", async event => {
+
+    if (!mainWindow || event.sender !== mainWindow.webContents) {
+        return { success: false, message: "The license agreement is unavailable. Please try again later." };
+    }
+
+    return readAuthoritativeEula({
+        isPackaged: app.isPackaged,
+        appPath: app.getAppPath(),
+        mainDirectory: __dirname
+    });
 });
 
 ipcMain.handle(

@@ -1,183 +1,158 @@
 KAIRA LUXE BILLING SYSTEM
-END USER LICENSE AGREEMENT (EULA)
+END USER LICENSE AGREEMENT
 
-Version 1.0.0
-Effective: September 2026
+Copyright © 2026 Himanish Patnaik. All Rights Reserved.
 
-Copyright (c) 2026 Himanish Patnaik
-All Rights Reserved.
+1. AGREEMENT AND ACCEPTANCE
 
-PLEASE READ THIS END USER LICENSE AGREEMENT CAREFULLY BEFORE INSTALLING OR
-USING THE SOFTWARE. BY SELECTING "I ACCEPT" OR BY INSTALLING, ACCESSING, OR
-USING THE SOFTWARE, YOU AGREE TO BE BOUND BY THIS AGREEMENT. IF YOU DO NOT
-AGREE, DO NOT INSTALL OR USE THE SOFTWARE.
+This End User License Agreement ("Agreement") governs access to and use of the Kaira Luxe Billing System ("KLBS" or the "Software"). By selecting an acceptance option during installation, or by installing, accessing, or using the Software, the Licensee accepts this Agreement to the extent permitted by applicable law. If the Licensee does not agree, do not install, access, or use the Software. Where applicable law requires a different method of acceptance, that law governs.
 
-1. SOFTWARE AND LICENSOR
+2. DEFINITIONS
 
-This End User License Agreement ("Agreement") governs your use of the KAIRA
-LUXE Billing System Version 1.0.0 ("Software"). The Software is provided by
-Himanish Patnaik ("Licensor").
+"Licensor" means Himanish Patnaik.
 
-2. LICENSE GRANT
+"Licensee" or "User" means the person or business authorized to install or use the Software and the personnel it permits to use the Software on its behalf.
 
-Subject to this Agreement and any applicable commercial terms, Licensor grants
-you a limited, non-exclusive, non-transferable, non-sublicensable license to
-install and use the Software for your internal business operations. Unless
-Licensor expressly permits otherwise in writing, the default authorization is
-one authorized production device.
+"Authorized Device" means the single production device authorized for the Licensee's use under the applicable license authorization or other written terms supplied by the Licensor.
 
-3. AUTHORIZED USE
+"Documentation" means user instructions and other materials supplied by or on behalf of the Licensor for the Software.
 
-You may use the Software for lawful retail billing, inventory, customer,
-reporting, backup, and related business activities for which it is designed.
-You must use the Software in accordance with this Agreement, the applicable
-license authorization, and all applicable laws and regulations.
+"Third-Party Components" means software or services owned or provided by parties other than the Licensor, including open-source software incorporated into or used with KLBS.
 
-4. LICENSE RESTRICTIONS
+"Business Data" means business, customer, transaction, inventory, billing, reporting, and other information entered into or generated through the Licensee's operation of KLBS.
 
-You must not, and must not permit another person to:
+3. LICENCE GRANT
 
-  a. copy, reproduce, or make the Software available except as authorized by
-     this Agreement or applicable law;
-  b. install or use the Software on multiple devices without authorization;
-  c. resell, rent, lease, lend, sublicense, distribute, or commercially exploit
-     the Software except as expressly authorized in writing;
-  d. modify the Software or create derivative works without permission;
-  e. reverse engineer, decompile, or disassemble the Software, except to the
-     extent that applicable law does not permit such restriction;
-  f. bypass, disable, defeat, or interfere with security, licensing, or
-     authorization controls; or
-  g. use the Software for unlawful, fraudulent, or harmful purposes.
+Subject to this Agreement and any applicable written license authorization, the Licensor grants the Licensee a limited, non-exclusive, non-transferable license to install and use the Software on the Authorized Device for the Licensee's authorized internal business operations. This Agreement does not transfer ownership of the Software or any intellectual-property rights. The Licensee receives only the rights expressly granted here.
 
-5. INTELLECTUAL PROPERTY AND OWNERSHIP
+4. AUTHORIZED DEVICE AND INSTALLATION SCOPE
 
-The Software, including its code, design, documentation, and associated
-materials, is protected by applicable intellectual-property laws. The Software
-is licensed, not sold. All rights, title, and interest not expressly granted
-under this Agreement remain with Himanish Patnaik.
+Unless the Licensor expressly authorizes otherwise in writing, the license is for one Authorized Device used for production operations. The Licensee must obtain authorization before deploying KLBS for production use on an additional device. This limitation does not prohibit storage or backup copies that are permitted under Section 7 or applicable law. This Agreement does not require or represent that KLBS uses an activation server, license server, or other activation technology.
 
-6. BUSINESS DATA
+5. OWNERSHIP AND INTELLECTUAL PROPERTY
 
-You retain responsibility for the business data entered into or generated by
-the Software. You are responsible for its accuracy, lawful collection and use,
-access permissions, retention, and compliance with applicable tax, accounting,
-privacy, and other requirements.
+KLBS and its proprietary source code, object code, design, Documentation, names, and associated proprietary materials remain owned by Himanish Patnaik or the applicable rights holder. All rights not expressly granted are reserved. Third-Party Components remain owned by their respective rights holders and are subject to Section 8 and their applicable licenses. The Licensor claims no ownership of the Licensee's Business Data.
 
-7. BACKUPS AND DATA PROTECTION
+6. RESTRICTIONS
 
-You are responsible for maintaining suitable, current, and protected backups,
-including testing restoration when appropriate. Backup and recovery features
-do not replace an independent business continuity plan. Protect backup files,
-devices, credentials, and any synchronized or third-party storage locations.
+Except to the extent a restriction is prohibited by applicable law or a right cannot lawfully be excluded or restricted, the Licensee must not, and must not authorize another person to:
 
-8. INTERNET AND THIRD-PARTY SERVICES
+(a) copy, reproduce, publish, distribute, or make the Software available to others except as expressly permitted by this Agreement or applicable law;
+(b) resell, rent, lease, lend, sublicense, assign, transfer, or commercially exploit the Software or this license without the Licensor's prior written authorization;
+(c) deploy or use the Software for production operations on more than the Authorized Device without authorization;
+(d) modify the Software, create derivative works, or exploit a modification or derivative work, except where permitted by applicable law or separately authorized in writing; or
+(e) reverse engineer, decompile, or disassemble the Software, or observe, study, or test its operation, except to the extent applicable law permits or protects that act, including any mandatory rights of a lawful possessor of a computer program.
 
-Core local features may operate without continuous internet access. Configured
-integrations, synchronization, updates, downloads, and other third-party
-services may require internet access. Licensor does not control third-party
-availability, security, terms, or data handling. Your use of third-party
-services is subject to their terms and policies.
+Nothing in this Agreement excludes, restricts, or modifies a statutory right or exception concerning a computer program, interoperability, copying, observation, testing, correction of errors, or other conduct that applicable law does not permit the Licensor to restrict.
 
-9. USER CREDENTIALS AND SECURITY
+7. PERMITTED BACKUP AND TECHNICAL COPIES
 
-You are responsible for safeguarding administrator, manager, master-security,
-and other credentials, and for limiting access to authorized personnel. Do not
-share credentials or attempt to bypass authorization controls. Notify Licensor
-through the support channel provided with your license, if any, of suspected
-misuse or compromise.
+The Licensee may make a reasonable backup or archival copy of the Software where that copy is permitted by applicable law or expressly authorized in writing, provided that it is used only to protect or support the licensed operation and is not used to expand production deployment or distributed to an unauthorized person. Any notices or restrictions required by applicable law or a Third-Party Component license must be preserved.
 
-10. SYSTEM REQUIREMENTS
+Software backup copies are distinct from Business Data backups. This Section does not replace or reduce the Licensee's responsibilities for Business Data described in Sections 9 through 12.
 
-The Software is intended for Windows 10 and Windows 11 on x64 hardware using
-the supplied Windows installer. You are responsible for compatible hardware,
-operating-system permissions, storage, printer drivers, network access where
-needed, and any third-party services used with the Software.
+8. THIRD-PARTY AND OPEN-SOURCE COMPONENTS
 
-11. UPDATES AND UPGRADES
+KLBS may include or interact with Third-Party Components. Each component remains subject to its applicable license and terms. To the extent an applicable third-party or open-source license grants rights that differ from this Agreement, that license governs the relevant component and those rights are not removed or restricted by this Agreement. This Agreement does not claim ownership of, or impose KLBS proprietary restrictions on, Third-Party Components contrary to their applicable licenses. Third-party services are addressed in Section 15.
 
-Updates and upgrades may be provided subject to applicable license terms.
-Compatibility, backup, and installation requirements may apply. You are
-responsible for maintaining appropriate backups before an upgrade and for
-reviewing release information before deployment.
+9. BUSINESS DATA OWNERSHIP
 
-12. TAX, ACCOUNTING AND BUSINESS RESPONSIBILITY
+As between the Licensor and the Licensee, the Licensee or its business retains its rights in Business Data, subject to applicable law and the rights of customers and other third parties. Nothing in this Agreement transfers ownership of Business Data to the Licensor. The Licensee is responsible for determining its authority to enter, use, disclose, retain, and export Business Data.
 
-The Software is a business tool and does not constitute tax, accounting, legal,
-or professional advice. You are solely responsible for reviewing calculations,
-invoices, tax treatment, records, reports, payment decisions, and compliance
-with laws applicable to your business and jurisdiction.
+10. DATA STORAGE
 
-13. SOFTWARE PROVIDED "AS IS"
+In the present application architecture, KLBS stores operational information locally, including in a SQLite database. Depending on the features configured and used, information may also be processed or transmitted through network-connected functionality or third-party services. Storage devices, operating systems, software, networks, and services may fail; the Software does not guarantee that all data will always remain available, accurate, or intact. The Licensee should use the application's supported workflows and protect access to its devices and data.
 
-To the maximum extent permitted by applicable law, the Software is provided
-"AS IS" and "AS AVAILABLE," with all faults, and without a promise that every
-feature will meet every business requirement or that operation will be
-uninterrupted or error-free.
+11. BACKUP RESPONSIBILITY
 
-14. DISCLAIMER OF WARRANTIES
+The Licensee remains responsible for maintaining appropriate, current, protected backups of Business Data and for retaining them as required for its business. The Licensee should verify that backups can be read and restored and maintain suitable recovery procedures. KLBS includes backup and restore functionality, but its availability or use does not replace the Licensee's responsibility. Selecting a local, synchronized, Dropbox, or other destination does not guarantee that a backup completed, synchronized, is intact, or can be restored. KLBS does not provide cloud storage merely because a third-party destination is configured.
 
-To the maximum extent permitted by applicable law, Licensor disclaims all
-express, implied, and statutory warranties, including warranties of
-merchantability, fitness for a particular purpose, title, non-infringement,
-accuracy, availability, and suitability. Nothing in this Agreement excludes or
-limits rights that cannot lawfully be excluded or limited.
+12. DATA LOSS, CORRUPTION, AND RECOVERY
 
-15. LIMITATION OF LIABILITY
+Software defects, hardware or storage failure, operating-system changes, user actions, power interruption, network conditions, and third-party services can result in unavailable, lost, or corrupted data. The Licensee is responsible for checking important records and verifying backup and recovery arrangements. Any responsibility or liability concerning data loss or corruption remains subject to the applicable law and the limitations and exceptions in Sections 22 and 23.
 
-To the maximum extent permitted by applicable law, Licensor will not be liable
-for indirect, incidental, special, consequential, exemplary, or punitive
-damages, or for loss of profits, revenue, goodwill, business opportunity, or
-data, arising from or related to the Software or this Agreement. Nothing in
-this Agreement excludes or limits liability that cannot lawfully be excluded
-or limited. You remain responsible for backups and verification of business
-records.
+13. PRIVACY AND PERSONAL DATA
 
-16. TERMINATION
+The Licensee is responsible for ensuring that Business Data, including personal data, is collected, entered, accessed, used, disclosed, and retained lawfully and for meeting the data-protection, privacy, notice, consent, security, and other obligations applicable to its business. KLBS may support configured network features, including Remote Dashboard or notifications, that can transmit limited information needed for those features. The Licensor does not represent that the existence or use of KLBS automatically makes the Licensee compliant with any privacy law. This Agreement is not a separate privacy policy.
 
-This license terminates if you materially breach this Agreement or if the
-applicable license authorization ends. Upon termination, you must stop using
-the Software and remove it from your devices, subject to records-retention
-requirements and applicable law. Sections that by their nature should survive
-termination will survive.
+14. INTERNET AND NETWORK FUNCTIONS
 
-17. TRANSFER
+Core local functions may operate without continuous internet access. Some functions, including configured integrations, Remote Dashboard, notifications, synchronization, or update-related activity, may require a network or internet connection. Their operation may depend on connectivity and related services. A loss or interruption of connectivity may make those functions unavailable and is not, by itself, a breach of a warranty that the Software will operate continuously.
 
-You may not transfer, assign, or delegate this license or the Software to
-another person or device without Licensor's prior written permission, except
-where such restriction is not permitted by applicable law.
+15. THIRD-PARTY SERVICES
 
-18. SEVERABILITY
+KLBS may rely on or interoperate with services and software outside the Licensor's control, such as operating-system facilities, networks, browsers, notification infrastructure, backup destinations, and other configured integrations. Those services are controlled by their respective providers and may have separate terms, privacy practices, security measures, availability, or fees. The Licensor does not own or control those services and does not guarantee their availability or operation. The Licensee's use of them is subject to the applicable provider terms.
 
-If any provision is held invalid or unenforceable, it will be enforced to the
-maximum extent permitted and the remaining provisions will remain in effect.
+16. REMOTE DASHBOARD AND NOTIFICATIONS
 
-19. NO WAIVER
+Where configured and available, Remote Dashboard and notification features can provide remote visibility or send event-related notifications using network and third-party infrastructure. Delivery may be delayed, interrupted, incomplete, unavailable, or not received, and historical information may not remain available indefinitely. These features do not guarantee instantaneous delivery, uninterrupted access, receipt by a particular person, or permanent history. The Licensee should use KLBS and other appropriate records as the operational source for business decisions.
 
-A failure or delay in enforcing any provision is not a waiver of that provision
-or of any other right.
+17. UPDATES, UPGRADES, AND CHANGES
 
-20. ENTIRE AGREEMENT
+The Licensor may make updates, upgrades, or changes available but does not promise that any particular update or upgrade will be provided. Compatibility, backup, installation, or other requirements may apply. Unless an update or upgrade is accompanied by a replacement EULA that is lawfully accepted, this Agreement continues to govern the Software as updated or upgraded. The Licensee should review release information and maintain appropriate backups before applying an update or upgrade.
 
-This Agreement, together with any applicable written license authorization,
-constitutes the entire agreement concerning the Software and supersedes prior
-understandings concerning its subject matter. Any amendment must be in
-writing, except where applicable law provides otherwise.
+18. COMPATIBILITY AND SYSTEM REQUIREMENTS
 
-21. GOVERNING LAW AND JURISDICTION
+The Software is intended for the operating-system environments identified in the Documentation or release materials supplied for the applicable release. Compatibility can depend on operating-system version and updates, hardware, display settings, printers and drivers, storage, permissions, networks, and third-party services. The Licensor does not guarantee perpetual compatibility with every operating-system version, device, printer, display, operating-system update, network, or third-party service. This section does not alter a supported environment expressly documented for a release.
 
-This Agreement is governed by the laws of India, without regard to conflict of
-law rules. Subject to applicable law, the courts located in Bhubaneswar,
-Odisha, India shall have jurisdiction over disputes arising from or related to
-this Agreement or the Software.
+19. USER AND OPERATOR RESPONSIBILITY
 
-22. COPYRIGHT NOTICE
+The Licensee is responsible for the accuracy and review of information entered into or produced by KLBS; assigning access only to authorized personnel; safeguarding credentials, PINs, devices, and accounts; maintaining appropriate device and operating procedures; and reviewing bills, reports, exports, and other records before relying on them. The Licensee is responsible for its business operations and decisions.
 
-Copyright (c) 2026 Himanish Patnaik
-All Rights Reserved.
+20. TAX, ACCOUNTING, AND REGULATORY RESPONSIBILITY
 
-23. ACCEPTANCE
+KLBS is a business tool that assists with billing, records, and related operations. It does not provide legal, tax, accounting, or other professional advice and is not represented by this Agreement as government-approved or certified for a particular statutory purpose. The Licensee is responsible for determining and meeting the tax, invoicing, accounting, recordkeeping, consumer, privacy, and other legal requirements applicable to its business and jurisdiction, including review of calculations and filings.
 
-By selecting "I Accept" in the installer or by installing, accessing, or using
-the Software, you acknowledge that you have read, understood, and accepted
-this Agreement. If you do not accept it, select the option to decline and do
-not install or use the Software.
+21. SECURITY
+
+KLBS may include software and security measures intended to support controlled operation. No software or measure can guarantee protection against every unauthorized access, security incident, loss, or attack. The Licensee remains responsible for securing its devices, operating systems, accounts, networks, credentials, and access permissions and for responding appropriately to suspected compromise.
+
+22. WARRANTY DISCLAIMER
+
+To the maximum extent permitted by applicable law, the Software and Documentation are provided "AS IS" and "AS AVAILABLE," with all faults. The Licensor disclaims warranties, conditions, and representations, whether express, implied, or statutory, including those of merchantability, fitness for a particular purpose, title, non-infringement, accuracy, availability, and uninterrupted or error-free operation. No statement in this Agreement excludes, restricts, or modifies a warranty, right, or remedy that cannot lawfully be excluded, restricted, or modified.
+
+23. LIMITATION OF LIABILITY
+
+To the maximum extent permitted by applicable law, the Licensor will not be liable for indirect, incidental, special, exemplary, punitive, or consequential loss or damage, or for loss of profits, revenue, anticipated savings, business opportunity, goodwill, business interruption, or loss, unavailability, or corruption of data, arising out of or related to the Software, this Agreement, or the inability to use the Software. To the maximum extent permitted by applicable law, the Licensor is also not responsible for failures or acts of third-party services outside the Licensor's control. Nothing in this Agreement excludes, restricts, or modifies liability that cannot lawfully be excluded, restricted, or modified, including any mandatory rights or remedies available to the Licensee. The Licensee's backup and record-verification responsibilities remain as stated in this Agreement.
+
+24. TERMINATION
+
+The Licensor may terminate the license by written notice if the Licensee materially breaches this Agreement and, where the breach can be remedied, fails to remedy it within a reasonable period after receiving notice. The license may also be terminated for unauthorized use where permitted by applicable law. On termination, the Licensee must cease use of the Software and remove or destroy its copies, except for copies the Licensee is entitled or required to retain under applicable law. Termination does not transfer or extinguish the Licensee's rights in Business Data. The Licensee should preserve or export its Business Data before ceasing use where lawful and practicable. Provisions that by their nature should continue after termination remain effective.
+
+25. TRANSFER AND ASSIGNMENT
+
+The Licensee may not assign or transfer this license or the Software to another person or device without the Licensor's prior written consent, except to the extent such restriction is not permitted by applicable law. This section does not restrict a transfer or other right that applicable law makes non-excludable.
+
+26. SEVERABILITY
+
+If a provision of this Agreement is held invalid or unenforceable, it will be applied to the maximum extent permitted by law, and the remaining provisions will continue in effect. A provision will be limited or severed only to the extent necessary to give effect to this section.
+
+27. NO WAIVER
+
+A failure or delay by either party to exercise a right under this Agreement does not waive that right. A waiver is effective only to the extent stated and permitted by applicable law.
+
+28. ENTIRE AGREEMENT
+
+This Agreement is the software licence agreement for the Software it accompanies and governs the rights expressly addressed here, subject to any separate written agreement concerning the Software that is expressly executed by the Licensor and Licensee. It does not supersede unrelated commercial documents, invoices, privacy notices, or applicable Third-Party Component licenses. If an expressly executed separate written agreement conflicts with this Agreement, that agreement governs to the extent it expressly addresses the conflict.
+
+29. GOVERNING LAW AND JURISDICTION
+
+This Agreement is governed by the laws of India. Subject to applicable law, the courts located in Bhubaneswar, Odisha, India shall have jurisdiction over disputes arising out of or relating to this Agreement or the Software.
+
+30. STATUTORY RIGHTS AND APPLICABLE LAW
+
+Nothing in this Agreement excludes, restricts, or modifies a right, remedy, warranty, condition, exception, or liability that applicable law does not permit to be excluded, restricted, or modified. This Agreement is subject to mandatory applicable law, including statutory rights applicable to lawful possessors of computer programs and applicable Indian law governing contracts, electronic acceptance, copyright, and data protection and privacy.
+
+31. AMENDMENTS AND REPLACEMENT AGREEMENT
+
+A change to this Agreement must be made in writing and accepted as required by applicable law. A later release or update may be accompanied by a replacement EULA. A replacement EULA applies to the relevant release or update only upon the Licensee's acceptance where required by applicable law. No amendment is retroactive unless the parties lawfully agree otherwise.
+
+32. VERSION APPLICABILITY
+
+This Agreement applies to the version of KLBS supplied with or made subject to this Agreement and to subsequent updates or upgrades, unless a replacement EULA is supplied and lawfully accepted for a later release or update. A software version number or release label does not itself change this Agreement.
+
+33. LICENSOR IDENTIFICATION AND COPYRIGHT
+
+Licensor: Himanish Patnaik.
+
+Copyright © Himanish Patnaik. All Rights Reserved, except for Third-Party Components and materials to which other rights apply. All rights in KLBS not expressly granted by this Agreement are reserved to the applicable rights holder.

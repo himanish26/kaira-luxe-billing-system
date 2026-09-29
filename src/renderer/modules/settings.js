@@ -131,7 +131,7 @@ async function showAboutPage() {
    EULA
 ===================================== */
 
-function showEULAPage() {
+async function showEULAPage() {
 
     renderSettingsPage({
 
@@ -148,95 +148,23 @@ function showEULAPage() {
         content: `
 
 <div class="eula-card">
-
-    <div class="eula-content">
-
-        <h2>KAIRA LUXE BILLING SYSTEM</h2>
-
-        <p>
-
-            This software is licensed, not sold.
-
-            This copy of the Kaira Luxe Billing System is licensed
-            for use on a single authorized device only.
-
-        </p>
-
-        <h3>1. License Grant</h3>
-
-        <p>
-
-            The Licensor grants the Licensee a
-            non-transferable, non-exclusive license
-            to use this software for internal
-            business operations.
-
-        </p>
-
-        <h3>2. Restrictions</h3>
-
-        <ul>
-
-            <li>Do not copy the software.</li>
-
-            <li>Do not modify or reverse engineer the software.</li>
-
-            <li>Do not distribute or resell the software.</li>
-
-            <li>Do not install on multiple systems without permission.</li>
-
-        </ul>
-
-        <h3>3. Ownership</h3>
-
-        <p>
-
-            All intellectual property rights remain
-            the exclusive property of
-            Himanish Patnaik.
-
-        </p>
-
-        <h3>4. Warranty</h3>
-
-        <p>
-
-            This software is provided "AS IS"
-            without any express or implied
-            warranties.
-
-        </p>
-
-        <h3>5. Limitation of Liability</h3>
-
-        <p>
-
-            The developer shall not be liable for
-            any indirect, incidental or consequential
-            damages arising from the use of
-            this software.
-
-        </p>
-
-        <h3>6. Copyright</h3>
-
-        <p>
-
-            © ${new Date().getFullYear()} Himanish Patnaik
-
-            <br><br>
-
-            All Rights Reserved.
-
-        </p>
-
-    </div>
-
+    <pre class="eula-content" id="authoritativeEulaText" role="document" aria-label="End User License Agreement">Loading license agreement…</pre>
 </div>
 
 `
 
     });
+
+    const eulaElement = document.getElementById("authoritativeEulaText");
+    try {
+        const result = await window.electronAPI.getEulaText();
+        eulaElement.textContent = result && result.success && typeof result.text === "string" && result.text.trim()
+            ? result.text
+            : "The license agreement is unavailable. Please try again later.";
+    }
+    catch (_) {
+        eulaElement.textContent = "The license agreement is unavailable. Please try again later.";
+    }
 
 }
 

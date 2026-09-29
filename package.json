@@ -21,6 +21,7 @@
     "artifactName": "KairaLuxeBillingSetup-${version}.${ext}",
     "files": [
       "src/**/*",
+      "EULA.txt",
       "!**/*.db",
       "!**/*.sqlite",
       "!**/*.sqlite3"

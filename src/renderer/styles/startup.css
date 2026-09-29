@@ -141,11 +141,13 @@ h1 {
 .diagnostics {
     position: relative;
 
+    flex: 0 0 auto;
+
     margin-top: 12px;
 
     padding: 12px 13px 10px;
 
-    overflow: hidden;
+    overflow: visible;
 
     border: 1px solid #49343c;
 
