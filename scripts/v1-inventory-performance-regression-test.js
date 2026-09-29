@@ -266,7 +266,7 @@ else {
     const sizes = [1253, 3000, 5000, 10000];
     const measurements = [];
     for (const size of sizes) {
-        const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-inventory-perf-"));
+        const tempRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "klbs-inventory-perf-"));
         const result = spawnSync(
             electronBinary,
             ["--disable-gpu", "--in-process-gpu", __filename, "--child", tempRoot, String(size)],

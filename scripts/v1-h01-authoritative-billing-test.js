@@ -224,7 +224,7 @@ if (process.argv.includes("--h01-child")) {
     });
 }
 else {
-    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-h01-"));
+    const tempRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "klbs-h01-"));
     const electronBinary = require("electron");
     const result = spawnSync(
         electronBinary,

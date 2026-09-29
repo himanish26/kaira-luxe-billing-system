@@ -141,7 +141,7 @@ if (process.argv.includes("--child")) {
         process.exitCode = 1;
     });
 } else {
-    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-return-reason-"));
+    const tempRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "klbs-return-reason-"));
     const electronBinary = require("electron");
     const result = spawnSync(electronBinary, ["--disable-gpu", "--in-process-gpu", __filename, "--child", tempRoot], {
         cwd: path.resolve(__dirname, ".."),

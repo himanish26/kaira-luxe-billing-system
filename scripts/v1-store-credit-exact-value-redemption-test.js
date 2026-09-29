@@ -452,7 +452,7 @@ if (process.argv.includes("--child")) {
     });
 }
 else {
-    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-payment-roundoff-"));
+    const tempRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "klbs-payment-roundoff-"));
     const result = spawnSync(require("electron"), ["--disable-gpu", "--in-process-gpu", __filename, "--child", tempRoot], {
         cwd: path.resolve(__dirname, ".."),
         env: { ...process.env, KLBS_DEV_DATABASE_PATH: path.join(tempRoot, "billing.db") },

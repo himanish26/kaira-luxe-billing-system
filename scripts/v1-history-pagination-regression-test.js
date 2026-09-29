@@ -147,7 +147,7 @@ else {
     const cases = [[1000, 1000], [5000, 5000], [10000, 10000], [0, 25000]];
     const measurements = [];
     for (const [billCount, activityCount] of cases) {
-        const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-history-pagination-"));
+        const tempRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "klbs-history-pagination-"));
         const result = spawnSync(electronBinary, ["--disable-gpu", "--in-process-gpu", __filename, "--child", tempRoot, billCount, activityCount], {
             cwd: path.resolve(__dirname, ".."),
             env: { ...process.env, KLBS_DEV_DATABASE_PATH: path.join(tempRoot, "billing.db") },
