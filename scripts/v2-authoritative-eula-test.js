@@ -38,7 +38,7 @@ function createSettingsHarness(getEulaText) {
             electronAPI: {
                 async getAppInfo() {
                     return {
-                        appName: "KAIRA LUXE BILLING SYSTEM", version: "1.1.0", electron: "test",
+                        appName: "KAIRA LUXE BILLING SYSTEM", version: packageInfo.version, electron: "test",
                         node: "test", chrome: "test", author: "Himanish Patnaik", license: "Single Device Commercial",
                         database: "SQLite", schema: "v1", platform: "test", architecture: "test"
                     };
@@ -68,7 +68,7 @@ async function main() {
     );
     assert.equal(packageInfo.build.nsis.license, "EULA.txt", "NSIS uses authoritative EULA.txt");
     assert.ok(packageInfo.build.files.includes("EULA.txt"), "packaged application includes EULA.txt");
-    assert.equal(packageInfo.version, "1.1.0", "package version remains 1.1.0");
+    assert.equal(packageInfo.version, "2.0.0", "package version is promoted for the V2 release candidate");
     assert.doesNotMatch(settingsSource, /This copy of the Kaira Luxe Billing System is licensed|1\. License Grant|3\. Ownership/, "old independent EULA text is absent from About renderer");
     assert.match(settingsSource, /window\.electronAPI\.getEulaText\(\)/, "About retrieves EULA through the bridge");
     assert.match(settingsSource, /eulaElement\.textContent\s*=/, "EULA is displayed as inert text, not HTML");
@@ -113,6 +113,7 @@ async function main() {
     const visibleText = "Authoritative EULA fixture\nSection one";
     const successHarness = createSettingsHarness(async () => ({ success: true, text: visibleText }));
     await successHarness.context.showAboutPage();
+    assert.ok(successHarness.renderedPage.content.includes(`<strong>${packageInfo.version}</strong>`), "About displays the promoted package version");
     assert.ok(successHarness.renderedPage.content.includes("View End User License Agreement"), "About page retains EULA navigation button");
     await successHarness.listeners.viewEulaBtn();
     assert.equal(successHarness.renderedPage.title, "END USER LICENSE AGREEMENT", "EULA navigation opens legal view");

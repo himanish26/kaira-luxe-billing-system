@@ -5,6 +5,7 @@ const path = require("path");
 const { spawn } = require("child_process");
 const sqlite3 = require("sqlite3").verbose();
 const { CURRENT_DB_SCHEMA_VERSION } = require("../src/database/schemaVersion");
+const packageInfo = require("../package.json");
 
 const RESULT_PREFIX = "REG02_RESULT=";
 const LEGACY_SCHEMA_VERSION = 3;
@@ -124,7 +125,7 @@ async function childMain(tempRoot, phase) {
         segmentDsrOutbox: { enqueue: async () => {} },
         logBusinessDayClosed: async () => {},
         logBusinessDayReopened: async () => {},
-        klbsVersion: "1.1.0"
+        klbsVersion: packageInfo.version
     });
     childProgress(phase, "business-day-close-started");
     const closeResult = await service.closeBusinessDay("2026-09-21");

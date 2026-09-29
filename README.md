@@ -1,6 +1,6 @@
 # KAIRA LUXE Billing System
 
-**Version 1.0.0 Stable**
+**Version 2.0.0 Release Candidate**
 **Windows x64**
 
 KAIRA LUXE Billing System is an offline-first Windows desktop application for retail billing, inventory operations, customer transactions, reporting, and controlled business-day workflows.
@@ -8,10 +8,14 @@ KAIRA LUXE Billing System is an offline-first Windows desktop application for re
 ## Release information
 
 - Product: KAIRA LUXE Billing System
-- Release: Version 1.0.0 Stable
+- Release: Version 2.0.0 Release Candidate
 - Platform: Windows 10/11, x64
 - Installer: Windows NSIS installer
 - Copyright: 2026 Himanish Patnaik. All Rights Reserved.
+
+## Release history
+
+- 2026-09-29 — V1.1.0 was the internal development-cycle version. After REL-02 Full Mac V1.1 Regression passed with 75/75 reconciled regression cases, the accepted V1.1 development baseline was promoted to the intended major production release, V2.0.0. This commit is a release candidate; Windows qualification remains pending and no production deployment has occurred.
 
 ## Billing and invoicing
 
@@ -98,7 +102,7 @@ Core local operations do not require continuous internet access. Configured exte
 
 ## Supported Windows platform
 
-Version 1.0.0 Stable targets Windows 10 and Windows 11 on x64 hardware using the supplied Windows installer. Printer drivers, permissions, storage, and third-party services remain part of the deployment environment and should be validated by the operator.
+Version 2.0.0 Release Candidate targets Windows 10 and Windows 11 on x64 hardware. Windows installation, printer drivers, permissions, storage, and third-party services remain subject to qualification before production release.
 
 ## Data and operator responsibilities
 
@@ -108,7 +112,7 @@ Operators are responsible for accurate product, customer, tax, payment, and busi
 
 KLBS is designed around fast, clear, reliable, auditable, and offline-first retail operations. Workflows aim to provide practical operator guidance, minimize unnecessary steps, preserve traceability, and protect business state through authorization and transaction-aware persistence.
 
-Only functionality available in the shipped Stable V1 workflows is documented here. Items presented inside the application as Coming Soon are not represented as completed production features by this README.
+Only functionality available in this release candidate's shipped workflows is documented here. Items presented inside the application as Coming Soon are not represented as completed production features by this README.
 
 ## License
 
