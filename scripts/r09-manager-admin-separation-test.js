@@ -16,10 +16,22 @@ const {
 const root = path.resolve(__dirname, "..");
 const settingsCss = fs.readFileSync(path.join(root, "src/renderer/styles/settings.css"), "utf8");
 const managerModalCss = fs.readFileSync(path.join(root, "src/renderer/style.css"), "utf8");
+const indexHtml = fs.readFileSync(path.join(root, "src/renderer/index.html"), "utf8");
 assert.match(settingsCss, /\.admin-error\s*\{[^}]*height:\s*22px[^}]*min-height:\s*22px[^}]*max-height:\s*22px/s);
-assert.match(managerModalCss, /#ffPinError\s*\{[^}]*height:\s*22px[^}]*min-height:\s*22px[^}]*max-height:\s*22px[^}]*margin:\s*0 0 12px/s);
-assert.match(managerModalCss, /#ffPinDialog \.ff-pin-box\s*\{[^}]*height:\s*60px[^}]*margin-top:\s*-5px[^}]*margin-bottom:\s*20px/s);
-assert.match(managerModalCss, /#ffPinDialog \.modal-buttons button\s*\{[^}]*height:\s*50px/s);
+assert.match(settingsCss, /\.manager-authorization \.admin-error\s*\{[^}]*height:\s*22px[^}]*min-height:\s*22px[^}]*max-height:\s*22px[^}]*line-height:\s*22px[^}]*margin-bottom:\s*12px/s);
+assert.match(settingsCss, /#adminDialog \.modal-content h2,\s*\.manager-authorization \.modal-content h2\s*\{[^}]*margin:\s*\.83em 0 6px[^}]*font-size:\s*30px[^}]*line-height:\s*normal/s);
+assert.match(settingsCss, /\.manager-authorization \.modal-content h2\s*\{[^}]*margin:\s*\.83em 0 6px[^}]*font-size:\s*30px[^}]*line-height:\s*normal/s);
+assert.match(settingsCss, /\.manager-authorization \.admin-lock\s*\{[^}]*font-size:\s*64px[^}]*margin-bottom:\s*10px/s);
+assert.match(settingsCss, /\.manager-authorization \.pin-box\s*\{[^}]*height:\s*60px[^}]*margin-top:\s*-5px[^}]*margin-bottom:\s*20px/s);
+assert.match(settingsCss, /\.manager-authorization \.modal-buttons button\s*\{[^}]*height:\s*50px[^}]*font-size:\s*18px/s);
+assert.match(managerModalCss, /#ffPinDialog \.admin-error:not\(:empty\)::before\s*\{[^}]*content:\s*"❌ "/s);
+assert(indexHtml.includes('id="adminDialog"') && indexHtml.includes('id="ffPinDialog"'));
+const ffModalSource = indexHtml.slice(indexHtml.indexOf('id="ffPinDialog"'), indexHtml.indexOf('id="ffPinDialog"') + 1800);
+assert.match(ffModalSource, /class="modal manager-authorization"/);
+assert.match(ffModalSource, /class="admin-lock"[\s\S]*?🔐[\s\S]*?Manager Access/);
+assert.match(ffModalSource, /id="ffPinError"[\s\S]*?class="admin-error"[\s\S]*?class="pin-box"/);
+assert.match(ffModalSource, /Manager Access[\s\S]*?placeholder=" Enter 4-digit Manager PIN"[\s\S]*?id="ffPinCancelBtn"[\s\S]*?Cancel[\s\S]*?id="ffPinVerifyBtn"[\s\S]*?Unlock/);
+assert(!ffModalSource.includes('class="ff-pin-lock"') && !ffModalSource.includes('class="ff-pin-box"'));
 
 const openMemory = () => new sqlite3.Database(":memory:");
 const run = (db, sql, params = []) => new Promise((resolve, reject) => {
@@ -168,6 +180,11 @@ async function main() {
     };
     assert(sources.renderer.includes('.authorizePin(enteredPin, purpose)'));
     assert(sources.renderer.includes('pinAuthorizationAction === "FF"'));
+    assert(sources.renderer.includes('const purpose = pinAuthorizationAction === "FF"') &&
+        sources.renderer.includes(': "GIFT_VOUCHER"'));
+    assert(sources.renderer.includes('document.getElementById("ffPinDialog")'));
+    assert(sources.renderer.includes('ffPinError.innerText =') &&
+        sources.renderer.includes('"Incorrect PIN."'));
     assert(sources.dayClosing.includes('requestAdminAuthorization("DAY_REOPEN")'));
     assert(sources.main.includes('authorizePin(pin, "DAY_REOPEN")'));
     assert(sources.splash.includes("4-digit Manager PIN"));

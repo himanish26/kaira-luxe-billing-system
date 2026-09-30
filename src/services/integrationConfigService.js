@@ -42,6 +42,18 @@ function validateRemoteDashboardBaseUrl(value, label) {
     return url.toString();
 }
 
+function remoteDashboardMetadata(remote) {
+    return {
+        webAppBase: remote ? remote.webAppBase : "",
+        gatewayBase: remote ? remote.gatewayBase : "",
+        enabled: remote ? remote.enabled !== false : true,
+        configured: Boolean(remote && remote.secret),
+        secretConfigured: Boolean(remote && remote.secret),
+        lastTestAt: remote ? remote.lastTestAt || null : null,
+        lastTestResult: remote ? remote.lastTestResult || "NEVER_TESTED" : "NEVER_TESTED"
+    };
+}
+
 function validateEmailInput(input, hasExistingSecret) {
     const senderEmail = String(input.senderEmail || "").trim();
     const smtpHost = String(input.smtpHost || "").trim();
@@ -119,6 +131,7 @@ function createIntegrationConfigService(options) {
         const store = readStore();
         const email = store.email || null;
         const dsr = store.dsr || null;
+        const remoteDashboard = store.remoteDashboard || null;
         const diagnostics = store.diagnostics || {};
         const emailTest = diagnostics.email || email || {};
         const dsrTest = diagnostics.dsr || dsr || {};
@@ -148,8 +161,15 @@ function createIntegrationConfigService(options) {
                 automaticSync: true,
                 lastTestAt: dsrTest.lastTestAt || null,
                 lastTestResult: dsrTest.lastTestResult || "NEVER_TESTED"
-            }
+            },
+            remoteDashboard: remoteDashboardMetadata(remoteDashboard)
         };
+    }
+    function getRemoteDashboardConfiguration() {
+        return getConfigurationDetails().remoteDashboard;
+    }
+    function getPublicRemoteDashboard(remoteDashboard) {
+        return remoteDashboardMetadata(remoteDashboard);
     }
     function getPublicConfig() {
         const details = getConfigurationDetails();
@@ -166,6 +186,13 @@ function createIntegrationConfigService(options) {
                 tabName: details.dsr.tabName,
                 lastTestAt: details.dsr.lastTestAt,
                 lastTestResult: details.dsr.lastTestResult
+            },
+            remoteDashboard: {
+                configured: details.remoteDashboard.configured,
+                secretConfigured: details.remoteDashboard.secretConfigured,
+                enabled: details.remoteDashboard.enabled,
+                lastTestAt: details.remoteDashboard.lastTestAt,
+                lastTestResult: details.remoteDashboard.lastTestResult
             }
         };
     }
@@ -214,21 +241,38 @@ function createIntegrationConfigService(options) {
         const webAppBase = validateRemoteDashboardBaseUrl(values.webAppBase, "Apps Script Web App base URL");
         const gatewayBase = validateRemoteDashboardBaseUrl(values.gatewayBase, "Remote Dashboard Gateway base URL");
         const secret = String(values.secret || "");
-        if (!secret) throw new Error("Remote Dashboard installation secret is required.");
         if (typeof values.enabled !== "boolean") throw new Error("Remote Dashboard enabled state must be boolean.");
-
-        // Validate and encrypt everything before replacing the existing store.
-        const encryptedSecret = encrypt(secret);
         const store = readStore();
+        const existing = store.remoteDashboard || null;
+        const replaceSecret = values.replaceSecret === true;
+        const hasExistingSecret = Boolean(existing && existing.secret);
+        if (!secret && (!hasExistingSecret || replaceSecret)) {
+            throw new Error("Remote Dashboard installation secret is required.");
+        }
+        // Validate and encrypt everything before replacing the existing store.
+        const encryptedSecret = secret ? encrypt(secret) : null;
         store.remoteDashboard = {
             webAppBase,
             gatewayBase,
             enabled: values.enabled,
-            secret: encryptedSecret,
+            secret: encryptedSecret || existing.secret,
+            lastTestAt: existing ? existing.lastTestAt || null : null,
+            lastTestResult: existing ? existing.lastTestResult || "NEVER_TESTED" : "NEVER_TESTED",
             updatedAt: now().toISOString()
         };
         writeStore(store);
-        return { webAppBase, gatewayBase, enabled: values.enabled, configured: true };
+        return {
+            ...remoteDashboardMetadata(store.remoteDashboard),
+            configurationAction: existing ? "UPDATED" : "CONFIGURED",
+            secretAction: secret ? (hasExistingSecret ? "REPLACED" : "CONFIGURED") : "PRESERVED"
+        };
+    }
+    function clearRemoteDashboard() {
+        const store = readStore();
+        const existed = Boolean(store.remoteDashboard);
+        delete store.remoteDashboard;
+        writeStore(store);
+        return { cleared: existed, ...remoteDashboardMetadata(null) };
     }
     function resolveEmailRuntime() {
         const store = readStore();
@@ -277,7 +321,7 @@ function createIntegrationConfigService(options) {
         };
     }
     function recordTest(kind, success) {
-        if (kind !== "email" && kind !== "dsr") {
+        if (kind !== "email" && kind !== "dsr" && kind !== "remoteDashboard") {
             throw new Error("Unsupported integration diagnostic type.");
         }
         const store = readStore();
@@ -286,7 +330,10 @@ function createIntegrationConfigService(options) {
             lastTestResult: success ? "SUCCESS" : "FAILED"
         };
         store.diagnostics = { ...(store.diagnostics || {}), [kind]: diagnostic };
-        if (store[kind]) Object.assign(store[kind], diagnostic);
+        if (kind === "remoteDashboard") {
+            if (store.remoteDashboard) Object.assign(store.remoteDashboard, diagnostic);
+        }
+        else if (store[kind]) Object.assign(store[kind], diagnostic);
         writeStore(store);
         return diagnostic;
     }
@@ -309,7 +356,8 @@ function createIntegrationConfigService(options) {
         return { migrated: true };
     }
     return {
-        getPublicConfig, getConfigurationDetails, saveEmail, saveDsr, saveRemoteDashboard, resolveEmailRuntime, resolveDsrRuntime,
+        getPublicConfig, getConfigurationDetails, getRemoteDashboardConfiguration, saveEmail, saveDsr, saveRemoteDashboard,
+        clearRemoteDashboard, resolveEmailRuntime, resolveDsrRuntime,
         resolveRemoteDashboardRuntime,
         recordTest, migrateLegacyEmail
     };

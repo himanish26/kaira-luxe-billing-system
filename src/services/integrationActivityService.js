@@ -39,16 +39,51 @@ function dsrSettingsEvent(configuration) {
     };
 }
 
+function remoteDashboardSettingsEvent(configuration) {
+    const action = configuration.configurationAction === "CONFIGURED"
+        ? "REMOTE_DASHBOARD_SETTINGS_CONFIGURED"
+        : "REMOTE_DASHBOARD_SETTINGS_UPDATED";
+    return {
+        action,
+        status: "SUCCESS",
+        reference: "REMOTE_DASHBOARD_INTEGRATION",
+        details: `Remote Dashboard settings ${configuration.configurationAction === "CONFIGURED" ? "configured" : "updated"}`
+    };
+}
+
+function remoteDashboardSecretEvent(configuration) {
+    return {
+        action: configuration.secretAction === "REPLACED"
+            ? "REMOTE_DASHBOARD_SECRET_REPLACED"
+            : "REMOTE_DASHBOARD_SECRET_CONFIGURED",
+        status: "SUCCESS",
+        reference: "REMOTE_DASHBOARD_INTEGRATION",
+        details: configuration.secretAction === "REPLACED"
+            ? "Remote Dashboard installation secret replaced"
+            : "Remote Dashboard installation secret configured"
+    };
+}
+
+function remoteDashboardClearEvent() {
+    return {
+        action: "REMOTE_DASHBOARD_CONFIGURATION_CLEARED",
+        status: "SUCCESS",
+        reference: "REMOTE_DASHBOARD_INTEGRATION",
+        details: "Remote Dashboard configuration cleared"
+    };
+}
+
 function connectionEvent(kind, result) {
     const email = kind === "email";
+    const remote = kind === "remoteDashboard";
     const success = Boolean(result && result.success);
     return {
-        action: `${email ? "EMAIL" : "DSR"}_CONNECTION_TEST_${success ? "SUCCESS" : "FAILED"}`,
+        action: `${remote ? "REMOTE_DASHBOARD" : email ? "EMAIL" : "DSR"}_CONNECTION_TEST_${success ? "SUCCESS" : "FAILED"}`,
         status: success ? "SUCCESS" : "FAILED",
-        reference: email ? "EMAIL_INTEGRATION" : "DSR_INTEGRATION",
+        reference: remote ? "REMOTE_DASHBOARD_INTEGRATION" : email ? "EMAIL_INTEGRATION" : "DSR_INTEGRATION",
         details: success
-            ? `${email ? "Email" : "DSR"} connection test successful`
-            : `${email ? "Email" : "DSR"} connection test failed; ${safeFailure(result && result.error)}`
+            ? `${remote ? "Remote Dashboard" : email ? "Email" : "DSR"} connection test successful`
+            : `${remote ? "Remote Dashboard" : email ? "Email" : "DSR"} connection test failed; ${safeFailure(result && result.error)}`
     };
 }
 
@@ -61,5 +96,6 @@ function emailTestMessageEvent() {
 
 module.exports = {
     recordIntegrationActivity, emailSettingsEvent, dsrSettingsEvent,
+    remoteDashboardSettingsEvent, remoteDashboardSecretEvent, remoteDashboardClearEvent,
     connectionEvent, emailTestMessageEvent, safeFailure
 };

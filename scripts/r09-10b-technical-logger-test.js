@@ -66,6 +66,26 @@ for (const secret of ["1234", "open", "deadbeef", "raw-token", "must-not-leak"])
 assert.strictEqual(security.metadata.nested, "[OMITTED]");
 assert.strictEqual(security.metadata.array, "[OMITTED]");
 
+const terminalDiagnostics = [];
+const originalConsoleLog = console.log;
+console.log = (...args) => terminalDiagnostics.push(args.join(" "));
+try {
+    logger.development("REMOTE_DASHBOARD", "TEST_CONNECTION_RESPONSE", {
+        operation: "TEST_CONNECTION", targetType: "WEB_APP", httpStatus: 403,
+        responseCode: "BAD_SIGNATURE", configurationState: "CONFIGURED",
+        merchant: "KAIRA_LUXE", store: "KL001", terminal: "POS01",
+        installationSecret: "must-not-appear", authorizationHeader: "Bearer must-not-appear"
+    });
+}
+finally {
+    console.log = originalConsoleLog;
+}
+assert.strictEqual(terminalDiagnostics.length, 1);
+assert(terminalDiagnostics[0].includes("[REMOTE_DASHBOARD] TEST_CONNECTION_RESPONSE"));
+for (const secret of ["must-not-appear", "Bearer"]) assert(!terminalDiagnostics[0].includes(secret));
+const diagnosticLog = JSON.stringify(readLines().at(-1));
+for (const secret of ["must-not-appear", "Bearer"]) assert(!diagnosticLog.includes(secret));
+
 logger.error("FILESYSTEM", `Failed at ${tempRoot}/private/file.db and ${os.homedir()}/secret`,
     new Error(`Stack path ${tempRoot}/private/file.js password=hidden`));
 const pathEntry = readLines().at(-1);

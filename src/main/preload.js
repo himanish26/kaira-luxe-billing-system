@@ -312,9 +312,12 @@ getIntegrationOutboxStatus: () => ipcRenderer.invoke("integrations:get-outbox-st
 getIntegrationDetails: (kind, grant) => ipcRenderer.invoke("integrations:get-details", kind, grant),
 saveEmailIntegration: (data, grant) => ipcRenderer.invoke("integrations:save-email", data, grant),
 saveDsrIntegration: (data, grant) => ipcRenderer.invoke("integrations:save-dsr", data, grant),
+saveRemoteDashboardIntegration: (data, grant) => ipcRenderer.invoke("integrations:save-remote-dashboard", data, grant),
 testEmailIntegration: grant => ipcRenderer.invoke("integrations:test-email", grant),
 sendIntegrationTestEmail: (recipient, grant) => ipcRenderer.invoke("integrations:send-test-email", recipient, grant),
 testDsrIntegration: grant => ipcRenderer.invoke("integrations:test-dsr", grant),
+testRemoteDashboardIntegration: grant => ipcRenderer.invoke("integrations:test-remote-dashboard", grant),
+clearRemoteDashboardIntegration: grant => ipcRenderer.invoke("integrations:clear-remote-dashboard", grant),
 
 getPrinters: () =>
     ipcRenderer.invoke(

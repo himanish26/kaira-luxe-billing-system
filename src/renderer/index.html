@@ -2239,36 +2239,38 @@ style="display:none;">
 
 <div
     id="ffPinDialog"
-    class="modal"
+    class="modal manager-authorization"
     style="display:none;">
 
     <div class="modal-content">
 
-        <div class="ff-pin-lock" aria-hidden="true">&#128274;</div>
+        <div class="admin-lock" aria-hidden="true">
+            🔐
+        </div>
 
         <h2>
             Manager Access
         </h2>
 
-        <div class="ff-pin-box">
+        <div
+            id="ffPinError"
+            class="admin-error">
+        </div>
+
+        <div class="pin-box">
             <input
                 type="password"
                 id="ffPinInput"
                 maxlength="4"
                 inputmode="numeric"
-                placeholder="Enter 4-digit Manager PIN">
-        </div>
-
-        <div
-            id="ffPinError"
-            class="dialog-error">
+                placeholder=" Enter 4-digit Manager PIN">
         </div>
 
         <div class="modal-buttons">
 
             <button
                 id="ffPinCancelBtn"
-                class="dashboard-btn secondary klbs-cancel-btn">
+                class="klbs-cancel-btn">
 
                 Cancel
 
@@ -2276,7 +2278,7 @@ style="display:none;">
 
             <button
                 id="ffPinVerifyBtn"
-                class="dashboard-btn klbs-primary-btn">
+                class="klbs-primary-btn">
 
                 Unlock
 

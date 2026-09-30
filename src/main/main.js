@@ -140,13 +140,14 @@ const {
 } = require("../services/emailService");
 const { createIntegrationOutboxService } = require("../services/integrationOutboxService");
 const { createIntegrationStatusService } = require("../services/integrationStatusService");
-const { createRemoteDashboardService } = require("../services/remoteDashboardService");
+const { createRemoteDashboardService, IDENTITY: REMOTE_DASHBOARD_IDENTITY } = require("../services/remoteDashboardService");
 const { readClosedDsrPayload } = require("../database/dayClosingDsrService");
 const { getBackupFolder } = require("../services/backupService");
 const { createIntegrationConfigService } = require("../services/integrationConfigService");
 const { REPORTING_MODES, resolveReportingMode } = require("../services/reportingMode");
 const {
     recordIntegrationActivity, emailSettingsEvent, dsrSettingsEvent,
+    remoteDashboardSettingsEvent, remoteDashboardSecretEvent, remoteDashboardClearEvent,
     connectionEvent, emailTestMessageEvent
 } = require("../services/integrationActivityService");
 
@@ -466,6 +467,9 @@ const remoteDashboard = createRemoteDashboardService({
     },
     log: (action, metadata) => {
         if (action !== "snapshot-accepted") technicalLogger.info("REMOTE_DASHBOARD", `Remote Dashboard ${action}`, metadata);
+    },
+    diagnostic: (operation, metadata) => {
+        technicalLogger.development("REMOTE_DASHBOARD", operation, metadata);
     }
 });
 const {
@@ -2122,6 +2126,10 @@ ipcMain.handle(
 
 ipcMain.handle("integrations:get-config", async () => {
     const config = integrationConfig.getPublicConfig();
+    technicalLogger.info("REMOTE_DASHBOARD", "Remote Dashboard configuration loaded", {
+        configured: Boolean(config.remoteDashboard && config.remoteDashboard.configured),
+        secretConfigured: Boolean(config.remoteDashboard && config.remoteDashboard.secretConfigured)
+    });
     const [latest, status] = await Promise.all([
         new Promise((resolve, reject) => database.get(`
         SELECT closed_at, email_status
@@ -2144,10 +2152,21 @@ ipcMain.handle("integrations:get-outbox-status", async () => {
 });
 ipcMain.handle("integrations:get-details", (event, kind, grant) => {
     const purpose = kind === "email" ? "INTEGRATION_EMAIL_SETTINGS" :
-        kind === "dsr" ? "INTEGRATION_DSR_SETTINGS" : null;
+        kind === "dsr" ? "INTEGRATION_DSR_SETTINGS" :
+        kind === "remoteDashboard" ? "INTEGRATION_REMOTE_DASHBOARD_SETTINGS" : null;
     if (!purpose) throw new Error("Unsupported integration configuration.");
     requireIntegrationSession(grant, purpose);
-    return integrationConfig.getConfigurationDetails()[kind];
+    const details = integrationConfig.getConfigurationDetails()[kind];
+    return kind === "remoteDashboard"
+        ? {
+            ...details,
+            identity: {
+                merchant: REMOTE_DASHBOARD_IDENTITY.merchant_id,
+                store: REMOTE_DASHBOARD_IDENTITY.store_code,
+                terminal: REMOTE_DASHBOARD_IDENTITY.terminal_id
+            }
+        }
+        : details;
 });
 ipcMain.handle("integrations:save-email", async (event, data, grant) => {
     requireIntegrationSession(grant, "INTEGRATION_EMAIL_SETTINGS");
@@ -2184,6 +2203,53 @@ ipcMain.handle("integrations:test-dsr", async (event, grant) => {
     integrationConfig.recordTest("dsr", result.success);
     const activityWarning = await recordIntegrationActivity(logActivity, connectionEvent("dsr", result));
     return { ...result, activityWarning };
+});
+ipcMain.handle("integrations:save-remote-dashboard", async (event, data, grant) => {
+    requireIntegrationSession(grant, "INTEGRATION_REMOTE_DASHBOARD_SETTINGS");
+    try {
+        const result = integrationConfig.saveRemoteDashboard(data || {});
+        technicalLogger.development("REMOTE_DASHBOARD", "CONFIG_SAVE", {
+            operation: "CONFIG_SAVE",
+            configurationAction: result.configurationAction,
+            secretAction: result.secretAction,
+            enabled: result.enabled,
+            configurationState: result.enabled ? "CONFIGURED" : "DISABLED",
+            merchant: REMOTE_DASHBOARD_IDENTITY.merchant_id, store: REMOTE_DASHBOARD_IDENTITY.store_code, terminal: REMOTE_DASHBOARD_IDENTITY.terminal_id
+        });
+        const activityWarning = await recordIntegrationActivity(logActivity, remoteDashboardSettingsEvent(result));
+        if (result.secretAction === "CONFIGURED" || result.secretAction === "REPLACED") {
+            const secretActivityWarning = await recordIntegrationActivity(logActivity, remoteDashboardSecretEvent(result));
+            return { ...result, activityWarning: activityWarning || secretActivityWarning };
+        }
+        return { ...result, activityWarning };
+    }
+    catch (error) {
+        technicalLogger.error("REMOTE_DASHBOARD", "Remote Dashboard configuration save failed", error);
+        throw error;
+    }
+});
+ipcMain.handle("integrations:test-remote-dashboard", async (event, grant) => {
+    requireIntegrationSession(grant, "INTEGRATION_REMOTE_DASHBOARD_SETTINGS");
+    const result = await remoteDashboard.testConnection();
+    integrationConfig.recordTest("remoteDashboard", result.success);
+    const activityWarning = await recordIntegrationActivity(logActivity, connectionEvent("remoteDashboard", result));
+    return { ...result, activityWarning };
+});
+ipcMain.handle("integrations:clear-remote-dashboard", async (event, grant) => {
+    requireIntegrationSession(grant, "INTEGRATION_REMOTE_DASHBOARD_SETTINGS");
+    try {
+        const result = integrationConfig.clearRemoteDashboard();
+        technicalLogger.development("REMOTE_DASHBOARD", "CONFIG_CLEAR", {
+            operation: "CONFIG_CLEAR",
+            cleared: Boolean(result.cleared)
+        });
+        const activityWarning = await recordIntegrationActivity(logActivity, remoteDashboardClearEvent());
+        return { ...result, activityWarning };
+    }
+    catch (error) {
+        technicalLogger.error("REMOTE_DASHBOARD", "Remote Dashboard configuration clear failed", error);
+        throw error;
+    }
 });
 
 ipcMain.handle(

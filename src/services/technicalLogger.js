@@ -237,12 +237,28 @@ function error(component, message, errorValue, metadata) {
 function fatal(component, message, errorValue, metadata) {
     return write("FATAL", component, message, errorValue, metadata);
 }
+function development(component, message, metadata) {
+    const result = write("INFO", component, message, null, metadata);
+    if (!state.isPackaged) {
+        try {
+            const safeComponent = sanitizeText(component || "APPLICATION", MAX_COMPONENT) || "APPLICATION";
+            const safeMessage = sanitizeText(message || "Technical event");
+            const safeMetadata = sanitizeMetadata(metadata);
+            const details = safeMetadata
+                ? Object.entries(safeMetadata).map(([key, value]) => `${key}=${typeof value === "string" ? value : JSON.stringify(value)}`).join(" ")
+                : "";
+            console.log(`[${new Date().toISOString()}] [${safeComponent}] ${safeMessage}${details ? ` ${details}` : ""}`);
+        }
+        catch (_) {}
+    }
+    return result;
+}
 function getLogDirectory() {
     try { return state.initialized ? state.directory : null; }
     catch (_) { return null; }
 }
 
 module.exports = {
-    initialize, info, warn, error, fatal, sanitizeError, getLogDirectory,
+    initialize, info, warn, error, fatal, development, sanitizeError, getLogDirectory,
     _test: { sanitizeText, sanitizeMetadata, DEFAULT_MAX_BYTES, DEFAULT_RETENTION }
 };

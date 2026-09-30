@@ -3,6 +3,7 @@ const sqlite3 = require("sqlite3").verbose();
 const { migrateRemoteDashboardOutbox } = require("../src/database/remoteDashboardMigration");
 const { buildRemoteDashboardSnapshot } = require("../src/services/remoteDashboardSnapshot");
 const { createRemoteDashboardService } = require("../src/services/remoteDashboardService");
+const { SNAPSHOT_TIMEOUT_MS, SNAPSHOT_MAX_ATTEMPTS, SNAPSHOT_RETRY_DELAY_MS } = require("../src/services/remoteDashboardService");
 const fs = require("fs");
 const crypto = require("crypto");
 
@@ -49,7 +50,9 @@ function makeDb() { return new Promise((resolve, reject) => { const db = new sql
     const emptySnapshot = await buildRemoteDashboardSnapshot({ database: emptyDb, businessDate: "2026-09-26", now: () => new Date("2026-09-26T10:00:00+05:30") });
     assert.deepStrictEqual(emptySnapshot.today, { net_sales_paise: 0, bills: 0, qty: 0 });
     await emptyDb.close();
-    assert(!/remoteDashboard|REMOTE_DASHBOARD|secret/i.test(fs.readFileSync("src/main/preload.js", "utf8")));
+    const preloadSource = fs.readFileSync("src/main/preload.js", "utf8");
+    assert(preloadSource.includes("testRemoteDashboardIntegration"));
+    assert(!/get.*(?:secret|credential)|decrypt.*(?:secret|credential)/i.test(preloadSource));
     const statusServiceSource = fs.readFileSync("src/main/statusService.js", "utf8");
     assert(statusServiceSource.indexOf('process.platform !== "win32"') !== -1);
     assert(statusServiceSource.indexOf('process.platform !== "win32"') < statusServiceSource.indexOf('"powershell.exe"'));
@@ -58,7 +61,8 @@ function makeDb() { return new Promise((resolve, reject) => { const db = new sql
     await migrateRemoteDashboardOutbox(db);
     let calls = 0;
     const requests = [];
-    const service = createRemoteDashboardService({ database: db, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: () => ({ webAppBase: "https://script.example.test/exec", gatewayBase: "https://gateway.example.test", secret: "fictional-installation-secret", enabled: true }), post: async (endpoint, envelope, headers, timeout) => { calls += 1; requests.push({ endpoint, envelope, timeout }); return { status: 200, data: { ok: true, code: "ACCEPTED" } }; } });
+    const diagnosticEvents = [];
+    const service = createRemoteDashboardService({ database: db, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: () => ({ webAppBase: "https://script.example.test/exec", gatewayBase: "https://gateway.example.test", secret: "fictional-installation-secret", enabled: true }), diagnostic: (operation, metadata) => diagnosticEvents.push({ operation, metadata }), post: async (endpoint, envelope, headers, timeout) => { calls += 1; requests.push({ endpoint, envelope, timeout }); return { status: 200, data: { ok: true, code: "ACCEPTED" } }; } });
     await service.queueBillSaved({ bill_no: "KL260926001", bill_date: "1900-01-01", net_amount: 999999 });
     await service.queueBillSaved({ bill_no: "KL260926001", bill_date: "1900-01-01", net_amount: 999999 });
     await service.queueStarted();
@@ -89,9 +93,13 @@ function makeDb() { return new Promise((resolve, reject) => { const db = new sql
     await service.syncSnapshot();
     assert.strictEqual(calls, 4);
     assert.strictEqual(requests[3].endpoint, "https://script.example.test/exec");
-    assert.strictEqual(requests[3].timeout, 20000);
+    assert.strictEqual(requests[3].timeout, SNAPSHOT_TIMEOUT_MS);
     assert.strictEqual(requests[3].envelope.context, "/snapshot");
     assert.strictEqual(requests[3].envelope.body.contract_id, "klbs.remote-dashboard.snapshot.v1");
+    assert.strictEqual(requests[3].envelope.request_id, requests[3].envelope.body.request_id);
+    assert(diagnosticEvents.some(event => event.operation === "PUSH_START" && event.metadata.targetType === "GATEWAY"));
+    assert(diagnosticEvents.some(event => event.operation === "SNAPSHOT_START" && event.metadata.targetType === "WEB_APP"));
+    assert(!JSON.stringify(diagnosticEvents).includes("fictional-installation-secret"));
     const snapshotEnvelope = requests[3].envelope;
     const canonical = service._test.stableJson(snapshotEnvelope.body);
     const digest = crypto.createHash("sha256").update(canonical, "utf8").digest("hex");
@@ -151,7 +159,7 @@ function makeDb() { return new Promise((resolve, reject) => { const db = new sql
     const overlapDb = await makeDb();
     await run(overlapDb, "CREATE TABLE bills (id INTEGER PRIMARY KEY, bill_no TEXT, bill_date TEXT, net_amount REAL, total_qty INTEGER, cash_amount REAL, upi_amount REAL, card_amount REAL, created_at TEXT)");
     await run(overlapDb, "CREATE TABLE bill_items (bill_no TEXT, business_segment TEXT, qty INTEGER, net_amount REAL)");
-    const overlapService = createRemoteDashboardService({ database: overlapDb, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: () => ({ webAppBase: "https://script.example.test/exec", gatewayBase: "https://gateway.example.test", secret: "fictional-installation-secret", enabled: true }), post: async (endpoint, envelope, headers, timeout) => { if (envelope.context === "/snapshot") { snapshotCalls += 1; await snapshotStarted; assert.strictEqual(timeout, 20000); } return { status: 200, data: { code: "ACCEPTED" } }; } });
+    const overlapService = createRemoteDashboardService({ database: overlapDb, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: () => ({ webAppBase: "https://script.example.test/exec", gatewayBase: "https://gateway.example.test", secret: "fictional-installation-secret", enabled: true }), post: async (endpoint, envelope, headers, timeout) => { if (envelope.context === "/snapshot") { snapshotCalls += 1; await snapshotStarted; assert.strictEqual(timeout, SNAPSHOT_TIMEOUT_MS); } return { status: 200, data: { code: "ACCEPTED" } }; } });
     const firstSnapshot = overlapService.syncSnapshot();
     const secondSnapshot = overlapService.syncSnapshot();
     await new Promise(resolve => setTimeout(resolve, 25));
@@ -159,7 +167,156 @@ function makeDb() { return new Promise((resolve, reject) => { const db = new sql
     releaseSnapshot();
     assert.deepStrictEqual(await firstSnapshot, { accepted: true, code: "ACCEPTED" });
     const failingSnapshotService = createRemoteDashboardService({ database: overlapDb, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: () => ({ webAppBase: "https://script.example.test/exec", gatewayBase: "https://gateway.example.test", secret: "fictional-installation-secret", enabled: true }), post: async () => { throw new Error("timeout of 20000ms exceeded"); } });
-    assert.deepStrictEqual(await failingSnapshotService.syncSnapshot(), { accepted: false });
+    assert.deepStrictEqual(await failingSnapshotService.syncSnapshot(), { accepted: false, classification: "RETRYABLE_FAILURE" });
+    const httpFailureDiagnostics = [];
+    const httpFailureService = createRemoteDashboardService({ database: overlapDb, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: () => ({ webAppBase: "https://script.example.test/exec", gatewayBase: "https://gateway.example.test", secret: "fictional-installation-secret", enabled: true }), diagnostic: (operation, metadata) => httpFailureDiagnostics.push({ operation, metadata }), post: async () => ({ status: 404, data: {} }) });
+    assert.deepStrictEqual(await httpFailureService.syncSnapshot({ operation: "TEST_CONNECTION" }), { accepted: false, classification: "PERMANENT_FAILURE" });
+    assert.strictEqual(httpFailureDiagnostics.find(event => event.operation === "TEST_CONNECTION_RESPONSE").metadata.classification, "PERMANENT_FAILURE");
+    assert.strictEqual(httpFailureDiagnostics.find(event => event.operation === "TEST_CONNECTION_FAILURE").metadata.classification, "PERMANENT_FAILURE");
+
+    assert.strictEqual(SNAPSHOT_TIMEOUT_MS, 12000);
+    assert.strictEqual(SNAPSHOT_MAX_ATTEMPTS, 2);
+    assert.strictEqual(SNAPSHOT_RETRY_DELAY_MS, 1000);
+    const fixtureConfig = () => ({ webAppBase: "https://script.example.test/exec", gatewayBase: "https://gateway.example.test", secret: "fictional-installation-secret", enabled: true });
+    const makeSnapshotDb = async () => {
+        const fixture = await makeDb();
+        await run(fixture, "CREATE TABLE bills (id INTEGER PRIMARY KEY, bill_no TEXT, bill_date TEXT, net_amount REAL, total_qty INTEGER, cash_amount REAL, upi_amount REAL, card_amount REAL, created_at TEXT)");
+        await run(fixture, "CREATE TABLE bill_items (bill_no TEXT, business_segment TEXT, qty INTEGER, net_amount REAL)");
+        await run(fixture, "INSERT INTO bills VALUES (1,'SNAP1','2026-09-26',125,2,50,75,0,'2026-09-26T10:00:00+05:30')");
+        await run(fixture, "INSERT INTO bill_items VALUES ('SNAP1','KL',2,125)");
+        return fixture;
+    };
+    const verifySnapshotSignature = envelope => {
+        const digest = crypto.createHash("sha256").update(service._test.stableJson(envelope.body), "utf8").digest("hex");
+        const material = ["KLBS-SIGNATURE-v1", "POST", "/snapshot", envelope.body.contract_id, envelope.body.merchant_id, envelope.body.store_code, envelope.body.terminal_id, envelope.request_timestamp, envelope.request_id, digest].join("\n");
+        assert.strictEqual(envelope.signature, crypto.createHmac("sha256", "fictional-installation-secret").update(material, "utf8").digest("hex"));
+    };
+
+    // A: timeout then ACCEPTED must retain one logical snapshot and re-sign a fresh envelope.
+    const retryDb = await makeSnapshotDb();
+    let retryNow = new Date("2026-09-26T10:00:00+05:30");
+    const retryRequests = [];
+    let retryBuildStatusCalls = 0;
+    const retryService = createRemoteDashboardService({ database: retryDb, now: () => new Date(retryNow), sessionId: "retry-session", configProvider: fixtureConfig, getStatus: async () => { retryBuildStatusCalls += 1; return { day_closing: { status: "OPEN" } }; }, post: async (endpoint, envelope, headers, timeout) => {
+        retryRequests.push({ endpoint, envelope, timeout });
+        if (retryRequests.length === 1) { retryNow = new Date(retryNow.getTime() + 13000); const error = new Error("request timeout"); error.code = "ETIMEDOUT"; throw error; }
+        return { status: 200, data: { code: "ACCEPTED" } };
+    } });
+    assert.deepStrictEqual(await retryService.syncSnapshot(), { accepted: true, code: "ACCEPTED" });
+    assert.strictEqual(retryRequests.length, 2);
+    assert.strictEqual(retryRequests[0].envelope.request_id, retryRequests[0].envelope.body.request_id);
+    assert.strictEqual(retryRequests[1].envelope.request_id, retryRequests[1].envelope.body.request_id);
+    assert.notStrictEqual(retryRequests[0].envelope.request_id, retryRequests[1].envelope.request_id);
+    const { request_id: attemptOneRequestId, ...attemptOneLogicalSnapshot } = retryRequests[0].envelope.body;
+    const { request_id: attemptTwoRequestId, ...attemptTwoLogicalSnapshot } = retryRequests[1].envelope.body;
+    assert(attemptOneRequestId && attemptTwoRequestId);
+    assert.deepStrictEqual(attemptOneLogicalSnapshot, attemptTwoLogicalSnapshot);
+    assert.strictEqual(retryRequests[0].envelope.body.snapshot_id, retryRequests[1].envelope.body.snapshot_id);
+    assert.strictEqual(retryRequests[0].envelope.body.generated_at, retryRequests[1].envelope.body.generated_at);
+    assert.strictEqual(retryRequests[0].envelope.body.today.net_sales_paise, 12500);
+    assert.strictEqual(retryBuildStatusCalls, 1);
+    assert.notStrictEqual(retryRequests[0].envelope.request_id, retryRequests[1].envelope.request_id);
+    assert.notStrictEqual(retryRequests[0].envelope.request_timestamp, retryRequests[1].envelope.request_timestamp);
+    assert.notStrictEqual(retryRequests[0].envelope.signature, retryRequests[1].envelope.signature);
+    assert.strictEqual(retryRequests[0].envelope.context, "/snapshot");
+    assert.strictEqual(retryRequests[1].envelope.context, "/snapshot");
+    assert(retryRequests.every(request => request.timeout === SNAPSHOT_TIMEOUT_MS));
+    verifySnapshotSignature(retryRequests[0].envelope); verifySnapshotSignature(retryRequests[1].envelope);
+
+    // B: a persisted first attempt with a lost acknowledgement reaches backend-compatible duplicate comparison.
+    let duplicateCalls = 0;
+    let persistedLogicalSnapshot = null;
+    let logicalSnapshotWrites = 0;
+    const duplicateRequests = [];
+    const duplicateService = createRemoteDashboardService({ database: retryDb, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: fixtureConfig, post: async (endpoint, envelope) => {
+        duplicateCalls += 1;
+        duplicateRequests.push(envelope);
+        assert.strictEqual(envelope.request_id, envelope.body.request_id);
+        const { request_id, ...logicalSnapshot } = envelope.body;
+        if (duplicateCalls === 1) {
+            persistedLogicalSnapshot = logicalSnapshot;
+            logicalSnapshotWrites += 1;
+            const error = new Error("socket timeout after persistence"); error.code = "ETIMEDOUT"; throw error;
+        }
+        assert.deepStrictEqual(logicalSnapshot, persistedLogicalSnapshot);
+        return { status: 200, data: { code: "DUPLICATE" } };
+    } });
+    assert.deepStrictEqual(await duplicateService.syncSnapshot(), { accepted: true, code: "DUPLICATE" });
+    assert.strictEqual(duplicateCalls, 2);
+    assert.strictEqual(duplicateRequests[0].request_id, duplicateRequests[0].body.request_id);
+    assert.strictEqual(duplicateRequests[1].request_id, duplicateRequests[1].body.request_id);
+    assert.notStrictEqual(duplicateRequests[0].request_id, duplicateRequests[1].request_id);
+    assert.strictEqual(logicalSnapshotWrites, 1);
+
+    // C: two eligible transport failures retire after exactly two attempts.
+    let doubleFailureCalls = 0;
+    const doubleFailureService = createRemoteDashboardService({ database: retryDb, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: fixtureConfig, post: async () => { doubleFailureCalls += 1; const error = new Error("connection reset"); error.code = "ECONNRESET"; throw error; } });
+    assert.deepStrictEqual(await doubleFailureService.syncSnapshot(), { accepted: false, classification: "RETRYABLE_FAILURE" });
+    assert.strictEqual(doubleFailureCalls, 2);
+
+    // D: stale snapshots are terminal and never sent a second time.
+    let staleCalls = 0;
+    const staleService = createRemoteDashboardService({ database: retryDb, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: fixtureConfig, post: async () => { staleCalls += 1; return { status: 409, data: { code: "STALE_REJECTED" } }; } });
+    assert.deepStrictEqual(await staleService.syncSnapshot(), { accepted: false, classification: "STALE_REJECTED" });
+    assert.strictEqual(staleCalls, 1);
+
+    // E: authentication/configuration rejections are deterministic and terminal.
+    let permanentCalls = 0;
+    const permanentService = createRemoteDashboardService({ database: retryDb, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: fixtureConfig, post: async () => { permanentCalls += 1; return { status: 401, data: { code: "BAD_SIGNATURE" } }; } });
+    assert.deepStrictEqual(await permanentService.syncSnapshot(), { accepted: false, classification: "PERMANENT_FAILURE" });
+    assert.strictEqual(permanentCalls, 1);
+
+    // REQUEST_ID_MISMATCH is permanent, while generated attempts always satisfy the backend equality contract.
+    let mismatchCalls = 0;
+    const mismatchService = createRemoteDashboardService({ database: retryDb, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: fixtureConfig, post: async (endpoint, envelope) => {
+        mismatchCalls += 1;
+        assert.strictEqual(envelope.request_id, envelope.body.request_id);
+        return { status: 200, data: { code: "REQUEST_ID_MISMATCH" } };
+    } });
+    assert.deepStrictEqual(await mismatchService.syncSnapshot(), { accepted: false, classification: "PERMANENT_FAILURE" });
+    assert.strictEqual(mismatchCalls, 1);
+
+    // F: BACKEND_ONLY receives the same single bounded retry policy as other approved transients.
+    let backendOnlyCalls = 0;
+    let backendOnlyNow = new Date("2026-09-26T10:00:00+05:30");
+    const backendOnlyRequests = [];
+    const backendOnlyService = createRemoteDashboardService({ database: retryDb, now: () => new Date(backendOnlyNow), configProvider: fixtureConfig, post: async (endpoint, envelope) => { backendOnlyCalls += 1; backendOnlyRequests.push(envelope); if (backendOnlyCalls === 1) backendOnlyNow = new Date(backendOnlyNow.getTime() + 1000); return { status: 200, data: { code: backendOnlyCalls === 1 ? "BACKEND_ONLY" : "ACCEPTED" } }; } });
+    assert.deepStrictEqual(await backendOnlyService.syncSnapshot(), { accepted: true, code: "ACCEPTED" });
+    assert.strictEqual(backendOnlyCalls, 2);
+    assert.strictEqual(backendOnlyRequests[0].request_id, backendOnlyRequests[0].body.request_id);
+    assert.strictEqual(backendOnlyRequests[1].request_id, backendOnlyRequests[1].body.request_id);
+    assert.notStrictEqual(backendOnlyRequests[0].request_id, backendOnlyRequests[1].request_id);
+    const { request_id: backendOnlyFirstId, ...backendOnlyFirstBody } = backendOnlyRequests[0].body;
+    const { request_id: backendOnlySecondId, ...backendOnlySecondBody } = backendOnlyRequests[1].body;
+    assert(backendOnlyFirstId && backendOnlySecondId);
+    assert.deepStrictEqual(backendOnlyFirstBody, backendOnlySecondBody);
+    assert.notStrictEqual(backendOnlyRequests[0].request_id, backendOnlyRequests[1].request_id);
+    assert.notStrictEqual(backendOnlyRequests[0].request_timestamp, backendOnlyRequests[1].request_timestamp);
+    assert.notStrictEqual(backendOnlyRequests[0].signature, backendOnlyRequests[1].signature);
+    const redirected404 = { status: 404, request: { res: { responseUrl: "https://script.googleusercontent.com/macros/echo?user_content_key=safe" } }, data: {} };
+    assert.strictEqual(retryService._test.classify(redirected404, "snapshot"), "RETRYABLE_FAILURE");
+    assert.strictEqual(retryService._test.classify({ ...redirected404, request: { res: { responseUrl: "http://script.googleusercontent.com/macros/echo?key=safe" } } }, "snapshot"), "PERMANENT_FAILURE");
+    assert.strictEqual(retryService._test.classify({ ...redirected404, request: { res: { responseUrl: "https://other.googleusercontent.com/macros/echo?key=safe" } } }, "snapshot"), "PERMANENT_FAILURE");
+    assert.strictEqual(retryService._test.classify({ ...redirected404, request: { res: { responseUrl: "https://script.googleusercontent.com/other/path?key=safe" } } }, "snapshot"), "PERMANENT_FAILURE");
+    assert.strictEqual(retryService._test.classify({ status: 404, data: {} }, "snapshot"), "PERMANENT_FAILURE");
+    assert.strictEqual(retryService._test.classify({ ...redirected404, request: { res: { responseUrl: "https://script.example.test/exec" } } }, "snapshot"), "PERMANENT_FAILURE");
+    assert.strictEqual(retryService._test.classify(redirected404, "event"), "PERMANENT_FAILURE");
+    assert.strictEqual(retryService._test.classify({ status: 503, data: { code: "BAD_SIGNATURE" } }, "snapshot"), "PERMANENT_FAILURE");
+    assert.strictEqual(retryService._test.classify({ status: 400, data: { code: "BACKEND_ONLY" } }, "snapshot"), "PERMANENT_FAILURE");
+
+    // G: scheduled/manual calls join the logical operation while its retry is pending.
+    let overlapRetryCalls = 0;
+    let releaseRetry;
+    const retryBlocked = new Promise(resolve => { releaseRetry = resolve; });
+    const singleFlightRetryService = createRemoteDashboardService({ database: retryDb, now: () => new Date("2026-09-26T10:00:00+05:30"), configProvider: fixtureConfig, post: async () => { overlapRetryCalls += 1; if (overlapRetryCalls === 1) { const error = new Error("timeout"); error.code = "ETIMEDOUT"; throw error; } await retryBlocked; return { status: 200, data: { code: "ACCEPTED" } }; } });
+    const activeRetry = singleFlightRetryService.syncSnapshot();
+    while (overlapRetryCalls < 2) await new Promise(resolve => setImmediate(resolve));
+    const joinedSnapshot = singleFlightRetryService.syncSnapshot();
+    assert(joinedSnapshot instanceof Promise);
+    assert.strictEqual(overlapRetryCalls, 2);
+    releaseRetry();
+    assert.deepStrictEqual(await joinedSnapshot, { accepted: true, code: "ACCEPTED" });
+    await retryDb.close();
     await overlapDb.close();
     await db.close(); await failureDb.close();
     console.log("Remote Dashboard KLBS integration tests: PASS");

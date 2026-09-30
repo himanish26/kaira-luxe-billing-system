@@ -127,10 +127,11 @@ margin-bottom:50px;
 .integration-summary-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; margin:16px auto; }
 .integration-card { background:#fff; border-radius:16px; padding:24px; box-shadow:0 6px 20px rgba(0,0,0,.08); }
 .integration-card h3 { color:var(--primary); font-size:22px; margin:0 0 10px; }
-.integration-card>strong { display:block; color:#4f7f62; font-size:18px; margin-bottom:4px; }
+.integration-card>strong { display:block; color:#4f7f62; font-size:18px; margin-bottom:4px; }.integration-card>strong.integration-error { color:#9a2638; }
 .integration-card dl { margin:18px 0; }
 .integration-card dl div,.integration-info-row { display:flex; justify-content:space-between; gap:16px; padding:9px 0; border-bottom:1px solid #eee; }
 .integration-card dt { color:#666; }.integration-card dd { margin:0; text-align:right; }.integration-enabled { color:#4f7f62; font-weight:700; }
+.integration-card .dashboard-btn { width:100%; max-width:360px; box-sizing:border-box; }
 .integration-source,.integration-banner { color:#66545b; background:#f8f1f4; border-left:4px solid var(--primary); padding:10px 12px; }
 .integration-form { max-width:900px; margin:20px auto; padding:26px; border-radius:16px; background:#fff; box-shadow:0 6px 20px rgba(0,0,0,.08); }
 .integration-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 18px; }
@@ -145,7 +146,8 @@ margin-bottom:50px;
 .integration-button-neutral { background:#eceaec; border-color:#c9c4c7; color:#4e484b; }
 .integration-button-small { padding:7px 11px; font-size:13px; }
 .integration-button-destructive { background:#fff; border-color:#b98a91; color:#8a3441; }
-.integration-button:hover,.integration-button:focus-visible { box-shadow:0 0 0 3px rgba(122,0,60,.14); }
+.integration-button:hover,.integration-button:focus-visible { box-shadow:0 0 0 3px rgba(122,0,60,.14); }.integration-button:disabled { opacity:.62; cursor:wait; }
+.integration-identity-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:0 0 18px; }.integration-identity-grid>div { padding:12px 14px; border:1px solid #eee; border-radius:8px; background:#faf8f9; }.integration-identity-grid span { display:block; color:#666; font-size:13px; margin-bottom:4px; }.integration-identity-grid strong { color:var(--primary); letter-spacing:.04em; }.integration-security-note { margin:0 0 20px; color:#5b5558; font-size:14px; line-height:1.5; }.integration-advanced { margin-top:28px; padding-top:18px; border-top:1px solid #ddd; }.integration-advanced h2 { margin-top:0; }
 .integration-guide { margin-top:28px; padding-top:10px; border-top:1px solid #ddd; line-height:1.5; }.integration-guide li { margin-bottom:5px; }
 @media (max-width:900px) { .integration-summary-grid,.integration-form-grid,.integration-outbox-summary { grid-template-columns:1fr; } .integration-outbox-date { grid-template-columns:1fr; gap:8px; } .integration-outbox .integration-outbox-header { flex-direction:column; } }
 
@@ -729,24 +731,28 @@ font-size:15px;
    below changes theme colors only. Keep these values aligned with the
    approved Administrator layout while making the shared layout explicit.
 */
-#adminDialog .modal-content{
+#adminDialog .modal-content,
+.manager-authorization .modal-content{
     width:420px;
     padding:35px;
     border-radius:18px;
 }
 
-#adminDialog .admin-lock{
+#adminDialog .admin-lock,
+.manager-authorization .admin-lock{
     font-size:64px;
     margin-bottom:10px;
 }
 
-#adminDialog .modal-content h2{
+#adminDialog .modal-content h2,
+.manager-authorization .modal-content h2{
     margin: .83em 0 6px;
     font-size:30px;
     line-height:normal;
 }
 
-#adminDialog .admin-error{
+#adminDialog .admin-error,
+.manager-authorization .admin-error{
     box-sizing:border-box;
     height:22px;
     min-height:22px;
@@ -755,56 +761,67 @@ font-size:15px;
     margin-bottom:12px;
 }
 
-#adminDialog .pin-box{
+#adminDialog .pin-box,
+.manager-authorization .pin-box{
     height:60px;
     margin-top:-5px;
     margin-bottom:20px;
 }
 
-#adminDialog .modal-buttons{
+#adminDialog .modal-buttons,
+.manager-authorization .modal-buttons{
     display:flex;
     justify-content:space-between;
     gap:15px;
 }
 
-#adminDialog .modal-buttons button{
+#adminDialog .modal-buttons button,
+.manager-authorization .modal-buttons button{
     flex:1;
     height:50px;
     font-size:18px;
 }
 
 /* A failed PIN must not translate the shared popup when the error is shown. */
-#adminDialog .modal-content.shake{
+#adminDialog .modal-content.shake,
+.manager-authorization .modal-content.shake{
     animation:none;
 }
 
-#adminDialog.manager-authorization .modal-content h2{
+#adminDialog.manager-authorization .modal-content h2,
+.manager-authorization .modal-content h2{
     color:#B26A00;
 }
 
-#adminDialog.manager-authorization .klbs-primary-btn{
+#adminDialog.manager-authorization .klbs-primary-btn,
+.manager-authorization .klbs-primary-btn{
     background:#B26A00;
     border-color:#B26A00;
 }
 
-#adminDialog.manager-authorization .klbs-primary-btn:hover:not(:disabled){
+#adminDialog.manager-authorization .klbs-primary-btn:hover:not(:disabled),
+.manager-authorization .klbs-primary-btn:hover:not(:disabled){
     background:#8A4F00;
     border-color:#8A4F00;
 }
 
-#adminDialog.manager-authorization .klbs-cancel-btn{
+#adminDialog.manager-authorization .klbs-cancel-btn,
+.manager-authorization .klbs-cancel-btn{
     color:#B26A00;
     border-color:#B26A00;
 }
 
-#adminDialog.manager-authorization .klbs-cancel-btn:hover:not(:disabled){
+#adminDialog.manager-authorization .klbs-cancel-btn:hover:not(:disabled),
+.manager-authorization .klbs-cancel-btn:hover:not(:disabled){
     background:#FFF7E8;
     color:#B26A00;
     border-color:#B26A00;
 }
 
 #adminDialog.manager-authorization .klbs-primary-btn:focus-visible,
-#adminDialog.manager-authorization .klbs-cancel-btn:focus-visible{
+#adminDialog.manager-authorization .klbs-cancel-btn:focus-visible,
+.manager-authorization .klbs-primary-btn:focus-visible,
+.manager-authorization .klbs-cancel-btn:focus-visible{
     outline-color:rgba(178,106,0,.28);
 }
 
