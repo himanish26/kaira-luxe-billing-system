@@ -5695,6 +5695,8 @@ const net =
 
 if (saleType === "RETURN") {
 
+    const variableValueReturnLine = Number(item.variable_value) === 1;
+
     row.innerHTML = `
 
 <td>${item.barcode}</td>
@@ -5721,8 +5723,9 @@ if (saleType === "RETURN") {
     type="number"
     min="0"
     max="${Number(item.available_qty || 0)}"
-    value="${item.qty}"
+    value="${variableValueReturnLine ? 0 : item.qty}"
     class="qty-input return-qty-input"
+    ${variableValueReturnLine ? "disabled" : ""}
     onchange="updateQuantity(${index}, this.value)"
 >
 
@@ -5968,6 +5971,16 @@ function updateQuantity(index, value){
 
     if (!item) {
 
+        return;
+
+    }
+
+    if (Number(item.variable_value) === 1) {
+
+        item.qty = 0;
+        renderBill();
+        loadPaymentSummary();
+        calculatePayment();
         return;
 
     }

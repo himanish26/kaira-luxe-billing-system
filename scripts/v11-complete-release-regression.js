@@ -55,7 +55,7 @@ const groups = [
     ] },
     { name: "LOG/NAVIGATION", tests: [
         "v1-history-pagination-regression-test.js", "v11-log01-activity-log-search-test.js",
-        "v1-stable-gate-activity-outbox-test.js"
+        "v1-stable-gate-activity-outbox-test.js", "v2-ui-shortcut-modal-consistency-test.js"
     ] },
     { name: "STATIC/CONFIG", tests: [
         "r10-5-integrations-test.js", "r10-5b-integrations-final-polish-test.js",

@@ -429,18 +429,6 @@ case "paste": {
 
 async function openNewBill() {
 
-    if (
-        document.getElementById("paymentScreen")?.style.display === "block"
-    ) {
-
-        if (!window.confirmDiscardCurrentBill()) {
-
-            return;
-
-        }
-
-    }
-
     const newBillButton =
         document.getElementById("newBillBtn");
 
@@ -461,35 +449,11 @@ async function openNewBill() {
 
 function openBillHistory() {
 
-    if (
-        document.getElementById("paymentScreen")?.style.display === "block"
-    ) {
-
-        if (!window.confirmDiscardCurrentBill()) {
-
-            return;
-
-        }
-
-    }
-
     document.getElementById("billHistoryBtn")?.click();
 
 }
 
 function openReports() {
-
-    if (
-        document.getElementById("paymentScreen")?.style.display === "block"
-    ) {
-
-        if (!window.confirmDiscardCurrentBill()) {
-
-            return;
-
-        }
-
-    }
 
     document.getElementById("reportsBtn")?.click();
 
@@ -497,23 +461,36 @@ function openReports() {
 
 function openSettings() {
 
-    if (
-        document.getElementById("paymentScreen")?.style.display === "block"
-    ) {
-
-        if (!window.confirmDiscardCurrentBill()) {
-
-            return;
-
-        }
-
-    }
-
     document.getElementById("settingsBtn")?.click();
 
 }
 
 function handleEscape() {
+
+    // Dialogs own Cancel; never navigate the page beneath an active modal.
+    for (const modalId of ["processingDialog", "appLockOverlay", "dayClosingLifecycleOverlay"]) {
+        const modal = document.getElementById(modalId);
+        if (!modal) continue;
+        const style = window.getComputedStyle(modal);
+        if (style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0") {
+            return;
+        }
+    }
+    for (const [modalId, cancelId] of [
+        ["storeCreditModal", "cancelStoreCreditBtn"],
+        ["giftVoucherDialog", "giftVoucherCancelBtn"],
+        ["returnReasonDialog", "returnReasonCancelBtn"],
+        ["variableValueDialog", "variableValueCancelBtn"],
+        ["dayReopenReasonModal", "cancelDayReopenReasonBtn"]
+    ]) {
+        const modal = document.getElementById(modalId);
+        if (!modal) continue;
+        const style = window.getComputedStyle(modal);
+        if (style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0") {
+            document.getElementById(cancelId)?.click();
+            return;
+        }
+    }
 
     // Processing Dialog
     if (
@@ -797,6 +774,12 @@ function isKLBSModalOpen() {
         "ffPinDialog",
         "ffDiscountDialog",
         "stockTransactionModal",
+        "storeCreditModal",
+        "giftVoucherDialog",
+        "returnReasonDialog",
+        "variableValueDialog",
+        "dayReopenReasonModal",
+        "dayClosingLifecycleOverlay",
         "appLockOverlay"
     ];
 

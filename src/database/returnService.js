@@ -174,6 +174,7 @@ function resolveAuthoritativeReturnItems(
                     SELECT
                         p.id AS product_id,
                         p.barcode AS barcode,
+                        p.variable_value AS variable_value,
                         bi.product_name AS product_name,
                         bi.qty AS sold_quantity,
                         bi.mrp,
@@ -203,6 +204,15 @@ function resolveAuthoritativeReturnItems(
                             reject(
                                 new Error(
                                     "Unable to resolve the returned product from the original bill."
+                                )
+                            );
+                            return;
+                        }
+
+                        if (Number(product.variable_value) === 1) {
+                            reject(
+                                new Error(
+                                    "Variable Value items are not eligible for return."
                                 )
                             );
                             return;
@@ -820,10 +830,13 @@ function getBillForReturn(billNo) {
                             `
                             SELECT
                                 bi.*,
+                                COALESCE(p.variable_value, 0) AS variable_value,
 
                                 0 AS already_returned_qty
 
                             FROM bill_items bi
+                            LEFT JOIN products p
+                                ON p.barcode = bi.barcode
 
                             WHERE bi.bill_no = ?
 
