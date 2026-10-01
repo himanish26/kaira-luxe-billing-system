@@ -50,7 +50,7 @@ Added `scripts/v1-inventory-latest-sku-test.js`, which invokes the actual `getIn
 - Production DB: NOT TOUCHED. Qualification DB: NOT MODIFIED. Dropbox: NOT TOUCHED.
 - Product Master, SKU values, inventory, and all other business data: NOT MODIFIED.
 - Full release regression: NOT RUN by instruction. Build/package/deployment: NONE.
-- Implementation commit SHA: pending commit; will be recorded after commit exists.
+- Implementation commit SHA: `8e683e82411a2e985649a20a70e677b3b70696d3`.
 - Push and final HEAD/origin status: pending.
 
 ## Verdict
