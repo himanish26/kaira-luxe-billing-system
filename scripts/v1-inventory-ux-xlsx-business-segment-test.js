@@ -49,7 +49,8 @@ async function readWorkbook(filePath) {
 
 async function run() {
     assert(productServiceSource.includes("AS latest_sku"));
-    assert(productServiceSource.includes("ORDER BY latest_products.id DESC"));
+    assert(productServiceSource.includes("CAST(substr(latest_products.sku, 3) AS INTEGER) DESC"));
+    assert(productServiceSource.includes("latest_products.sku GLOB 'KL[0-9]*'"));
     const lastImportStart = productMasterTemplate.indexOf("<h2>Last Import</h2>");
     const fileNameIndex = productMasterTemplate.indexOf("<label>File Name</label>", lastImportStart);
     const importedOnIndex = productMasterTemplate.indexOf("<label>Imported On</label>", fileNameIndex);

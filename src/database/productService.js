@@ -61,10 +61,14 @@ function getInventorySummary() {
                 COUNT(DISTINCT season) AS seasons,
                 COUNT(DISTINCT collection) AS collections,
                 (
-                    SELECT sku
+                    SELECT latest_products.sku
                     FROM products latest_products
-                    WHERE TRIM(COALESCE(latest_products.sku, '')) <> ''
-                    ORDER BY latest_products.id DESC
+                    WHERE latest_products.sku GLOB 'KL[0-9]*'
+                      AND length(latest_products.sku) > 2
+                      AND substr(latest_products.sku, 3) NOT GLOB '*[^0-9]*'
+                    ORDER BY CAST(substr(latest_products.sku, 3) AS INTEGER) DESC,
+                             length(latest_products.sku) DESC,
+                             latest_products.sku DESC
                     LIMIT 1
                 ) AS latest_sku,
                 COALESCE(
