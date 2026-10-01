@@ -1,7 +1,9 @@
 const axios = require("axios");
+const { canonicalizeSemanticPayload } = require("../shared/consolidatedDsrBuilder");
 const { getIntegrationConfigService } = require("./emailService");
 const {
     buildEnvelope,
+    sha256Utf8,
     classifyTransportFailure,
     isValidUtcIsoTimestamp,
     validateFrozenJob,
@@ -140,6 +142,29 @@ function createConsolidatedSheetDeliveryWorker(options = {}) {
                         const message = safeMessage("STALE_SUPERSEDED", "A newer CLOSED sequence is authoritative; Sheet delivery was suppressed locally.");
                         await run("UPDATE consolidated_reporting_jobs SET sheet_status='FAILED', sheet_processing_started_at=NULL, sheet_last_error=? WHERE id=? AND sheet_status='PENDING'", [message, row.id]);
                         continue;
+                    }
+                    // A real closing must settle/attempt Email before Sheet,
+                    // including when the background poll competes with its UI.
+                    if (row.email_status === "PROCESSING" || (row.email_status === "PENDING" &&
+                        Number(row.email_attempt_count || 0) === 0 && !row.email_last_error)) continue;
+                }
+                // Freeze only the operational Email Status before the first
+                // Sheet attempt. Never change a hash already submitted to Sheet.
+                if (Number(row.sheet_attempt_count || 0) === 0) {
+                    let validated;
+                    try { validated = validateFrozenJob(row); } catch (_) { /* Existing send preflight records invalid jobs as FAILED. */ }
+                    const overall = validated && validated.payload.overall;
+                    const emailStatus = row.email_status === "DELIVERED" ? "SUCCESS"
+                        : row.email_status === "FAILED" ? "FAILED" : "PENDING";
+                    if (overall && Object.prototype.hasOwnProperty.call(overall, "emailStatus") &&
+                        overall.emailStatus !== emailStatus) {
+                        const payloadJson = canonicalizeSemanticPayload({ ...validated.payload,
+                            overall: { ...overall, emailStatus } });
+                        const payloadHash = sha256Utf8(payloadJson);
+                        await run("UPDATE consolidated_reporting_jobs SET payload_json=?, payload_hash=? WHERE id=? AND sheet_status='PENDING' AND sheet_attempt_count=0",
+                            [payloadJson, payloadHash, row.id]);
+                        row.payload_json = payloadJson;
+                        row.payload_hash = payloadHash;
                     }
                 }
                 const attemptTimestamp = now().toISOString();

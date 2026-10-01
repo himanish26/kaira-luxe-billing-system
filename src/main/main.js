@@ -180,6 +180,7 @@ const resetInventory =
 
 const {
     getSystemStatus,
+    getInternetStatus,
     getStartupCheck
 } = require("./statusService");
 
@@ -414,13 +415,16 @@ const consolidatedSheetDeliveryWorker = createConsolidatedSheetDeliveryWorker({
     integrationConfigProvider: () => integrationConfig.resolveDsrRuntime(),
     logActivity,
     technicalLogger,
-    onOutcome: ({ jobId, status }) => {
-        if (dayClosingFeedback && dayClosingFeedback.jobId === jobId && mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send("day-closing:progress", {
-                stage: "DSR_RESULT", attemptId: dayClosingFeedback.attemptId,
-                status, durable: true, refresh: true
-            });
-        }
+    onOutcome: ({ jobId }) => {
+        if (!dayClosingFeedback || dayClosingFeedback.jobId !== jobId) return;
+        void dayClosingDeliveryCoordinator.readJob(jobId).then(job => {
+            if (dayClosingFeedback && dayClosingFeedback.jobId === jobId && mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send("day-closing:progress", {
+                    stage: "DSR_RESULT", attemptId: dayClosingFeedback.attemptId,
+                    status: job.sheet_status, lastError: job.sheet_last_error, durable: true, refresh: true
+                });
+            }
+        }).catch(() => {});
     }
 });
 const consolidatedReportingEmailWorker = createConsolidatedReportingEmailWorker({
@@ -431,13 +435,16 @@ const consolidatedReportingEmailWorker = createConsolidatedReportingEmailWorker(
     validateBackup,
     logActivity,
     technicalLogger,
-    onOutcome: ({ jobId, status }) => {
-        if (dayClosingFeedback && dayClosingFeedback.jobId === jobId && mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send("day-closing:progress", {
-                stage: "EMAIL_RESULT", attemptId: dayClosingFeedback.attemptId,
-                status, durable: true, refresh: true
-            });
-        }
+    onOutcome: ({ jobId }) => {
+        if (!dayClosingFeedback || dayClosingFeedback.jobId !== jobId) return;
+        void dayClosingDeliveryCoordinator.readJob(jobId).then(job => {
+            if (dayClosingFeedback && dayClosingFeedback.jobId === jobId && mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send("day-closing:progress", {
+                    stage: "EMAIL_RESULT", attemptId: dayClosingFeedback.attemptId,
+                    status: job.email_status, lastError: job.email_last_error, durable: true, refresh: true
+                });
+            }
+        }).catch(() => {});
     }
 });
 const dayClosingDeliveryCoordinator = createDayClosingDeliveryCoordinator({
@@ -734,17 +741,19 @@ setRestoreQuiesceHandler(() => {
 function startIntegrationOutboxDrain() {
     if (integrationOutboxTimer) return;
     const poll = async () => {
-        if (isRestoreInProgress()) return;
+        if (isRestoreInProgress() || dayClosingCriticalInProgress) return;
         try {
             const status = await getSystemStatus();
             const online = Boolean(status.internet && status.internet.online);
+            if (dayClosingCriticalInProgress) return;
             if (online) {
                 if (reportingMode === REPORTING_MODES.CONSOLIDATED_V2) {
-                    try { await consolidatedSheetDeliveryWorker.drain(); } catch (error) {
-                        technicalLogger.warn("CONSOLIDATED_SHEET", "Consolidated Sheet drain failed", { classification: String(error.message || "").slice(0, 500) });
-                    }
                     try { await consolidatedReportingEmailWorker.processNext(); } catch (error) {
                         technicalLogger.warn("CONSOLIDATED_EMAIL", "Consolidated email drain failed", { classification: String(error.message || "").slice(0, 500) });
+                    }
+                    if (dayClosingCriticalInProgress) return;
+                    try { await consolidatedSheetDeliveryWorker.drain(); } catch (error) {
+                        technicalLogger.warn("CONSOLIDATED_SHEET", "Consolidated Sheet drain failed", { classification: String(error.message || "").slice(0, 500) });
                     }
                     if (!legacyReportingSuppressionLogged) {
                         const [legacyDsr, legacySegment] = await Promise.all([integrationOutbox.list(), segmentDsrOutbox.list()]);
@@ -3471,19 +3480,19 @@ ipcMain.handle(
                     };
                     let online = false;
                     try {
-                        const systemStatus = await getSystemStatus();
-                        online = Boolean(systemStatus.internet && systemStatus.internet.online);
+                        const internet = await getInternetStatus({ timeoutMs: 3000 });
+                        online = Boolean(internet.online);
                     }
                     catch (_) {}
 
-                    sendProgress("UPDATING_DSR");
-                    const dsr = await dayClosingDeliveryCoordinator.settle(jobId, "sheet", online,
-                        () => sendProgress("DSR_RETRYING"));
-                    sendProgress("DSR_RESULT", { status: dsr.status, durable: dsr.durable });
                     sendProgress("SENDING_EMAIL");
                     const email = await dayClosingDeliveryCoordinator.settle(jobId, "email", online,
                         () => sendProgress("EMAIL_RETRYING"));
-                    sendProgress("EMAIL_RESULT", { status: email.status, durable: email.durable });
+                    sendProgress("EMAIL_RESULT", { status: email.status, durable: email.durable, lastError: email.lastError });
+                    sendProgress("UPDATING_DSR");
+                    const dsr = await dayClosingDeliveryCoordinator.settle(jobId, "sheet", online,
+                        () => sendProgress("DSR_RETRYING"));
+                    sendProgress("DSR_RESULT", { status: dsr.status, durable: dsr.durable, lastError: dsr.lastError });
                     result.onlineDelivery = {
                         online,
                         dsrStatus: dsr.status,
@@ -3615,8 +3624,14 @@ ipcMain.handle("day-closing:retry-dsr-sync", async (event, grant, snapshotId) =>
                 consolidatedSheetDeliveryWorker.retryForClosing(id),
                 consolidatedReportingEmailWorker.retryForClosing(id)
             ]);
+            const job = await consolidatedReportingPersistence.getByClosingId(id);
+            const onlineDelivery = job ? {
+                dsrStatus: job.sheet_status, emailStatus: job.email_status,
+                dsrError: job.sheet_last_error, emailError: job.email_last_error, durable: true
+            } : null;
             return {
                 success: Boolean(sheet.requeued || email.requeued),
+                onlineDelivery,
                 dsrSyncStatus: sheet.requeued || email.requeued ? "PENDING" : "FAILED",
                 dsrSyncWarning: sheet.requeued || email.requeued ? null : "No failed consolidated reporting job was requeued.",
                 action: "CONSOLIDATED_RETRY"

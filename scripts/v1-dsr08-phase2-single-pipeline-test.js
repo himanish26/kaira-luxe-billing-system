@@ -163,21 +163,23 @@ async function testSheetAndEmailUseFrozenJobAndExactBackup() {
     fs.writeFileSync(exact, "fixture backup");
     fs.writeFileSync(path.join(temp, "older.zip"), "older");
     fs.writeFileSync(path.join(temp, "newer-unrelated.zip"), "newer");
-    let sent; let backupValidation = 0;
+    let sent = {}; let backupValidation = 0;
     const sheet = createConsolidatedSheetDeliveryWorker({
         database: db, now: () => new Date(NOW), configProvider: () => ({ endpoint: "https://fixture.invalid/c4d", secret: "fixture-secret" }),
-        httpClient: { post: async (url, envelope) => { sent = { url, envelope }; return response("INSERTED", envelope); } }
+        httpClient: { post: async (url, envelope) => { Object.assign(sent, { url, envelope }); return response("INSERTED", envelope); } }
     });
     const email = createConsolidatedReportingEmailWorker({
         database: db, now: () => new Date(NOW), sendEmail: async value => { sent.email = value; },
         getEmailConfiguration: async () => ({ automaticEmailBackup: true, recipients: ["fixture@example.invalid"] }),
         getBackupPath: async reference => path.join(temp, reference), validateBackup: async value => { backupValidation += 1; assert.strictEqual(value, exact); return { success: true }; }
     });
+    assert.strictEqual((await sheet.processNext()).processed, false, "Sheet cannot overtake unattempted Email");
+    assert.strictEqual((await email.processNext()).status, "DELIVERED");
     assert.strictEqual((await sheet.processNext()).status, "DELIVERED");
+    assert.strictEqual(sent.envelope.payload.overall.emailStatus, "SUCCESS");
     assert.strictEqual(sent.envelope.payload.contractVersion, 2);
     const storedJob = await get(db, "SELECT payload_hash FROM consolidated_reporting_jobs WHERE closing_id=11");
     assert.strictEqual(sent.envelope.payloadHash, storedJob.payload_hash);
-    assert.strictEqual((await email.processNext()).status, "DELIVERED");
     assert.strictEqual(sent.email.attachments[0].path, exact);
     assert.strictEqual(backupValidation, 1);
     assert.match(sent.email.text, /KL\n/); assert.match(sent.email.text, /MENS\n/); assert.match(sent.email.text, /KIDS\n/); assert.doesNotMatch(sent.email.text, /MTD/i);
@@ -232,12 +234,12 @@ async function testCurrentClosingJobIsTargeted() {
         getBackupPath: async reference => path.join(temp, reference),
         validateBackup: async () => ({ success: true })
     });
-    assert.strictEqual((await sheet.processForJob(current.id)).status, "DELIVERED");
     assert.strictEqual((await email.processForJob(current.id)).status, "DELIVERED");
+    assert.strictEqual((await sheet.processForJob(current.id)).status, "DELIVERED");
     assert.deepStrictEqual([sheetSends, emailSends], [1, 1]);
     assert.deepStrictEqual(outcomes, [
-        { channel: "sheet", jobId: current.id, status: "DELIVERED" },
-        { channel: "email", jobId: current.id, status: "DELIVERED" }
+        { channel: "email", jobId: current.id, status: "DELIVERED" },
+        { channel: "sheet", jobId: current.id, status: "DELIVERED" }
     ]);
     const old = await get(db, "SELECT sheet_status,email_status FROM consolidated_reporting_jobs WHERE closing_id=41");
     const now = await get(db, "SELECT sheet_status,email_status FROM consolidated_reporting_jobs WHERE closing_id=42");

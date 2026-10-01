@@ -5,18 +5,18 @@
 })(typeof window !== "undefined" ? window : globalThis, function() {
     const ORDER = Object.freeze([
         "FINALIZING_ACCOUNTS", "BUSINESS_DAY_CLOSED", "CREATING_BACKUP",
-        "VERIFYING_BACKUP", "UPDATING_DSR", "SENDING_EMAIL",
+        "VERIFYING_BACKUP", "SENDING_EMAIL", "UPDATING_DSR",
         "COMPLETING_DAY_CLOSING", "PRINTING_DAY_CLOSING_SUMMARY"
     ]);
     const LABELS = Object.freeze({
-        FINALIZING_ACCOUNTS: "Finalizing accounts",
+        FINALIZING_ACCOUNTS: "Finalizing Accounts",
         BUSINESS_DAY_CLOSED: "Closing Business Day",
-        CREATING_BACKUP: "Creating backup",
-        VERIFYING_BACKUP: "Verifying backup",
+        CREATING_BACKUP: "Creating Backup",
+        VERIFYING_BACKUP: "Verifying Backup",
         UPDATING_DSR: "Updating DSR",
-        SENDING_EMAIL: "Sending email",
+        SENDING_EMAIL: "Sending Email",
         COMPLETING_DAY_CLOSING: "Completing Day Closing",
-        PRINTING_DAY_CLOSING_SUMMARY: "Printing Day Closing summary"
+        PRINTING_DAY_CLOSING_SUMMARY: "Printing Day Closing Summary"
     });
     const START_DETAILS = Object.freeze({
         FINALIZING_ACCOUNTS: "Processing...",
@@ -66,6 +66,8 @@
             } else if (detail.status === "FAILED") {
                 set(stage, "error", "Failed");
             } else return false;
+            row(stage).retryable = detail.status === "FAILED" &&
+                !String(detail.lastError || "").startsWith("STALE_SUPERSEDED:");
             return true;
         }
         function begin() {
@@ -161,7 +163,10 @@
                 ...warnings
             ].filter(Boolean).join(" ");
             current.noticeType = failedDelivery || printFailed ? "error" : queued ? "warning" : "";
-            current.closeEnabled = !failedDelivery;
+            current.closeEnabled = !printFailed && ["FINALIZING_ACCOUNTS", "BUSINESS_DAY_CLOSED",
+                "CREATING_BACKUP", "VERIFYING_BACKUP", "COMPLETING_DAY_CLOSING",
+                "PRINTING_DAY_CLOSING_SUMMARY"].every(stage => row(stage).status === "complete");
+            current.retryVisible = dsr.retryable === true || email.retryable === true;
             current.outcome = failedDelivery || printFailed ? "attention" : queued ? "pending" : "success";
             return current;
         }

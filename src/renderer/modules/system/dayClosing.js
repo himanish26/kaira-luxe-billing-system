@@ -534,6 +534,7 @@ async function showDayClosingPage() {
 
 
 let dayClosingLifecycleListenerBound = false;
+let dayClosingRetryAuthorizing = false;
 let activeDayClosingAttemptId = null;
 const dayClosingLifecycleState = window.createDayClosingLifecycleState();
 const DAY_CLOSING_STAGE_ORDER = dayClosingLifecycleState.order;
@@ -565,6 +566,7 @@ function ensureDayClosingLifecycleOverlay() {
             <div id="dcLifecycleNotice" class="dc-lifecycle-notice" hidden></div>
             <div class="dc-lifecycle-actions">
                 <button id="dcLifecycleReturnBtn" class="klbs-cancel-btn" hidden>RETURN TO DAY CLOSING</button>
+                <button id="dcLifecycleRetryBtn" class="klbs-primary-btn" hidden>RETRY FAILED TASKS</button>
                 <button id="dcLifecycleCloseBtn" class="klbs-primary-btn" disabled>CLOSE KLBS</button>
             </div>
         </section>
@@ -590,6 +592,42 @@ function ensureDayClosingLifecycleOverlay() {
             notice.hidden = false;
             notice.className = "dc-lifecycle-notice is-error";
             notice.textContent = result && result.error || "KLBS could not close safely.";
+        }
+    });
+
+    document.getElementById("dcLifecycleRetryBtn").addEventListener("click", async event => {
+        const button = event.currentTarget;
+        const state = dayClosingLifecycleState.getCurrent();
+        const snapshotId = state && state.finalContext && state.finalContext[0].snapshotId;
+        if (!snapshotId || button.disabled) return;
+        button.disabled = true;
+        button.textContent = "Retrying...";
+        try {
+            let grant;
+            dayClosingRetryAuthorizing = true;
+            overlay.classList.remove("is-visible");
+            try { grant = await requestAdminAuthorization("DSR_SYNC_RETRY"); }
+            finally {
+                dayClosingRetryAuthorizing = false;
+                renderDayClosingLifecycleState(dayClosingLifecycleState.getCurrent());
+            }
+            if (!grant) return;
+            const result = await window.electronAPI.retryDayClosingDsrSync(grant, snapshotId);
+            if (!dayClosingLifecycleState.isCurrent(state.attemptId)) return;
+            if (result.onlineDelivery) {
+                for (const [stage, status, lastError] of [
+                    ["EMAIL_RESULT", result.onlineDelivery.emailStatus, result.onlineDelivery.emailError],
+                    ["DSR_RESULT", result.onlineDelivery.dsrStatus, result.onlineDelivery.dsrError]
+                ]) updateDayClosingLifecycleStage(stage, state.attemptId, { status, lastError, durable: true, refresh: true });
+            }
+            if (!result.success) await window.electronAPI.showMessageBox({ type: "warning",
+                title: "Retry Failed Tasks", message: result.error || result.dsrSyncWarning || "No failed task was requeued." });
+        } catch (error) {
+            await window.electronAPI.showMessageBox({ type: "error", title: "Retry Failed Tasks",
+                message: error.message || "Failed tasks could not be requeued." });
+        } finally {
+            button.disabled = false;
+            button.textContent = "RETRY FAILED TASKS";
         }
     });
 
@@ -642,9 +680,12 @@ function renderDayClosingLifecycleState(state) {
     closeButton.disabled = !state.closeEnabled;
     closeButton.textContent = "CLOSE KLBS";
     document.getElementById("dcLifecycleReturnBtn").hidden = !state.returnVisible;
-    overlay.classList.add("is-visible");
-    overlay.tabIndex = -1;
-    overlay.focus();
+    document.getElementById("dcLifecycleRetryBtn").hidden = !state.retryVisible;
+    if (!dayClosingRetryAuthorizing) {
+        overlay.classList.add("is-visible");
+        overlay.tabIndex = -1;
+        overlay.focus();
+    }
     state.stages.forEach((stage, index) => {
         const row = overlay.querySelector(`.dc-lifecycle-stage[data-stage="${stage.stage}"]`);
         if (!row) return;
@@ -730,13 +771,13 @@ async function startDayClosing() {
             "VERIFYING_BACKUP", "BACKUP_VERIFIED"]) {
             updateDayClosingLifecycleStage(stage, attemptId);
         }
-        updateDayClosingLifecycleStage("UPDATING_DSR", attemptId);
-        updateDayClosingLifecycleStage("DSR_RESULT", attemptId, {
-            status: result.onlineDelivery.dsrStatus, durable: true
-        });
         updateDayClosingLifecycleStage("SENDING_EMAIL", attemptId);
         updateDayClosingLifecycleStage("EMAIL_RESULT", attemptId, {
-            status: result.onlineDelivery.emailStatus, durable: true
+            status: result.onlineDelivery.emailStatus, lastError: result.onlineDelivery.emailError, durable: true
+        });
+        updateDayClosingLifecycleStage("UPDATING_DSR", attemptId);
+        updateDayClosingLifecycleStage("DSR_RESULT", attemptId, {
+            status: result.onlineDelivery.dsrStatus, lastError: result.onlineDelivery.dsrError, durable: true
         });
         updateDayClosingLifecycleStage("COMPLETING_DAY_CLOSING", attemptId);
         updateDayClosingLifecycleStage("DAY_CLOSING_COMPLETE", attemptId);

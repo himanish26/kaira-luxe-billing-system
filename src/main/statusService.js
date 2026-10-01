@@ -226,9 +226,11 @@ async function getStartupCheck(checkName, dependencies = {}) {
    INTERNET STATUS
 ========================================== */
 
-function getInternetStatus() {
+function getInternetStatus(options = {}) {
 
     return new Promise((resolve) => {
+        let deadline;
+        const finish = result => { clearTimeout(deadline); resolve(result); };
 
         const request = https.get(
 
@@ -236,7 +238,7 @@ function getInternetStatus() {
 
             () => {
 
-                resolve({
+                finish({
 
                     online: true,
 
@@ -250,7 +252,7 @@ function getInternetStatus() {
 
         request.on("error", () => {
 
-            resolve({
+            finish({
 
                 online: false,
 
@@ -264,7 +266,7 @@ function getInternetStatus() {
 
             request.destroy();
 
-            resolve({
+            finish({
 
                 online: false,
 
@@ -273,6 +275,12 @@ function getInternetStatus() {
             });
 
         });
+
+        // Optional wall-clock bound also covers DNS/TLS before socket timeout.
+        if (options.timeoutMs > 0) deadline = setTimeout(() => {
+            request.destroy();
+            finish({ online: false, status: "Offline" });
+        }, options.timeoutMs);
 
     });
 
@@ -631,6 +639,7 @@ module.exports = {
 
     getSystemStatus,
     getStartupCheck,
+    getInternetStatus,
     getDatabaseStatus,
     getDatabaseIntegrityStatus,
     getProductInventoryStatus
