@@ -117,4 +117,12 @@ Implemented locked Email-before-DSR, existing-vocabulary status propagation, int
 
 Windows packaged/manual Day Closing sequence, recovery button/PIN usability and thermal output acceptance remain to be performed; automated fixtures do not claim real Windows focus/printing or live delivery acceptance. The final complete release regression remains deferred by explicit instruction.
 
-Final status: IMPLEMENTED - TESTS PASSED (focused). Implementation SHA and post-push verification will be recorded after commit creation.
+Final status: IMPLEMENTED - TESTS PASSED (focused).
+
+## COMMIT / PUSH VERIFICATION
+
+- Implementation commit: `09781c85d7c572d3c45e64c894e3d4b28cfcc5e4`.
+- Message: `fix: settle day closing email before DSR and enable delivery recovery`.
+- Push to origin/main: PASS.
+- Verified after implementation push: HEAD = origin/main = `09781c85d7c572d3c45e64c894e3d4b28cfcc5e4`; `git status -sb` = `## main...origin/main` with no changes. Working-tree and staged diff checks PASS.
+- This documentation follow-up records the now-existing implementation SHA and verified push evidence. The task's final response records the subsequent documentation checkpoint HEAD/origin and clean status.
