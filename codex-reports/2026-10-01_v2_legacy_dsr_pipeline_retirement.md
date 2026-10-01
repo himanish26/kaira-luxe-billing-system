@@ -55,7 +55,7 @@ Before/after equality was verified for email and all nonselected integration out
 - Qualification DB: intentionally modified only by the tested retirement service after making the verified safety copy.
 - Network delivery/replay: NONE. Apps Script/Cloudflare deployment: NONE. Installer/build/package: NONE.
 - Business rules and schema: unchanged.
-- Implementation commit SHA: pending commit; will be recorded once the implementation commit exists.
+- Implementation commit SHA: `0085a62098e0c0ca1458b1513fc351222b06a83b`.
 - Push/HEAD-origin verification: pending.
 
 ## Verdict
