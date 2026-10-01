@@ -3612,9 +3612,8 @@ ipcMain.handle(
     }
 );
 
-ipcMain.handle("day-closing:retry-dsr-sync", async (event, grant, snapshotId) => {
+ipcMain.handle("day-closing:retry-dsr-sync", async (event, snapshotId) => {
     try {
-        requireSecurityGrant(grant, "DSR_SYNC_RETRY");
         const id = Number(snapshotId);
         if (!Number.isSafeInteger(id) || id <= 0) {
             throw new Error("A valid Day Closing snapshot is required.");

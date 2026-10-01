@@ -181,8 +181,8 @@ onDayClosingExitBlocked: callback =>
 closeAfterDayClosing: () =>
     ipcRenderer.invoke("app:close-after-day-closing"),
 
-    retryDayClosingDsrSync: (grant, snapshotId) =>
-        ipcRenderer.invoke("day-closing:retry-dsr-sync", grant, snapshotId),
+    retryDayClosingDsrSync: snapshotId =>
+        ipcRenderer.invoke("day-closing:retry-dsr-sync", snapshotId),
 
     reopenBusinessDay: (grant, reason) =>
 

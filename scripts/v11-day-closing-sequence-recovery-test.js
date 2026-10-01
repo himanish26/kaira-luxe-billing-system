@@ -130,14 +130,13 @@ async function testClosing(emailOutcome, online) {
         // Existing retry route only requeues channels; no closing or print operation.
         if (online) {
             const retry = captureHandler(mainSource, 'ipcMain.handle("day-closing:retry-dsr-sync"', '\n}\n', {
-                requireSecurityGrant: (_grant, purpose) => assert.strictEqual(purpose, "DSR_SYNC_RETRY"),
                 reportingMode: "CONSOLIDATED_V2", REPORTING_MODES: { CONSOLIDATED_V2: "CONSOLIDATED_V2" },
                 consolidatedSheetDeliveryWorker: sheet, consolidatedReportingEmailWorker: email,
                 consolidatedReportingPersistence: { getByClosingId: id => get(db, "SELECT * FROM consolidated_reporting_jobs WHERE closing_id=?", [id]) }
             });
             const before = await get(db, "SELECT * FROM consolidated_reporting_jobs WHERE id=1");
             const beforeCalls = calls.slice();
-            const retried = await retry({}, "fixture-grant", 1);
+            const retried = await retry({}, 1);
             assert.strictEqual(retried.success, emailOutcome === "FAILED");
             assert.deepStrictEqual(calls, beforeCalls, "requeue never repeats close/backup/completion/print or sends synchronously");
             const after = await get(db, "SELECT * FROM consolidated_reporting_jobs WHERE id=1");
@@ -157,8 +156,12 @@ async function testClosing(emailOutcome, online) {
             assert.strictEqual((await sheet.retryForClosing(1)).requeued, false);
             await run(db, "UPDATE consolidated_reporting_jobs SET sheet_last_error='REJECTED: fixture',email_status='DELIVERED',email_delivered_at=? WHERE id=1", [clock.toISOString()]);
             const successfulEmail = await get(db, "SELECT email_status,email_delivered_at,email_attempt_count FROM consolidated_reporting_jobs WHERE id=1");
-            assert.strictEqual((await retry({}, "fixture-grant", 1)).success, true);
+            assert.strictEqual((await retry({}, 1)).success, true);
             assert.strictEqual((await get(db, "SELECT sheet_status FROM consolidated_reporting_jobs WHERE id=1")).sheet_status, "PENDING");
+            const callsAfterRequeue = calls.slice();
+            const secondPendingRetry = await retry({}, 1);
+            assert.strictEqual(secondPendingRetry.success, false, "queued PENDING work cannot be requeued again");
+            assert.deepStrictEqual(calls, callsAfterRequeue, "a queued retry does not send or requeue a second time");
             assert.deepStrictEqual(await get(db, "SELECT email_status,email_delivered_at,email_attempt_count FROM consolidated_reporting_jobs WHERE id=1"), successfulEmail);
         }
     } finally {
@@ -200,45 +203,61 @@ async function testSheetRetryHash() {
     } finally { await new Promise(resolve => db.close(resolve)); }
 }
 
-async function testRetryAuthorization() {
+async function testRetryClickProtection() {
     let click;
-    let resolveGrant;
-    let visible = true;
+    let resolveRetry;
     let retries = 0;
+    let authorizationCalls = 0;
     const button = { disabled: false, textContent: "RETRY FAILED TASKS", addEventListener: (_event, fn) => { click = fn; } };
-    const state = { attemptId: 5, finalContext: [{ snapshotId: 1 }] };
+    const state = { attemptId: 5, finalContext: [{ snapshotId: 1 }], retryVisible: true };
+    const stageUpdates = [];
     const context = {
         document: { getElementById: () => button },
-        overlay: { classList: { remove: () => { visible = false; } } },
-        dayClosingRetryAuthorizing: false,
         dayClosingLifecycleState: { getCurrent: () => state, isCurrent: id => id === state.attemptId },
-        requestAdminAuthorization: purpose => {
-            assert.strictEqual(purpose, "DSR_SYNC_RETRY");
-            return new Promise(resolve => { resolveGrant = resolve; });
+        requestAdminAuthorization: () => { authorizationCalls += 1; throw new Error("Retry must not request authorization."); },
+        updateDayClosingLifecycleStage: (stage, attemptId, detail) => {
+            stageUpdates.push({ stage, attemptId, detail });
+            state.retryVisible = detail.status === "FAILED" && !String(detail.lastError || "").startsWith("STALE_SUPERSEDED:");
+            button.hidden = !state.retryVisible;
         },
-        renderDayClosingLifecycleState: () => { assert.strictEqual(context.dayClosingRetryAuthorizing, false); visible = true; },
-        updateDayClosingLifecycleStage: () => {},
         window: { electronAPI: {
-            retryDayClosingDsrSync: async (grant, id) => { assert.strictEqual(grant, "authorized"); assert.strictEqual(id, 1); retries += 1; return { success: true }; },
+            retryDayClosingDsrSync: id => {
+                assert.strictEqual(id, 1);
+                assert.strictEqual(button.disabled, true, "button disables before backend IPC is invoked");
+                assert.strictEqual(button.textContent, "Retrying...");
+                retries += 1;
+                return new Promise(resolve => { resolveRetry = resolve; });
+            },
             showMessageBox: async () => {}
         } }
     };
     const start = uiSource.indexOf('document.getElementById("dcLifecycleRetryBtn").addEventListener');
     vm.runInNewContext(uiSource.slice(start, uiSource.indexOf("if (!dayClosingLifecycleListenerBound)", start)), context);
-    const cancelled = click({ currentTarget: button });
-    assert.strictEqual(visible, false, "lifecycle yields to the existing Administrator modal");
-    assert.strictEqual(context.dayClosingRetryAuthorizing, true);
-    await click({ currentTarget: button }); // Duplicate click is ignored.
-    resolveGrant(null);
-    await cancelled;
-    assert.strictEqual(retries, 0, "cancelled Administrator authorization does not requeue anything");
-    assert.strictEqual(visible, true); assert.strictEqual(button.disabled, false);
-    const authorized = click({ currentTarget: button });
-    resolveGrant("authorized");
-    await authorized;
-    assert.strictEqual(retries, 1); assert.strictEqual(button.disabled, false);
-    assert.strictEqual(button.textContent, "RETRY FAILED TASKS");
-    assert(uiSource.includes("if (!dayClosingRetryAuthorizing)"), "background render cannot cover authorization or steal PIN focus");
+    const first = click({ currentTarget: button });
+    assert.strictEqual(button.disabled, true, "first click disables synchronously");
+    assert.strictEqual(button.textContent, "Retrying...");
+    await click({ currentTarget: button }); // Immediate repeated click is ignored.
+    assert.strictEqual(retries, 1, "double click invokes retry only once");
+    assert.strictEqual(authorizationCalls, 0, "Retry Failed Tasks does not request Administrator authorization");
+    resolveRetry({ success: true, onlineDelivery: { emailStatus: "DELIVERED", dsrStatus: "PENDING", durable: true } });
+    await first;
+    assert.strictEqual(button.hidden, true, "PENDING/queued state hides retry");
+    assert.strictEqual(button.disabled, false);
+    await click({ currentTarget: button });
+    assert.strictEqual(retries, 1, "queued state cannot invoke another retry");
+    assert.deepStrictEqual(stageUpdates.map(item => [item.stage, item.detail.status]), [
+        ["EMAIL_RESULT", "DELIVERED"], ["DSR_RESULT", "PENDING"]
+    ], "UI reconciles from the durable channel states returned by IPC");
+
+    state.retryVisible = true; button.hidden = false;
+    const laterFailed = click({ currentTarget: button });
+    assert.strictEqual(retries, 2, "a later genuinely failed state permits an intentional retry");
+    resolveRetry({ success: false, onlineDelivery: { emailStatus: "DELIVERED", dsrStatus: "FAILED", dsrError: "RETRYABLE_FAILURE", durable: true } });
+    await laterFailed;
+    assert.strictEqual(button.hidden, false, "eligible FAILED state keeps retry available");
+    assert.strictEqual(button.disabled, false);
+    assert.strictEqual(authorizationCalls, 0);
+    assert(!uiSource.includes('requestAdminAuthorization("DSR_SYNC_RETRY")'));
 }
 
 (async () => {
@@ -248,11 +267,14 @@ async function testRetryAuthorization() {
     await testClosing("PENDING", false);
     await testConnectivity();
     await testSheetRetryHash();
-    await testRetryAuthorization();
+    await testRetryClickProtection();
     const retryUI = uiSource.slice(uiSource.indexOf('document.getElementById("dcLifecycleRetryBtn").addEventListener'),
         uiSource.indexOf("if (!dayClosingLifecycleListenerBound)"));
-    assert(retryUI.includes('requestAdminAuthorization("DSR_SYNC_RETRY")'));
-    assert(retryUI.includes("retryDayClosingDsrSync(grant, snapshotId)"));
+    assert(!retryUI.includes("requestAdminAuthorization"));
+    assert(retryUI.includes("retryDayClosingDsrSync(snapshotId)"));
+    assert(retryUI.indexOf("button.disabled = true") < retryUI.indexOf("await window.electronAPI.retryDayClosingDsrSync"),
+        "the retry button is disabled before awaiting retry IPC");
+    assert(retryUI.includes("!state.retryVisible"), "queued/success states cannot trigger a stale hidden retry action");
     assert(!/closeBusinessDay|printDayClosing|startDayClosing|createBackup/.test(retryUI));
     assert(uiSource.indexOf('updateDayClosingLifecycleStage("EMAIL_RESULT", attemptId') <
         uiSource.indexOf('updateDayClosingLifecycleStage("UPDATING_DSR", attemptId'));

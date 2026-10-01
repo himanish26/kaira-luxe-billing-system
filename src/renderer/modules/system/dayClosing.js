@@ -534,7 +534,6 @@ async function showDayClosingPage() {
 
 
 let dayClosingLifecycleListenerBound = false;
-let dayClosingRetryAuthorizing = false;
 let activeDayClosingAttemptId = null;
 const dayClosingLifecycleState = window.createDayClosingLifecycleState();
 const DAY_CLOSING_STAGE_ORDER = dayClosingLifecycleState.order;
@@ -601,20 +600,11 @@ function ensureDayClosingLifecycleOverlay() {
         const button = event.currentTarget;
         const state = dayClosingLifecycleState.getCurrent();
         const snapshotId = state && state.finalContext && state.finalContext[0].snapshotId;
-        if (!snapshotId || button.disabled) return;
+        if (!snapshotId || !state.retryVisible || button.disabled) return;
         button.disabled = true;
         button.textContent = "Retrying...";
         try {
-            let grant;
-            dayClosingRetryAuthorizing = true;
-            overlay.classList.remove("is-visible");
-            try { grant = await requestAdminAuthorization("DSR_SYNC_RETRY"); }
-            finally {
-                dayClosingRetryAuthorizing = false;
-                renderDayClosingLifecycleState(dayClosingLifecycleState.getCurrent());
-            }
-            if (!grant) return;
-            const result = await window.electronAPI.retryDayClosingDsrSync(grant, snapshotId);
+            const result = await window.electronAPI.retryDayClosingDsrSync(snapshotId);
             if (!dayClosingLifecycleState.isCurrent(state.attemptId)) return;
             if (result.onlineDelivery) {
                 for (const [stage, status, lastError] of [
@@ -683,11 +673,9 @@ function renderDayClosingLifecycleState(state) {
     closeButton.textContent = "CLOSE KLBS";
     document.getElementById("dcLifecycleReturnBtn").hidden = !state.returnVisible;
     document.getElementById("dcLifecycleRetryBtn").hidden = !state.retryVisible;
-    if (!dayClosingRetryAuthorizing) {
-        overlay.classList.add("is-visible");
-        overlay.tabIndex = -1;
-        overlay.focus();
-    }
+    overlay.classList.add("is-visible");
+    overlay.tabIndex = -1;
+    overlay.focus();
     state.stages.forEach((stage, index) => {
         const row = overlay.querySelector(`.dc-lifecycle-stage[data-stage="${stage.stage}"]`);
         if (!row) return;
