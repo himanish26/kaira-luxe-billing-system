@@ -2334,15 +2334,23 @@ body{
 .dc-lifecycle-overlay.is-visible{ display:flex; }
 
 .dc-lifecycle-shell{
+    display:flex;
+    flex-direction:column;
     width:min(720px, 100%);
     max-height:calc(100vh - 48px);
-    overflow:auto;
+    overflow:hidden;
     padding:28px 34px;
     background:var(--card);
     border:1px solid var(--border);
     border-top:6px solid var(--primary);
     border-radius:var(--radius-xl);
     box-shadow:0 24px 70px rgba(0,0,0,.28);
+}
+
+.dc-lifecycle-scroll{
+    flex:0 1 auto;
+    min-height:0;
+    overflow-y:auto;
 }
 
 .dc-lifecycle-brand{

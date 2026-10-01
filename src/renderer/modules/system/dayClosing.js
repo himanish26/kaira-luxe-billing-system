@@ -550,20 +550,22 @@ function ensureDayClosingLifecycleOverlay() {
     overlay.setAttribute("role", "presentation");
     overlay.innerHTML = `
         <section class="dc-lifecycle-shell" role="dialog" aria-modal="true" aria-labelledby="dcLifecycleTitle">
-            <div class="dc-lifecycle-brand">KAIRA LUXE</div>
-            <div class="dc-lifecycle-kicker">DAY CLOSING</div>
-            <h1 id="dcLifecycleTitle">Closing Business Day</h1>
-            <p id="dcLifecycleSubtitle">Please keep KLBS open while the mandatory closing work completes.</p>
-            <div id="dcLifecycleStages" class="dc-lifecycle-stages">
-                ${DAY_CLOSING_STAGE_ORDER.map((stage, index) => `
-                    <div class="dc-lifecycle-stage is-pending" data-stage="${stage}" aria-label="${stage}">
-                        <span class="dc-lifecycle-stage-icon" aria-hidden="true">${index + 1}</span>
-                        <span class="dc-lifecycle-stage-label"></span>
-                        <span class="dc-lifecycle-stage-state">Waiting</span>
-                    </div>
-                `).join("")}
+            <div class="dc-lifecycle-scroll">
+                <div class="dc-lifecycle-brand">KAIRA LUXE</div>
+                <div class="dc-lifecycle-kicker">DAY CLOSING</div>
+                <h1 id="dcLifecycleTitle">Closing Business Day</h1>
+                <p id="dcLifecycleSubtitle">Please keep KLBS open while the mandatory closing work completes.</p>
+                <div id="dcLifecycleStages" class="dc-lifecycle-stages">
+                    ${DAY_CLOSING_STAGE_ORDER.map((stage, index) => `
+                        <div class="dc-lifecycle-stage is-pending" data-stage="${stage}" aria-label="${stage}">
+                            <span class="dc-lifecycle-stage-icon" aria-hidden="true">${index + 1}</span>
+                            <span class="dc-lifecycle-stage-label"></span>
+                            <span class="dc-lifecycle-stage-state">Waiting</span>
+                        </div>
+                    `).join("")}
+                </div>
+                <div id="dcLifecycleNotice" class="dc-lifecycle-notice" hidden></div>
             </div>
-            <div id="dcLifecycleNotice" class="dc-lifecycle-notice" hidden></div>
             <div class="dc-lifecycle-actions">
                 <button id="dcLifecycleReturnBtn" class="klbs-cancel-btn" hidden>RETURN TO DAY CLOSING</button>
                 <button id="dcLifecycleRetryBtn" class="klbs-primary-btn" hidden>RETRY FAILED TASKS</button>

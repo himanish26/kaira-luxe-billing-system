@@ -20,7 +20,15 @@ assert.deepStrictEqual(STAGE_ORDER, [
 ]);
 assert(html.indexOf("dayClosingLifecycleState.js") < html.indexOf("modules/system/dayClosing.js"));
 assert(ui.includes('role="dialog" aria-modal="true"'));
+assert(ui.includes('<div class="dc-lifecycle-scroll">'),
+    "Day Closing content scrolls inside the rounded modal shell");
+assert(ui.indexOf('class="dc-lifecycle-scroll"') < ui.indexOf('id="dcLifecycleStages"') &&
+    ui.indexOf('class="dc-lifecycle-scroll"') < ui.indexOf('id="dcLifecycleNotice"'));
 assert(css.includes("width:min(720px, 100%)"));
+assert(/\.dc-lifecycle-shell\s*\{[^}]*max-height:calc\(100vh - 48px\);[^}]*overflow:hidden;/s.test(css),
+    "the outer Day Closing shell retains its existing size and clips to the rounded boundary");
+assert(/\.dc-lifecycle-scroll\s*\{[^}]*min-height:0;[^}]*overflow-y:auto;/s.test(css),
+    "only the inner Day Closing content owns vertical scrolling");
 assert(/\.dc-lifecycle-stage\.is-pending\s*\{\s*display:none;/.test(css),
     "future stages stay hidden until their real operation starts");
 assert(ui.includes('document.body.appendChild(overlay)'));
