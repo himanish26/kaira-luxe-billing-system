@@ -12,6 +12,7 @@ function createIntegrationOutboxService(options = {}) {
     const getBackupPath = options.getBackupPath || (async () => null);
     const logActivity = options.logActivity;
     const activityExists = options.activityExists || (async () => false);
+    const reportingMode = String(options.reportingMode || "LEGACY").trim().toUpperCase();
     let drainInFlight = null;
     const run = (sql, params = []) => new Promise((resolve, reject) => database.run(sql, params, function (error) { error ? reject(error) : resolve({ lastID: this.lastID, changes: this.changes }); }));
     const get = (sql, params = []) => new Promise((resolve, reject) => database.get(sql, params, (error, row) => error ? reject(error) : resolve(row || null)));
@@ -98,6 +99,50 @@ function createIntegrationOutboxService(options = {}) {
         await recordSupersededActivity(item, reason);
         return true;
     }
+    async function retireLegacyDsrBacklog() {
+        if (reportingMode !== "CONSOLIDATED_V2") return { retiredCount: 0 };
+
+        await run("BEGIN IMMEDIATE");
+        let retired = [];
+        try {
+            const openDay = await get(`SELECT business_date, opened_at FROM business_day_state
+                WHERE state='OPEN' ORDER BY business_date DESC LIMIT 1`);
+            if (!openDay) {
+                await run("COMMIT");
+                return { retiredCount: 0 };
+            }
+            const consolidatedTable = await get("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='consolidated_reporting_jobs'");
+            const consolidatedGuard = consolidatedTable ? `AND NOT EXISTS (
+                SELECT 1 FROM consolidated_reporting_jobs j
+                WHERE j.closing_id=o.closing_id AND j.business_date=o.business_date AND j.close_sequence=o.close_sequence
+                  AND (j.sheet_status IN ('PENDING','PROCESSING') OR j.email_status IN ('PENDING','PROCESSING'))
+            )` : "";
+            retired = await all(`SELECT o.id,o.business_date,o.closing_id,o.close_sequence,o.delivery_type
+                FROM integration_outbox o
+                JOIN day_closing_snapshots s ON s.id=o.closing_id
+                WHERE o.delivery_type='DSR_DAY_CLOSING'
+                  AND o.status IN ('PENDING','PROCESSING')
+                  AND o.business_date < ? AND o.created_at < ?
+                  AND s.business_date=o.business_date AND s.close_sequence=o.close_sequence
+                  AND s.close_status='CLOSED'
+                  ${consolidatedGuard}
+                ORDER BY o.id`, [openDay.business_date, openDay.opened_at]);
+            const reason = "legacy DSR pipeline retired because CONSOLIDATED_V2 replaced the legacy DSR pipeline.";
+            const completedAt = now().toISOString();
+            for (const item of retired) {
+                await run(`UPDATE integration_outbox
+                    SET status='SUCCESS', completed_at=?, last_error=?
+                    WHERE id=? AND delivery_type='DSR_DAY_CLOSING' AND status IN ('PENDING','PROCESSING')`,
+                [completedAt, `Delivery not sent: ${reason}`, item.id]);
+            }
+            await run("COMMIT");
+            for (const item of retired) await recordSupersededActivity(item, reason);
+            return { retiredCount: retired.length };
+        } catch (error) {
+            try { await run("ROLLBACK"); } catch (_) {}
+            throw error;
+        }
+    }
     async function processOne(item) {
         await run("UPDATE integration_outbox SET status='PROCESSING', attempt_count=attempt_count+1, last_attempt_at=? WHERE id=? AND status='PENDING'", [now().toISOString(), item.id]);
         try {
@@ -113,7 +158,30 @@ function createIntegrationOutboxService(options = {}) {
         } catch (error) { await run("UPDATE integration_outbox SET status='PENDING', last_error=? WHERE id=?", [String(error.message || "Delivery failed").replace(/https?:\/\/\S+/gi, "[ENDPOINT]").slice(0, 500), item.id]); return false; }
     }
     async function drain() { if (drainInFlight) return drainInFlight; drainInFlight = (async () => { await recoverStaleProcessing(); const blockedIds = new Set(); while (true) { const excluded = [...blockedIds].map(() => "?").join(","); const item = await get(`SELECT * FROM integration_outbox WHERE status='PENDING' ${excluded ? `AND id NOT IN (${excluded})` : ""} ORDER BY business_date, id LIMIT 1`, [...blockedIds]); if (!item) break; const staleReason = await getStaleReason(item); if (staleReason) { await markStale(item, staleReason); continue; } const currentTime = now().getTime(); const lastAttemptTime = item.last_attempt_at ? Date.parse(item.last_attempt_at) : NaN; if (Number.isFinite(lastAttemptTime) && currentTime - lastAttemptTime < RETRY_COOLDOWN_MS) { blockedIds.add(item.id); continue; } if (!(await processOne(item))) blockedIds.add(item.id); } })().finally(() => { drainInFlight = null; }); return drainInFlight; }
-    async function getStatusView() { const rows = await all("SELECT business_date, delivery_type, status FROM integration_outbox ORDER BY business_date, delivery_type"); const byDate = new Map(); for (const row of rows) { if (!byDate.has(row.business_date)) byDate.set(row.business_date, { businessDate: row.business_date, emailStatus: "PENDING", dsrStatus: "PENDING" }); const group = byDate.get(row.business_date); const status = row.status === "SUCCESS" ? "SUCCESS" : "PENDING"; if (row.delivery_type === "EMAIL_DAY_CLOSING") group.emailStatus = status; else if (row.delivery_type === "DSR_DAY_CLOSING") group.dsrStatus = status; } const deliveries = [...byDate.values()].filter(item => item.emailStatus !== "SUCCESS" || item.dsrStatus !== "SUCCESS"); return { pendingCount: rows.filter(row => row.status !== "SUCCESS").length, deliveries }; }
-    return { enqueue, drain, list: () => all("SELECT * FROM integration_outbox ORDER BY business_date, id"), getStatusView };
+    async function getStatusView() {
+        const rows = await all("SELECT business_date, delivery_type, status, last_error FROM integration_outbox ORDER BY business_date, delivery_type, id");
+        const byDate = new Map();
+        for (const row of rows) {
+            if (!byDate.has(row.business_date)) byDate.set(row.business_date, { businessDate: row.business_date, emailStatus: "PENDING", dsrStatus: null });
+            const group = byDate.get(row.business_date);
+            const status = row.status === "SUCCESS" ? "SUCCESS" : "PENDING";
+            if (row.delivery_type === "EMAIL_DAY_CLOSING") group.emailStatus = status;
+            else if (row.delivery_type === "DSR_DAY_CLOSING") {
+                const retired = status === "SUCCESS" && String(row.last_error || "").startsWith("Delivery not sent: legacy DSR pipeline retired because CONSOLIDATED_V2");
+                if (status !== "SUCCESS") {
+                    group.dsrStatus = "PENDING";
+                    delete group.dsrRetired;
+                } else if (group.dsrStatus !== "PENDING") {
+                    group.dsrStatus = "SUCCESS";
+                    if (retired) group.dsrRetired = true;
+                    else delete group.dsrRetired;
+                }
+            }
+        }
+        for (const item of byDate.values()) if (!item.dsrStatus) item.dsrStatus = "PENDING";
+        const deliveries = [...byDate.values()].filter(item => item.emailStatus !== "SUCCESS" || item.dsrStatus !== "SUCCESS" || item.dsrRetired);
+        return { pendingCount: rows.filter(row => row.status !== "SUCCESS").length, deliveries };
+    }
+    return { enqueue, drain, list: () => all("SELECT * FROM integration_outbox ORDER BY business_date, id"), getStatusView, retireLegacyDsrBacklog };
 }
 module.exports = { createIntegrationOutboxService };

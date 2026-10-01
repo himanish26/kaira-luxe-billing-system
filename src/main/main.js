@@ -382,6 +382,7 @@ const dsrSyncService = createDsrSyncService({
 });
 const integrationOutbox = createIntegrationOutboxService({
     database,
+    reportingMode,
     logActivity,
     activityExists: event => new Promise((resolve, reject) => database.get(
         `SELECT 1 FROM activities
@@ -775,6 +776,11 @@ app.whenReady().then(async () => {
 
         await databaseReady;
         technicalLogger.info("DATABASE", "Database readiness checkpoint completed");
+
+        const legacyDsrRetirement = await integrationOutbox.retireLegacyDsrBacklog();
+        if (legacyDsrRetirement.retiredCount > 0) {
+            technicalLogger.info("INTEGRATIONS", "Retired superseded legacy DSR backlog without delivery", { count: legacyDsrRetirement.retiredCount });
+        }
 
         try {
             const legacySmtp = await new Promise((resolve, reject) => database.get(`

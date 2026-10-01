@@ -47,6 +47,7 @@ const groups = [
         "v1-c4a-consolidated-transport-foundation-test.js", "v1-c4b-consolidated-reporting-recovery-migration-test.js",
         "v1-c4c-consolidated-sheet-delivery-worker-test.js", "v1-c4d-auth-compatibility-test.js",
         "v1-c4d-failed-job-retry-test.js", "v1-dsr08-phase2-single-pipeline-test.js",
+        "v2-legacy-dsr-retirement-test.js",
         "c4d-job2-unchanged-repair-test.js", "c4d-v16-job2-idempotency-verifier-test.js"
     ] },
     { name: "RECLOSE/RECOVERY", tests: [
