@@ -1,5 +1,6 @@
-const CURRENT_DB_SCHEMA_VERSION = 4;
+const CURRENT_DB_SCHEMA_VERSION = 5;
 const SCHEMA_METADATA_TABLE = "klbs_schema_metadata";
+const { migrateV5Foundation } = require("./v5FoundationMigration");
 
 function run(database, sql, params = []) {
     return new Promise((resolve, reject) => {
@@ -218,7 +219,8 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
         const defaultMigrations = [
             { from: 1, to: 2, name: "automatic_backup_settings", up: migrateAutomaticBackupSettings },
             { from: 2, to: 3, name: "business_segment_columns", up: migrateBusinessSegmentColumns },
-            { from: 3, to: 4, name: "variable_value_billing_foundation", up: migrateVariableValueBillingFoundation }
+            { from: 3, to: 4, name: "variable_value_billing_foundation", up: migrateVariableValueBillingFoundation },
+            { from: 4, to: 5, name: "v2_1_database_foundation", up: migrateV5Foundation }
         ];
         await runForwardMigrations(
             database,
@@ -266,5 +268,6 @@ module.exports = {
     prepareDatabaseSchema,
     migrateBusinessSegmentColumns,
     migrateVariableValueBillingFoundation,
+    migrateV5Foundation,
     _test: { run, get, all }
 };

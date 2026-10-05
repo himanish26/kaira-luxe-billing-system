@@ -31,6 +31,12 @@ const BASE_SCHEMA = `
     CREATE TABLE settings (id INTEGER PRIMARY KEY);
     CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, quantity INTEGER);
     CREATE TABLE day_closing (id INTEGER PRIMARY KEY, business_date TEXT);
+    CREATE TABLE customers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, customer_code TEXT UNIQUE,
+        name TEXT NOT NULL, mobile TEXT UNIQUE, email TEXT, address TEXT,
+        remarks TEXT, active INTEGER DEFAULT 1, created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
 `;
 const createDatabase = async filePath => {
     const database = open(filePath);
@@ -45,12 +51,13 @@ const prepare = (database, options = {}) => prepareDatabaseSchema({
     runCurrentMigrations: options.runCurrentMigrations || (async () => {
         await migrateBusinessSegmentColumns(database);
         await migrateVariableValueBillingFoundation(database);
+        await require("../src/database/v5FoundationMigration").migrateV5Foundation(database);
     }),
     migrations: options.migrations || []
 });
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 4);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 5);
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-schema-version-"));
     try {
         // 1, 2, 7: fresh initialization, legacy adoption, and data preservation.
@@ -86,6 +93,12 @@ async function main() {
             CREATE TABLE settings (id INTEGER PRIMARY KEY);
             CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, quantity INTEGER);
             CREATE TABLE day_closing (id INTEGER PRIMARY KEY, business_date TEXT);
+            CREATE TABLE customers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, customer_code TEXT UNIQUE,
+                name TEXT NOT NULL, mobile TEXT UNIQUE, email TEXT, address TEXT,
+                remarks TEXT, active INTEGER DEFAULT 1, created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
         `);
         await prepare(database);
         assert.strictEqual(await readSchemaVersion(database), CURRENT_DB_SCHEMA_VERSION);
@@ -100,7 +113,7 @@ async function main() {
         await run(database, "INSERT INTO products VALUES (12, 'Versioned Product')");
         await run(database, "INSERT INTO bill_items VALUES (13, 'VERSIONED-BILL')");
         await prepare(database);
-        assert.strictEqual(await readSchemaVersion(database), 4);
+        assert.strictEqual(await readSchemaVersion(database), CURRENT_DB_SCHEMA_VERSION);
         assert.strictEqual((await get(database, "SELECT variable_value FROM products WHERE id = 12")).variable_value, 0);
         assert.strictEqual((await get(database, "SELECT gross_amount FROM bill_items WHERE id = 13")).gross_amount, null);
         await close(database);

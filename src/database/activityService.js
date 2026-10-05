@@ -8,7 +8,7 @@ const CATEGORIES = new Set([
     "SYSTEM", "SECURITY", "PRODUCT", "INVENTORY", "BILLING",
     "RETURN", "CREDIT NOTE", "STORE CREDIT", "GIFT VOUCHER",
     "SETTINGS", "BACKUP", "RESTORE", "DAY CLOSING", "PRINTING",
-    "EXPORT", "ACTIVITY"
+    "EXPORT", "ACTIVITY", "EXPENSE", "CUSTOMER"
 ]);
 const ACTORS = new Set(["SYSTEM", "OPERATOR", "MANAGER", "ADMINISTRATOR"]);
 const STATUSES = new Set(["SUCCESS", "WARNING", "FAILED", "ERROR"]);
@@ -156,6 +156,29 @@ async function logActivity(activity) {
     });
 }
 
+function appendActivityInTransaction(database, activity, instant = new Date()) {
+    if (!database || typeof database.run !== "function") {
+        throw new Error("A SQLite database connection is required for transactional activity logging.");
+    }
+    const normalized = normalizeActivity(activity, instant);
+    return new Promise((resolve, reject) => {
+        database.run(`
+            INSERT INTO activities (
+                activity_date, activity_time, category, action, details,
+                user_name, status, entity_type, reference_no, change_data, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            normalized.activity_date, normalized.activity_time,
+            normalized.category, normalized.action, normalized.details,
+            normalized.user_name, normalized.status, normalized.entity_type,
+            normalized.reference_no, normalized.change_data, normalized.created_at
+        ], function(error) {
+            if (error) return reject(error);
+            resolve({ success: true, id: this.lastID, activity: normalized });
+        });
+    });
+}
+
 async function getActivities() {
     return new Promise((resolve, reject) => {
         db.all("SELECT * FROM activities ORDER BY id DESC", [],
@@ -260,6 +283,7 @@ module.exports = {
     getActivityPage,
     archiveActivities,
     normalizeActivity,
+    appendActivityInTransaction,
     serializeChangeData,
     getActivityTimestamp,
     ACTIVITY_TIME_ZONE

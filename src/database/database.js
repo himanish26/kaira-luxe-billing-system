@@ -27,6 +27,7 @@ const {
     migrateBusinessSegmentColumns,
     migrateVariableValueBillingFoundation
 } = require("./schemaVersion");
+const { migrateV5Foundation } = require("./v5FoundationMigration");
 const {
     recoverInterruptedRestoreAtStartup,
     forceRecoverPreviousDatabase
@@ -3026,6 +3027,8 @@ try {
         await runNamedMigration("business_segment_columns", () => migrateBusinessSegmentColumns(db));
 
         await runNamedMigration("variable_value_billing_foundation", () => migrateVariableValueBillingFoundation(db));
+
+        await runNamedMigration("v2_1_database_foundation", () => migrateV5Foundation(db));
 
         await runNamedMigration("segment_dsr_outbox", () => migrateSegmentDsrOutbox(db));
 
