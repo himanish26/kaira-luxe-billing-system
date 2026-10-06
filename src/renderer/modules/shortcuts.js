@@ -449,11 +449,15 @@ async function openNewBill() {
 
 function openBillHistory() {
 
+    abandonNewBillDraftBeforeNavigation();
+
     document.getElementById("billHistoryBtn")?.click();
 
 }
 
-function openReports() {
+function openBusinessWorkspace() {
+
+    abandonNewBillDraftBeforeNavigation();
 
     document.getElementById("reportsBtn")?.click();
 
@@ -461,11 +465,37 @@ function openReports() {
 
 function openSettings() {
 
+    abandonNewBillDraftBeforeNavigation();
+
     document.getElementById("settingsBtn")?.click();
 
 }
 
+function abandonNewBillDraftBeforeNavigation() {
+    if (
+        document.getElementById("newBillScreen")?.style.display === "block" &&
+        document.getElementById("paymentScreen")?.style.display !== "block"
+    ) {
+        window.abandonNewBillSession?.();
+    }
+}
+
 function handleEscape() {
+
+    // Customer dialogs own Escape before the New Bill page can navigate away.
+    for (const [modalId, closeId] of [
+        ["customerProfileModal", "customerProfileCancel"],
+        ["customerChooserModal", "customerChooserCancel"],
+        ["customerHistoryModal", "customerHistoryClose"]
+    ]) {
+        const modal = document.getElementById(modalId);
+        if (!modal) continue;
+        const style = window.getComputedStyle(modal);
+        if (style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0") {
+            document.getElementById(closeId)?.click();
+            return;
+        }
+    }
 
     // Dialogs own Cancel; never navigate the page beneath an active modal.
     for (const modalId of ["processingDialog", "appLockOverlay", "dayClosingLifecycleOverlay"]) {
@@ -685,6 +715,27 @@ function handleEscape() {
 
     }
 
+    // Customers and Accounting & Data return to Business.
+    if (document.getElementById("customerManagementProfile")?.hidden === false) {
+        document.getElementById("customerProfileBackToDirectory")?.click();
+        return;
+    }
+    for (const [screenId, backId] of [
+        ["customersScreen", "customersBusinessBtn"],
+        ["accountingDataScreen", "accountingBusinessBtn"]
+    ]) {
+        if (document.getElementById(screenId)?.style.display === "block") {
+            document.getElementById(backId)?.click();
+            return;
+        }
+    }
+
+    // Business returns to Dashboard.
+    if (document.getElementById("businessScreen")?.style.display === "block") {
+        document.getElementById("businessDashboardBtn")?.click();
+        return;
+    }
+
     // Settings Page
     if (
         document.getElementById("settingsPage")
@@ -778,6 +829,9 @@ function isKLBSModalOpen() {
         "giftVoucherDialog",
         "returnReasonDialog",
         "variableValueDialog",
+        "customerProfileModal",
+        "customerChooserModal",
+        "customerHistoryModal",
         "dayReopenReasonModal",
         "dayClosingLifecycleOverlay",
         "appLockOverlay"
@@ -850,6 +904,8 @@ function handleKeyboardShortcut(event) {
 
             event.stopPropagation();
 
+            event.stopImmediatePropagation?.();
+
             handleEscape();
 
             return;
@@ -908,7 +964,7 @@ function handleKeyboardShortcut(event) {
 
             event.preventDefault();
 
-            openReports();
+            openBusinessWorkspace();
 
             break;
 

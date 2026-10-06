@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld(
                     "get-app-info"
                 ),
 
+            getDevelopmentStartupGateStatus: () =>
+                ipcRenderer.invoke("development:get-startup-gate-status"),
+
             getEulaText: () =>
                 ipcRenderer.invoke(
                     "legal:get-eula-text"
@@ -58,6 +61,30 @@ contextBridge.exposeInMainWorld(
                 "save-bill",
                 billData
             ),
+
+        findCustomersByMobile: (mobile) =>
+            ipcRenderer.invoke("customers:find-by-mobile", mobile),
+
+        getCustomerProfile: (customerId) =>
+            ipcRenderer.invoke("customers:get-profile", customerId),
+
+        createCustomerProfile: (data) =>
+            ipcRenderer.invoke("customers:create-profile", data),
+
+        updateCustomerProfile: (customerId, data) =>
+            ipcRenderer.invoke("customers:update-profile", customerId, data),
+
+        getCustomerPurchaseHistory: (customerId) =>
+            ipcRenderer.invoke("customers:purchase-history", customerId),
+
+        getCustomerPurchaseHistoryPage: (customerId, options) =>
+            ipcRenderer.invoke("customers:purchase-history-page", customerId, options),
+
+        listCustomerDirectory: (search) =>
+            ipcRenderer.invoke("customers:list-directory", search),
+
+        getCustomerManagementProfile: (customerId) =>
+            ipcRenderer.invoke("customers:get-management-profile", customerId),
 
         getNextBillNumber: () =>
             ipcRenderer.invoke(

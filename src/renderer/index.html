@@ -9,6 +9,10 @@
 
 <body>
 
+    <div id="developmentBusinessDayBypassBanner" class="development-business-day-bypass-banner" hidden>
+        DEVELOPMENT MODE — BUSINESS DAY GATE BYPASSED
+    </div>
+
     <!-- DASHBOARD -->
 
     <div id="dashboardScreen" style="display: none;">
@@ -44,7 +48,7 @@
             </button>
 
             <button id="reportsBtn">
-                REPORTS
+                BUSINESS
             </button>
 
             <button id="settingsBtn">
@@ -811,8 +815,13 @@ maxlength="4">
                 maxlength="10"
             >
 
+            <button id="customerProfileOpen" class="customer-profile-open" type="button" aria-label="Customer details">+</button>
+            <input type="hidden" id="selectedCustomerProfileId" value="">
+            <div class="customer-profile-status" id="customerProfileStatus" aria-live="polite"></div>
+            <button type="button" id="customerPurchaseHistory" class="customer-history-link" hidden>Purchase History</button>
+
         </div>
-        
+
         <div class="billing-layout">
 
             <!-- LEFT -->
@@ -932,6 +941,46 @@ maxlength="4">
         </div>
 
         </div>
+
+    <!-- Customer overlays are application-level so Business → Customers can reuse them. -->
+    <div class="modal" id="customerProfileModal" style="display:none;">
+        <div class="modal-content customer-profile-dialog">
+            <h3 id="customerProfileTitle">CUSTOMER DETAILS</h3>
+            <p class="customer-profile-subtitle">Customer Profile · Optional</p>
+            <div class="customer-profile-fields">
+                <label for="profileName">Name<input id="profileName" type="text" maxlength="120"></label>
+                <label for="profileMobile">Mobile<input id="profileMobile" type="tel" inputmode="numeric" maxlength="10"></label>
+                <label for="profileBirthday">Birthday (DD/MM)<input id="profileBirthday" type="text" inputmode="numeric" placeholder="DD/MM" maxlength="5"></label>
+                <label for="profileAnniversary">Marriage Anniversary (DD/MM)<input id="profileAnniversary" type="text" inputmode="numeric" placeholder="DD/MM" maxlength="5"></label>
+                <label for="profileEmail">Email (optional)<input id="profileEmail" type="email" maxlength="254"></label>
+                <label for="profileNotes">Notes (optional)<textarea id="profileNotes" maxlength="2000" rows="2"></textarea></label>
+            </div>
+            <div id="customerProfileValidation" class="customer-profile-validation" role="alert" aria-live="polite"></div>
+            <div class="customer-profile-actions">
+                <button id="customerProfileCancel" type="button" class="klbs-cancel-btn">CANCEL</button>
+                <button id="customerProfileSave" type="button" class="klbs-primary-btn">SAVE</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="customerChooserModal" style="display:none;">
+        <div class="modal-content customer-profile-dialog">
+            <h3>Choose Customer</h3>
+            <div id="customerChooserList"></div>
+            <div class="customer-profile-actions">
+                <button id="customerChooserNew" type="button" class="klbs-primary-btn">+ New Customer</button>
+                <button id="customerChooserCancel" type="button" class="klbs-cancel-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="customerHistoryModal" style="display:none;">
+        <div class="modal-content customer-profile-dialog customer-history-dialog">
+            <h3>Purchase History</h3>
+            <div id="customerHistoryList"></div>
+            <div class="customer-profile-actions"><button id="customerHistoryClose" type="button" class="klbs-cancel-btn">Close</button></div>
+        </div>
+    </div>
 
     <!-- PAYMENT SCREEN -->
 
@@ -1868,6 +1917,140 @@ returned after purchase.
 </div>
 
 <!-- =====================================
+     BUSINESS WORKSPACE
+===================================== -->
+
+<div id="businessScreen" class="screen" style="display:none;">
+    <div class="business-page">
+        <div class="business-page-topbar">
+            <button id="businessDashboardBtn" class="back-btn">← Dashboard</button>
+        </div>
+        <header class="business-page-header">
+            <h1>BUSINESS</h1>
+            <p>Management and back-office workspace</p>
+        </header>
+        <nav class="business-workspace-grid" aria-label="Business sections">
+            <button id="businessReportsBtn" class="business-workspace-card" type="button">
+                <span class="business-workspace-icon" aria-hidden="true">📊</span>
+                <strong>REPORTS</strong>
+                <span class="business-workspace-description">Sales, inventory, payments and<br>business reports</span>
+            </button>
+            <button id="businessCustomersBtn" class="business-workspace-card" type="button">
+                <span class="business-workspace-icon" aria-hidden="true">👥</span>
+                <strong>CUSTOMERS</strong>
+                <span class="business-workspace-description">Customer directory, profiles and<br>purchase history</span>
+            </button>
+            <button id="businessAccountingBtn" class="business-workspace-card" type="button">
+                <span class="business-workspace-icon" aria-hidden="true">🧾</span>
+                <strong>ACCOUNTING &amp; DATA</strong>
+                <span class="business-workspace-description">Expenses, management accounts,<br>GST and data exports</span>
+            </button>
+        </nav>
+    </div>
+</div>
+
+<div id="customersScreen" class="screen" style="display:none;">
+    <div class="business-page">
+        <div class="business-page-topbar">
+            <button id="customersBusinessBtn" class="back-btn">← Business</button>
+        </div>
+        <header class="business-page-header">
+            <h1>CUSTOMERS</h1>
+            <p>Customer directory and purchase history</p>
+        </header>
+        <section id="customerDirectoryView" class="customer-management-view">
+            <div class="customer-directory-toolbar">
+                <label class="customer-search-wrap">
+                    <span class="sr-only">Search customers by name, mobile or Customer ID</span>
+                    <input id="customerDirectorySearch" type="search" aria-label="Search customers by name, mobile or Customer ID" placeholder="Search by name, mobile or Customer ID" autocomplete="off">
+                </label>
+                <button id="customerDirectoryAdd" class="klbs-primary-btn customer-add-button" type="button">+ ADD CUSTOMER</button>
+            </div>
+            <div id="customerDirectoryMessage" class="customer-directory-message" role="status" aria-live="polite"></div>
+            <div id="customerDirectoryEmpty" class="customer-directory-empty" hidden>
+                <strong>No customer profiles yet.</strong>
+                <span>Add a customer profile to keep linked purchase history together.</span>
+            </div>
+            <div id="customerDirectoryNoResults" class="customer-directory-empty" hidden>No customers match this search.</div>
+            <div id="customerDirectoryTableWrap" class="customer-directory-table-wrap table-container" hidden>
+                <table id="customerDirectoryTable" class="customer-directory-table">
+                    <thead><tr><th>CUSTOMER ID</th><th>CUSTOMER</th><th>MOBILE</th><th>BILLS</th><th>TOTAL SPEND</th><th>LAST VISIT</th><th>ACTION</th></tr></thead>
+                    <tbody id="customerDirectoryRows"></tbody>
+                </table>
+            </div>
+            <div id="customerDirectoryPagination" class="customer-directory-pagination history-pagination" hidden>
+                <div class="pagination-controls">
+                    <button id="customerDirectoryPrevious" class="pagination-nav-btn" type="button">Previous</button>
+                    <span id="customerDirectoryPageLabel">Page 1 of 1</span>
+                    <label for="customerDirectoryPageJump">Jump to page:</label>
+                    <input id="customerDirectoryPageJump" type="number" min="1" step="1" inputmode="numeric" value="1" aria-label="Jump to customer page">
+                    <button id="customerDirectoryNext" class="pagination-nav-btn" type="button">Next</button>
+                </div>
+                <span id="customerDirectoryRangeLabel">Showing 0–0 of 0 customers</span>
+            </div>
+        </section>
+        <section id="customerManagementProfile" class="customer-management-view" hidden>
+            <div class="customer-profile-toolbar">
+                <button id="customerProfileBackToDirectory" class="back-btn" type="button">← Customers</button>
+                <button id="customerProfileEdit" class="klbs-primary-btn" type="button">EDIT CUSTOMER</button>
+            </div>
+            <div id="customerManagementMessage" class="customer-directory-message" role="status" aria-live="polite"></div>
+            <article class="customer-profile-card">
+                <header class="customer-profile-identity"><div><h2 id="managementCustomerName"></h2><span id="managementCustomerCode"></span></div></header>
+                <dl class="customer-profile-details">
+                    <div><dt>Mobile</dt><dd id="managementCustomerMobile"></dd></div>
+                    <div><dt>Birthday</dt><dd id="managementCustomerBirthday"></dd></div>
+                    <div><dt>Marriage Anniversary</dt><dd id="managementCustomerAnniversary"></dd></div>
+                    <div><dt>Email</dt><dd id="managementCustomerEmail"></dd></div>
+                    <div class="customer-profile-notes"><dt>Notes</dt><dd id="managementCustomerNotes"></dd></div>
+                </dl>
+            </article>
+            <section class="customer-summary-grid" aria-label="Linked purchase summary">
+                <article><span>TOTAL BILLS</span><strong id="managementCustomerBillCount">0</strong></article>
+                <article><span>TOTAL SPEND</span><strong id="managementCustomerSpend">₹0.00</strong></article>
+                <article><span>LAST VISIT</span><strong id="managementCustomerLastVisit">Never</strong></article>
+                <article><span>AVERAGE BILL</span><strong id="managementCustomerAverage">₹0.00</strong></article>
+            </section>
+            <section class="customer-purchase-history">
+                <h2>PURCHASE HISTORY</h2>
+                <div id="customerPurchaseEmpty" class="customer-directory-empty" hidden>No linked purchases yet.</div>
+                <div id="customerPurchaseTableWrap" class="customer-directory-table-wrap" hidden>
+                    <table class="customer-directory-table">
+                        <thead><tr><th>DATE</th><th>BILL NO.</th><th>ITEMS / QTY</th><th>AMOUNT</th><th>ACTION</th></tr></thead>
+                        <tbody id="customerPurchaseRows"></tbody>
+                    </table>
+                </div>
+                <div id="customerPurchasePagination" class="customer-directory-pagination history-pagination" hidden>
+                    <div class="pagination-controls">
+                        <button id="customerPurchasePrevious" class="pagination-nav-btn" type="button">Previous</button>
+                        <span id="customerPurchasePageLabel">Page 1 of 1</span>
+                        <label for="customerPurchasePageJump">Jump to page:</label>
+                        <input id="customerPurchasePageJump" type="number" min="1" step="1" inputmode="numeric" value="1" aria-label="Jump to purchase page">
+                        <button id="customerPurchaseNext" class="pagination-nav-btn" type="button">Next</button>
+                    </div>
+                    <span id="customerPurchaseRangeLabel">Showing 0–0 of 0 purchases</span>
+                </div>
+            </section>
+        </section>
+    </div>
+</div>
+
+<div id="accountingDataScreen" class="screen" style="display:none;">
+    <div class="business-page">
+        <div class="business-page-topbar">
+            <button id="accountingBusinessBtn" class="back-btn">← Business</button>
+        </div>
+        <header class="business-page-header">
+            <h1>ACCOUNTING &amp; DATA</h1>
+            <p>Accounting and data workspace</p>
+        </header>
+        <section class="business-subpage-shell">
+            <p>This workspace is being prepared.</p>
+        </section>
+    </div>
+</div>
+
+<!-- =====================================
      REPORTS SCREEN
 ===================================== -->
 
@@ -1882,7 +2065,7 @@ style="display:none;">
             id="reportsDashboardBtn"
             class="back-btn">
 
-            ← Dashboard
+            ← Business
 
         </button>
 
@@ -2627,6 +2810,8 @@ style="display:none;">
 <script src="modules/system/integrations.js"></script>
 <!-- Always last -->
 <script src="app.js"></script>
+<script src="modules/customerProfile.js"></script>
+<script src="modules/customerManagement.js"></script>
 
 </body>
 </html>

@@ -3030,6 +3030,22 @@ try {
 
         await runNamedMigration("v2_1_database_foundation", () => migrateV5Foundation(db));
 
+        await runNamedMigration("v2_1_sale_cost_immutability", () => new Promise((resolve, reject) => {
+            db.run(`
+                CREATE TRIGGER IF NOT EXISTS trg_bill_item_captured_cost_immutable
+                BEFORE UPDATE OF unit_cost_paise, cost_basis_status, cost_source, cost_method
+                ON bill_items
+                FOR EACH ROW
+                WHEN NEW.unit_cost_paise IS NOT OLD.unit_cost_paise OR
+                    NEW.cost_basis_status IS NOT OLD.cost_basis_status OR
+                    NEW.cost_source IS NOT OLD.cost_source OR
+                    NEW.cost_method IS NOT OLD.cost_method
+                BEGIN
+                    SELECT RAISE(ABORT, 'KLBS_CAPTURED_COST_SNAPSHOT_IMMUTABLE');
+                END
+            `, error => error ? reject(error) : resolve());
+        }));
+
         await runNamedMigration("segment_dsr_outbox", () => migrateSegmentDsrOutbox(db));
 
         await runNamedMigration("consolidated_reporting_jobs", () => migrateConsolidatedReportingJobs(db));

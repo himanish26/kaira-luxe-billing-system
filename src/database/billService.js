@@ -18,6 +18,10 @@ const {
     calculatePaymentSettlement
 } = require("../shared/paymentSettlement");
 const { normalizeBusinessSegment } = require("../shared/businessSegment");
+const {
+    normalizeIndianMobile,
+    createCustomerProfileWithCode
+} = require("./customerService");
 
 function billAmountToPaise(value, fieldName, optional = false) {
 
@@ -324,6 +328,7 @@ function resolveAuthoritativeBillData(billData) {
                     discount,
                     gst_rate,
                     active,
+                    cost_price,
                     business_segment,
                     variable_value
                 FROM products
@@ -351,6 +356,11 @@ function resolveAuthoritativeBillData(billData) {
                     const gstRate = Number(product.gst_rate);
                     const normalDiscount = Number(product.discount ?? 0);
                     const isVariableValue = Number(product.variable_value) === 1;
+                    const numericCost = Number(product.cost_price);
+                    const hasSaleCost = !isVariableValue &&
+                        product.cost_price !== null && product.cost_price !== undefined &&
+                        product.cost_price !== "" && Number.isFinite(numericCost) && numericCost > 0 &&
+                        Number.isSafeInteger(Math.round(numericCost * 100));
                     let grossAmount;
                     const hasFamilyFriendsOverride =
                         submittedItem.ff_discount !== null &&
@@ -445,6 +455,12 @@ function resolveAuthoritativeBillData(billData) {
                         qty: quantity,
                         mrp,
                         variable_value: isVariableValue ? 1 : 0,
+                        unit_cost_paise: hasSaleCost ? Math.round(numericCost * 100) : null,
+                        cost_basis_status: isVariableValue
+                            ? "NOT_APPLICABLE"
+                            : hasSaleCost ? "CAPTURED" : "UNKNOWN",
+                        cost_source: hasSaleCost ? "PRODUCT_MASTER" : null,
+                        cost_method: hasSaleCost ? "SALE_TIME_COST_PRICE_PAISE" : null,
                         gross_amount: grossAmount,
                         master_discount: normalDiscount,
                         discount: effectiveDiscount,
@@ -466,6 +482,37 @@ function resolveAuthoritativeBillData(billData) {
 }
 
 function saveBill(billData) {
+
+    function resolveBillCustomerId() {
+        return new Promise((resolve, reject) => {
+            const mobile = normalizeIndianMobile(billData.customer_mobile);
+            const selectedId = Number(billData.customer_profile_id || billData.customer_id);
+            if (Number.isSafeInteger(selectedId) && selectedId > 0) {
+                db.get("SELECT id, mobile FROM customers WHERE id = ? AND active = 1", [selectedId], (error, profile) => {
+                    if (error) return reject(error);
+                    if (profile) return resolve(profile.id);
+                    findOrCreateBySnapshotMobile(mobile, resolve, reject);
+                });
+                return;
+            }
+            findOrCreateBySnapshotMobile(mobile, resolve, reject);
+        });
+    }
+
+    function findOrCreateBySnapshotMobile(mobile, resolve, reject) {
+        if (!mobile) return resolve(null);
+        db.all("SELECT id, mobile FROM customers WHERE active = 1 AND mobile IS NOT NULL", [], (error, profiles) => {
+            if (error) return reject(error);
+            const matches = (profiles || []).filter(profile => normalizeIndianMobile(profile.mobile) === mobile);
+            if (matches.length === 1) return resolve(matches[0].id);
+            if (matches.length > 1) return resolve(null);
+            const name = String(billData.customer_name || "").trim().replace(/\s+/g, " ");
+            if (!name || name.length > 120) return resolve(null);
+            createCustomerProfileWithCode({ name, mobile })
+                .then(profile => resolve(profile.id))
+                .catch(reject);
+        });
+    }
 
     return new Promise((resolve, reject) => {
 
@@ -545,7 +592,14 @@ function saveBill(billData) {
                             return;
                         }
 
-                        insertBill();
+                        resolveBillCustomerId()
+                            .then(customerId => {
+                                billData.customer_id = customerId;
+                                insertBill();
+                            })
+                            .catch(customerError => {
+                                db.run("ROLLBACK", () => reject(customerError));
+                            });
 
                     }
                 );
@@ -564,6 +618,7 @@ function saveBill(billData) {
                     bill_time,
                     customer_name,
                     customer_mobile,
+                    customer_id,
                     total_items,
                     total_qty,
                     gross_amount,
@@ -582,7 +637,7 @@ function saveBill(billData) {
                     created_at
                 )
                 VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `,
 
                 [
@@ -592,6 +647,7 @@ function saveBill(billData) {
                     billData.bill_time,
                     billData.customer_name,
                     billData.customer_mobile,
+                    billData.customer_id,
                     billData.total_items,
                     billData.total_qty,
                     billData.gross_amount,
@@ -692,10 +748,14 @@ function saveBill(billData) {
                             gst_rate,
                             gst_amount,
                             net_amount,
-                            business_segment
+                            business_segment,
+                            unit_cost_paise,
+                            cost_basis_status,
+                            cost_source,
+                            cost_method
                         )
                         VALUES
-                        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         `,
 
                         [
@@ -731,7 +791,11 @@ function saveBill(billData) {
                             gst,
 
                             net,
-                            item.business_segment
+                            item.business_segment,
+                            item.unit_cost_paise,
+                            item.cost_basis_status,
+                            item.cost_source,
+                            item.cost_method
 
                         ],
 
@@ -1850,12 +1914,11 @@ function getDashboardSummary() {
                 (SELECT COUNT(*) FROM products) AS products,
 
                 (
-                    SELECT COUNT(DISTINCT customer_mobile)
+                    SELECT COUNT(*)
 
-                    FROM bills
+                    FROM customers
 
-                    WHERE customer_mobile IS NOT NULL
-                    AND customer_mobile <> ''
+                    WHERE active = 1
 
                 ) AS customers,
 

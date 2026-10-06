@@ -328,6 +328,10 @@ const paymentScreen =
 const reportsScreen =
     document.getElementById("reportsScreen");    
 
+const businessScreen = document.getElementById("businessScreen");
+const customersScreen = document.getElementById("customersScreen");
+const accountingDataScreen = document.getElementById("accountingDataScreen");
+
 const billHistoryScreen =
     document.getElementById("billHistoryScreen");
 
@@ -1694,7 +1698,7 @@ if (reportsBtn) {
 
         hideAllScreens();
 
-        reportsScreen.style.display = "block";
+        businessScreen.style.display = "block";
 
     });
 
@@ -1781,9 +1785,11 @@ newBillBtn.addEventListener("click", async () => {
 
     }
 
+    const newBillWasVisible = newBillScreen.style.display === "block";
+    const paymentWasVisible = paymentScreen.style.display === "block";
     hideAllScreens();
 
-        if (billItems.length > 0) {
+        if (billItems.length > 0 && (newBillWasVisible || paymentWasVisible)) {
             newBillScreen.style.display = "block";
             await revalidateCurrentBillProducts();
         }
@@ -1857,19 +1863,50 @@ const reportsDashboardBtn =
 
 if (reportsDashboardBtn){
 
-    reportsDashboardBtn.addEventListener("click", () => {
-
-        reportsScreen.style.display = "none";
-
-        dashboardScreen.style.display = "block";
-
-        resetScrollPosition();
-
-        loadDashboardSummary();
-
-    });
+    reportsDashboardBtn.addEventListener("click", returnFromReports);
 
 }
+
+let reportsParentScreen = businessScreen;
+
+function showBusinessWorkspace() {
+    hideAllScreens();
+    businessScreen.style.display = "block";
+}
+
+async function openExistingReportsFromBusiness() {
+    if (!(await guardBusyOperation())) return;
+    reportsParentScreen = businessScreen;
+    hideAllScreens();
+    reportsScreen.style.display = "block";
+}
+
+function returnFromReports() {
+    hideAllScreens();
+    reportsParentScreen.style.display = "block";
+    resetScrollPosition();
+}
+
+async function returnToDashboard() {
+    hideAllScreens();
+    dashboardScreen.style.display = "block";
+    resetScrollPosition();
+    await loadDashboardSummary();
+}
+
+document.getElementById("businessDashboardBtn")?.addEventListener("click", returnToDashboard);
+document.getElementById("businessReportsBtn")?.addEventListener("click", openExistingReportsFromBusiness);
+document.getElementById("businessCustomersBtn")?.addEventListener("click", () => {
+    hideAllScreens();
+    customersScreen.style.display = "block";
+    window.showCustomerDirectory?.();
+});
+document.getElementById("businessAccountingBtn")?.addEventListener("click", () => {
+    hideAllScreens();
+    accountingDataScreen.style.display = "block";
+});
+document.getElementById("customersBusinessBtn")?.addEventListener("click", showBusinessWorkspace);
+document.getElementById("accountingBusinessBtn")?.addEventListener("click", showBusinessWorkspace);
 
 const storeCreditBtn =
     document.getElementById("storeCreditBtn");
@@ -2598,6 +2635,9 @@ if (mobile !== "" && mobile.length !== 10) {
         customer_mobile:
             document.getElementById("customerMobile").value,
 
+        customer_profile_id:
+            document.getElementById("selectedCustomerProfileId")?.value || null,
+
         total_items:
             billItems.length,
 
@@ -2748,6 +2788,7 @@ if (storeCreditAppliedAmount) {
     document.getElementById("customerName").value = "";
 
     document.getElementById("customerMobile").value = "";
+    window.clearSelectedCustomerProfile?.();
 
     paymentScreen.style.display = "none";
 
@@ -2783,22 +2824,7 @@ if (backBtn) {
     backBtn.addEventListener("click", async () => {
 
     if (billItems.length === 0){
-
-    document.getElementById("customerName").value = "";
-
-    document.getElementById("customerMobile").value = "";
-
-    document.getElementById("barcodeInput").value = "";
-
-    familyFriendsDiscountActive = false;
-
-    ffPinVerified = false;
-
-    if (familyFriendsBtn) {
-        familyFriendsBtn.classList.remove("active");
-    }
-
-    loadNextBillNumber();
+    clearCurrentBill();
 
     newBillScreen.style.display = "none";
 
@@ -3392,9 +3418,14 @@ if (viewBillBackBtn) {
     viewBillBackBtn.addEventListener("click", () => {
 
         document.getElementById("viewBillScreen").style.display = "none";
+        if (billDetailsReturnContext?.type === "customer-profile") {
+            customersScreen.style.display = "block";
+            window.restoreCustomerProfileContext?.(billDetailsReturnContext.customerId, billDetailsReturnContext.historyPage);
+            billDetailsReturnContext = { type: "history" };
+            return;
+        }
 
         billHistoryScreen.style.display = "block";
-
         resetScrollPosition();
 
     });
@@ -3593,6 +3624,7 @@ let billHistoryTotalCount = 0;
 let billHistoryTotalPages = 1;
 
 let currentViewedBill = null;
+let billDetailsReturnContext = { type: "history" };
 
 let ffPinVerified = false;
 
@@ -3839,6 +3871,7 @@ if (saleReturnType) {
             // Clear customer details
             document.getElementById("customerName").value = "";
             document.getElementById("customerMobile").value = "";
+            window.clearSelectedCustomerProfile?.();
 
             // Clear return lookup details
             const originalBillNo =
@@ -5811,6 +5844,11 @@ function clearCurrentBill(){
     cartProductValidationBlocked = false;
 
 appliedStoreCredit = null;
+ffPinVerified = false;
+pinAuthorizationAction = null;
+ffAuthorizationGrant = null;
+managerAuthorizationPending = false;
+giftVoucherAuthorizationGrant = null;
 
 if (storeCreditBtn) {
     storeCreditBtn.textContent =
@@ -5856,8 +5894,10 @@ availableStoreCredit = null;
     document.getElementById("customerName").value = "";
 
     document.getElementById("customerMobile").value = "";
+    window.clearSelectedCustomerProfile?.();
 
     document.getElementById("barcodeInput").value = "";
+    window.resetCustomerProfileDraft?.();
 familyFriendsDiscountActive = false;
 
 const originalBillNo =
@@ -5892,6 +5932,25 @@ if (familyFriendsBtn) {
 
 }
 
+for (const id of ["customerProfileModal", "customerChooserModal", "customerHistoryModal", "variableValueDialog", "ffPinDialog", "ffDiscountDialog", "giftVoucherDialog", "storeCreditModal", "returnReasonDialog", "productNotFoundDialog", "insufficientStockDialog"]) {
+    const dialog = document.getElementById(id);
+    if (dialog) dialog.style.display = "none";
+}
+
+for (const id of ["cashAmount", "upiAmount", "cardAmount", "paymentRemarks", "storeCreditNumberInput", "giftVoucherAmountInput"]) {
+    const input = document.getElementById(id);
+    if (input) input.value = id.endsWith("Amount") || ["cashAmount", "upiAmount", "cardAmount"].includes(id) ? "0" : "";
+}
+
+const paymentBillNumber = document.getElementById("paymentBillNo");
+if (paymentBillNumber) paymentBillNumber.textContent = "";
+paymentScreen.style.display = "none";
+
+for (const id of ["customerProfileValidation", "variableValueError", "productNotFoundMessage", "insufficientStockMessage", "ffPinError", "ffDiscountError", "giftVoucherError", "storeCreditVerificationResult", "returnReasonError"]) {
+    const message = document.getElementById(id);
+    if (message) message.textContent = "";
+}
+
     loadPaymentSummary();
 
     calculatePayment();
@@ -5900,6 +5959,8 @@ if (familyFriendsBtn) {
 
 
 }
+
+window.abandonNewBillSession = clearCurrentBill;
 
 function removeItem(index){
 
@@ -7162,12 +7223,20 @@ const result =
 
 }
 
-async function viewBill(billNo){
+async function viewBill(billNo, returnContext = null){
 
 
 
     const details =
         await window.electronAPI.getBillDetails(billNo);
+
+        billDetailsReturnContext = returnContext?.type === "customer-profile"
+            ? {
+                type: "customer-profile",
+                customerId: Number(returnContext.customerId),
+                historyPage: Number(returnContext.historyPage) || 1
+            }
+            : { type: "history" };
 
         const corrections =
     await window.electronAPI.getPaymentCorrections(
@@ -7185,6 +7254,7 @@ async function viewBill(billNo){
         
     // Hide Bill History
     billHistoryScreen.style.display = "none";
+    if (billDetailsReturnContext.type === "customer-profile") customersScreen.style.display = "none";
 
     // Show View Bill Screen
     document.getElementById("viewBillScreen").style.display = "block";
@@ -8043,6 +8113,10 @@ async function startOperationalDashboard() {
 
     operationalDashboardStarted = true;
 
+    const developmentGate = await window.electronAPI.getDevelopmentStartupGateStatus().catch(() => ({ active: false }));
+    const developmentBanner = document.getElementById("developmentBusinessDayBypassBanner");
+    if (developmentBanner) developmentBanner.hidden = developmentGate.active !== true;
+
     showScreen(dashboardScreen);
 
     await Promise.all([
@@ -8099,6 +8173,10 @@ function hideAllScreens() {
     paymentScreen.style.display = "none";
 
     reportsScreen.style.display = "none";
+
+    businessScreen.style.display = "none";
+    customersScreen.style.display = "none";
+    accountingDataScreen.style.display = "none";
 
     billHistoryScreen.style.display = "none";
 

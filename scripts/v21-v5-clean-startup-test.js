@@ -25,7 +25,7 @@ async function child(tempRoot, phase) {
     assert.strictEqual(database.CURRENT_DB_SCHEMA_VERSION, 5);
     await database.closeDatabase();
     process.stdout.write(`${RESULT_PREFIX}${JSON.stringify({ phase, version: version.schema_version, integrity: integrity.integrity_check, foreignKeyViolations: foreignKeys.length, foundationTables: stockTables.count })}\n`);
-    process.exit(0);
+    app.exit(0);
 }
 
 function parent() {

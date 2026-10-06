@@ -6,6 +6,7 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
+    "dev": "node scripts/dev-launch.js",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "manifest": "node updates/generateUpdateManifest.js",

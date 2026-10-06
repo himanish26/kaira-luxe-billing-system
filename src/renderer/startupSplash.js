@@ -20,6 +20,7 @@ const criticalChecks = new Set([
 const warningChecks = new Set(["backup", "printer", "internet"]);
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let checksRunning = false;
+let developmentBypassActive = false;
 let securitySetupOpening = false;
 let securitySetupOpened = false;
 let ellipsisTimer = null;
@@ -274,6 +275,7 @@ function resetChecks() {
     document.getElementById("actions").hidden = true;
     document.getElementById("reopenBtn").hidden = true;
     document.getElementById("closePreviousBtn").hidden = true;
+    document.getElementById("developmentBypassNotice").hidden = !developmentBypassActive;
     document.getElementById("securitySetupBtn").hidden = true;
     document.getElementById("reopenPanel").hidden = true;
     document.getElementById("closePreviousPanel").hidden = true;
@@ -289,6 +291,8 @@ function resetChecks() {
 async function runChecks() {
     if (checksRunning) return;
     checksRunning = true;
+    const metadata = await window.startupAPI.getMetadata().catch(() => ({}));
+    developmentBypassActive = metadata.developmentBusinessDayGateBypassActive === true;
     resetChecks();
 
     const results = await Promise.all(checkIds.map(async id => {
@@ -308,7 +312,11 @@ async function runChecks() {
 
 checksRunning = false;
 
-const failed = results.some(result => result.critical && result.state === "failed");
+const pendingDayFailure = results.find(result =>
+    result.id === "businessDay" && result.action === "closePreviousBusinessDay"
+);
+const failed = results.some(result => result.critical && result.state === "failed" &&
+    !(developmentBypassActive && result === pendingDayFailure));
     const finalStatus = document.getElementById("finalStatus");
 
 if (failed) {
@@ -321,6 +329,7 @@ if (failed) {
         ]);
         finalStatus.className = "final-status failed";
         finalStatus.querySelector("span").textContent = "SYSTEM NOT READY";
+        document.getElementById("developmentBypassNotice").hidden = !developmentBypassActive;
         document.getElementById("actions").hidden = false;
         const business = results.find(result => result.id === "businessDay");
         const administrator = results.find(result => result.id === "administratorSecurity");
@@ -332,6 +341,7 @@ if (failed) {
         );
         const previousButton = document.getElementById("closePreviousBtn");
         previousButton.hidden = !(business && business.action === "closePreviousBusinessDay");
+        if (developmentBypassActive) previousButton.disabled = true;
         if (!previousButton.hidden) {
             const displayDate = previousBusinessDateDisplay(business.pendingPreviousBusinessDate);
             document.getElementById("previousBusinessDate").textContent = displayDate;
@@ -341,6 +351,23 @@ if (failed) {
         document.getElementById("securitySetupBtn").hidden = !securityIncomplete;
         if (securityIncomplete) await openSecuritySetup();
         requestSplashFit();
+        return;
+    }
+
+    if (developmentBypassActive && pendingDayFailure) {
+        stopPresentationMotion();
+        setTerminal([
+            "DEVELOPMENT BYPASS ACTIVE",
+            `BUSINESS DAY ${String(pendingDayFailure.message || "PENDING CLOSE").toUpperCase()}`,
+            "DAY CLOSING AND AUTOMATIC INTEGRATION RETRIES DISABLED"
+        ]);
+        finalStatus.className = "final-status development-bypass";
+        finalStatus.querySelector("span").textContent = "DEVELOPMENT BYPASS ACTIVE";
+        document.getElementById("actions").hidden = false;
+        document.getElementById("closePreviousBtn").hidden = true;
+        document.getElementById("developmentBypassNotice").hidden = false;
+        requestSplashFit();
+        setTimeout(() => { window.startupAPI.ready(); }, 900);
         return;
     }
 
@@ -359,7 +386,9 @@ if (failed) {
 
 document.getElementById("retryBtn").addEventListener("click", async () => {
     if (checksRunning) return;
-    await window.startupAPI.retryRemoteDashboard().catch(() => ({ success: false }));
+    if (!developmentBypassActive) {
+        await window.startupAPI.retryRemoteDashboard().catch(() => ({ success: false }));
+    }
     await runChecks();
 });
 document.getElementById("exitBtn").addEventListener("click", () => window.startupAPI.exit());
@@ -416,6 +445,8 @@ document.getElementById("confirmReopenBtn").addEventListener("click", async () =
 window.startupAPI.getMetadata().then(metadata => {
     document.getElementById("startupVersion").textContent = metadata.version;
     document.getElementById("terminalVersion").textContent = metadata.version;
+    developmentBypassActive = metadata.developmentBusinessDayGateBypassActive === true;
+    document.getElementById("developmentBypassNotice").hidden = !developmentBypassActive;
 });
 
 window.addEventListener("beforeunload", () => {

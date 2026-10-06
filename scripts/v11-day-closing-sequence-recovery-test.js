@@ -81,6 +81,7 @@ async function testClosing(emailOutcome, online) {
         const coordinator = createDayClosingDeliveryCoordinator({ database: db, sheetWorker: sheet, emailWorker: email });
         const handler = captureHandler(mainSource, 'ipcMain.handle(\n\n    "close-business-day"',
             'ipcMain.handle("app:close-after-day-closing"', {
+                developmentBusinessDayGateBypassActive: false,
                 dayClosingCriticalInProgress: false, dayClosingPrintPending: null,
                 activeDayClosingUiAttemptId: null, dayClosingFeedback: null,
                 mainWindow: { isDestroyed: () => false, webContents: { send: (_event, value) => progress.push(value.stage) } },

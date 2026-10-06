@@ -201,7 +201,8 @@ async function main() {
     const splashHtml = fs.readFileSync(path.join(root, "src/renderer/startupSplash.html"), "utf8");
     const mainSource = fs.readFileSync(path.join(root, "src/main/main.js"), "utf8");
     const preload = fs.readFileSync(path.join(root, "src/main/startupPreload.js"), "utf8");
-    assert(mainSource.includes('check.critical && check.state === "failed"'));
+    const startupGate = fs.readFileSync(path.join(root, "src/main/developmentStartupGate.js"), "utf8");
+    assert(startupGate.includes('check.critical && check.state === "failed"'));
     assert(!mainSource.includes('check.critical && check.state !== "ready"'));
     assert.strictEqual(startupBlocked({ critical: true, state: "warning" }), false);
     assert.strictEqual(startupBlocked({ critical: true, state: "failed" }), true);
@@ -220,7 +221,7 @@ async function main() {
     assert(!preload.includes("import-products"));
     assert(mainSource.includes('ipcMain.handle("startup:open-security-setup"'));
     assert(mainSource.includes("status.initialized && status.managerPinConfigured"));
-    assert(mainSource.includes("readinessChecks.some"));
+    assert(mainSource.includes("areStartupChecksBlocked(readinessChecks, developmentBusinessDayGateBypassActive)"));
     assert(mainSource.includes('authorizePin(pin, "DAY_REOPEN")'));
 
     await new Promise(resolve => database.close(resolve));

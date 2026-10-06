@@ -88,6 +88,15 @@ app.on("second-instance", () => {
 
 const path = require("path");
 const { calculateStartupSplashBounds } = require("./startupSplashGeometry");
+const {
+    isDevelopmentBusinessDayGateBypassEnabled,
+    areStartupChecksBlocked
+} = require("./developmentStartupGate");
+// Capture before dotenv is loaded: activation must be explicit in the launch environment.
+const developmentBusinessDayGateBypassActive = isDevelopmentBusinessDayGateBypassEnabled({
+    isPackaged: app.isPackaged,
+    env: process.env
+});
 
 if (!app.isPackaged) {
     require("dotenv").config({
@@ -236,6 +245,7 @@ const {
     getDashboardSummary
 
 } = require("../database/billService");
+const customerProfileService = require("../database/customerService");
 
 const {
     getBillForReturn,
@@ -739,6 +749,7 @@ setRestoreQuiesceHandler(() => {
 });
 
 function startIntegrationOutboxDrain() {
+    if (developmentBusinessDayGateBypassActive) return;
     if (integrationOutboxTimer) return;
     const poll = async () => {
         if (isRestoreInProgress() || dayClosingCriticalInProgress) return;
@@ -859,8 +870,10 @@ app.whenReady().then(async () => {
 
         createWindow();
         createSplashWindow();
-        startIntegrationOutboxDrain();
-        remoteDashboard.start();
+        if (!developmentBusinessDayGateBypassActive) {
+            startIntegrationOutboxDrain();
+            remoteDashboard.start();
+        }
 
     }
 
@@ -942,7 +955,8 @@ ipcMain.handle(
 ipcMain.handle("startup:get-metadata", () => ({
     version: app.getVersion(),
     developer: "Himanish Patnaik",
-    copyright: "© 2026 Himanish Patnaik"
+    copyright: "© 2026 Himanish Patnaik",
+    developmentBusinessDayGateBypassActive
 }));
 
 ipcMain.handle("startup:fit-splash", async event => {
@@ -952,16 +966,27 @@ ipcMain.handle("startup:fit-splash", async event => {
     return fitSplashToWorkArea();
 });
 
-ipcMain.handle("startup:run-check", async (event, checkName) =>
-    getStartupCheck(checkName, {
+ipcMain.handle("startup:run-check", async (event, checkName) => {
+    const check = await getStartupCheck(checkName, {
         getAdministratorSecurityStatus: () => administratorSecurity.getStatus(),
         getBusinessDayState
-    })
-);
+    });
+    return developmentBusinessDayGateBypassActive
+        ? { ...check, developmentBusinessDayGateBypassActive: true }
+        : check;
+});
+
+ipcMain.handle("development:get-startup-gate-status", event => ({
+    success: Boolean(mainWindow && event.sender === mainWindow.webContents),
+    active: Boolean(mainWindow && event.sender === mainWindow.webContents && developmentBusinessDayGateBypassActive)
+}));
 
 ipcMain.handle("startup:retry-remote-dashboard", async event => {
     if (!splashWindow || event.sender !== splashWindow.webContents) {
         return { success: false, error: "Startup Remote Dashboard retry request rejected." };
+    }
+    if (developmentBusinessDayGateBypassActive) {
+        return { success: false, error: "Automatic integration retry is disabled while Development Bypass is active." };
     }
     await remoteDashboard.drain({ force: true });
     return { success: true };
@@ -989,6 +1014,9 @@ ipcMain.handle("startup:reopen-closed-day", async (event, data) => {
 ipcMain.handle("startup:close-previous-day", async (event, data) => {
     if (!splashWindow || event.sender !== splashWindow.webContents) {
         return { success: false, error: "Startup recovery request rejected." };
+    }
+    if (developmentBusinessDayGateBypassActive) {
+        return { success: false, error: "Day Closing is disabled while Development Bypass is active." };
     }
     const targetDate = String(data && data.businessDate || "");
     const pin = String(data && data.pin || "");
@@ -1088,7 +1116,7 @@ ipcMain.handle("startup:ready", async event => {
         "database", "databaseIntegrity", "productInventory",
         "administratorSecurity", "businessDay"
     ].map(checkName => getStartupCheck(checkName, readinessDependencies)));
-    if (readinessChecks.some(check => check.critical && check.state === "failed")) {
+    if (areStartupChecksBlocked(readinessChecks, developmentBusinessDayGateBypassActive)) {
         return { success: false, error: "System readiness conditions are not satisfied." };
     }
 
@@ -1283,6 +1311,45 @@ ipcMain.handle(
 
     }
 );
+
+function requireCustomerProfileRenderer(event) {
+    if (!mainWindow || event.sender !== mainWindow.webContents) {
+        throw new Error("Customer profile request rejected.");
+    }
+}
+
+ipcMain.handle("customers:find-by-mobile", async (event, mobile) => {
+    requireCustomerProfileRenderer(event);
+    return customerProfileService.findCustomersByMobile(mobile);
+});
+ipcMain.handle("customers:get-profile", async (event, customerId) => {
+    requireCustomerProfileRenderer(event);
+    return customerProfileService.getCustomerProfile(customerId);
+});
+ipcMain.handle("customers:create-profile", async (event, data) => {
+    requireCustomerProfileRenderer(event);
+    return customerProfileService.createCustomerProfile(data || {});
+});
+ipcMain.handle("customers:update-profile", async (event, customerId, data) => {
+    requireCustomerProfileRenderer(event);
+    return customerProfileService.updateCustomerProfile(customerId, data || {});
+});
+ipcMain.handle("customers:purchase-history", async (event, customerId) => {
+    requireCustomerProfileRenderer(event);
+    return customerProfileService.getCustomerPurchaseHistory(customerId);
+});
+ipcMain.handle("customers:purchase-history-page", async (event, customerId, options) => {
+    requireCustomerProfileRenderer(event);
+    return customerProfileService.getCustomerPurchaseHistoryPage(customerId, options || {});
+});
+ipcMain.handle("customers:list-directory", async (event, search) => {
+    requireCustomerProfileRenderer(event);
+    return customerProfileService.listCustomerDirectory(search);
+});
+ipcMain.handle("customers:get-management-profile", async (event, customerId) => {
+    requireCustomerProfileRenderer(event);
+    return customerProfileService.getCustomerManagementProfile(customerId);
+});
 
 /* ============================================================
    INVENTORY TRANSACTION HANDLERS
@@ -3447,6 +3514,10 @@ ipcMain.handle(
     "close-business-day",
 
     async (_event, attemptId) => {
+
+        if (developmentBusinessDayGateBypassActive) {
+            return { success: false, error: "Day Closing is disabled while Development Bypass is active." };
+        }
 
         if (!Number.isSafeInteger(attemptId) || attemptId <= 0) {
             return { success: false, error: "Day Closing attempt identifier is invalid." };

@@ -782,6 +782,25 @@ h2 {
     background: var(--failed);
 }
 
+.final-status.development-bypass {
+    color: #8a5a11;
+    border-color: #d6b66d;
+    background: #fff8e8;
+}
+
+.development-bypass-notice {
+    align-self: center;
+    margin-top: 7px;
+    padding: 7px 12px;
+    border: 1px solid #d6b66d;
+    border-radius: 4px;
+    color: #6b4a12;
+    background: #fff8e8;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+}
+
 
 /* =========================================================
    BUTTONS

@@ -73,8 +73,8 @@
 
 .customer-section{
     display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:20px;
+    grid-template-columns:minmax(0, 1fr) minmax(0, 1fr) 70px;
+    gap:12px;
     margin-bottom:20px;
 }
 
@@ -86,6 +86,42 @@
     border-radius:12px;
     border:2px solid #ddd;
 }
+
+.customer-profile-open{
+    height:70px;
+    border:0;
+    border-radius:12px;
+    background:var(--primary);
+    color:#fff;
+    font-size:38px;
+    font-weight:700;
+    cursor:pointer;
+}
+.customer-profile-status,.customer-history-link{grid-column:1 / 3;font-size:14px;color:var(--success);}
+.customer-history-link{justify-self:start;background:none;border:0;text-decoration:underline;cursor:pointer;}
+.customer-history-link[hidden]{display:none;}
+#customerProfileModal .modal-content.customer-profile-dialog{box-sizing:border-box;width:min(960px,calc(100vw - 48px));height:510px;min-height:0;max-height:calc(100vh - 48px);overflow:auto;padding:30px 44px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);text-align:left;}
+#customerProfileModal .customer-profile-dialog h3{margin:0;color:var(--primary);font-size:28px;font-weight:800;letter-spacing:.02em;}
+#customerProfileModal .customer-profile-subtitle{margin:4px 0 12px;color:var(--text-muted);font-size:14px;}
+#customerProfileModal .customer-profile-fields{display:grid;width:100%;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:32px;row-gap:8px;}
+#customerProfileModal .customer-profile-dialog label{display:block;min-width:0;margin:8px 0 7px;font-size:15px;font-weight:600;color:var(--text);text-align:left;}
+#customerProfileModal .customer-profile-dialog input,#customerProfileModal .customer-profile-dialog textarea{box-sizing:border-box;display:block;width:100%;min-width:0;margin:5px 0 0;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font:16px Arial,sans-serif;}
+#customerProfileModal .customer-profile-dialog input{height:48px;}
+#customerProfileModal .customer-profile-dialog textarea{min-height:66px;resize:vertical;}
+#customerProfileModal .customer-profile-dialog input:focus,#customerProfileModal .customer-profile-dialog textarea:focus{outline:2px solid rgba(139,0,75,.24);border-color:var(--primary);}
+#customerProfileModal .customer-profile-fields label:nth-child(4){white-space:nowrap;}
+#customerProfileModal .customer-profile-dialog input.is-invalid{border-color:var(--danger);background:#fff8f8;}
+#customerProfileModal .customer-profile-validation{box-sizing:border-box;display:flex;align-items:center;width:100%;height:24px;min-height:24px;margin:8px 0 0;overflow:hidden;color:var(--danger);font-size:14px;line-height:1.35;white-space:nowrap;}
+.customer-profile-actions{display:flex;justify-content:center;gap:24px;margin-top:12px;}
+#customerProfileModal .customer-profile-actions button{box-sizing:border-box;min-width:172px;height:50px;padding:8px 20px;cursor:pointer;font-size:16px;font-weight:700;}
+#customerProfileCancel{border:2px solid var(--primary);background:#fff;color:var(--primary);}
+#customerProfileSave{border:2px solid var(--primary);background:var(--primary);color:#fff;}
+.customer-choice{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px;border-bottom:1px solid var(--border);}
+.customer-choice button{padding:8px 14px;cursor:pointer;}
+.customer-history-dialog{width:min(760px,94vw);}
+.customer-history-row{padding:12px 4px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr auto;gap:5px;}
+@media(max-width:760px){.customer-section{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 54px;gap:8px}.customer-section input{font-size:18px;padding:0 10px}.customer-profile-open{height:60px}}
+@media(max-width:680px){#customerProfileModal .modal-content.customer-profile-dialog{width:calc(100vw - 32px);height:auto;max-height:calc(100vh - 32px);padding:22px}#customerProfileModal .customer-profile-fields{grid-template-columns:minmax(0,1fr)}#customerProfileModal .customer-profile-fields label:nth-child(4){white-space:normal}#customerProfileModal .customer-profile-validation{height:auto;min-height:24px;white-space:normal;overflow:visible}#customerProfileModal .customer-profile-actions{gap:10px}#customerProfileModal .customer-profile-actions button{min-width:132px;height:48px}}
 
 .gst-section{
     margin-bottom:25px;
