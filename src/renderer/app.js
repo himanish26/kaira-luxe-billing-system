@@ -1987,6 +1987,7 @@ const verifiedStoreCreditValidity =
 let appliedStoreCredit = null;
 
 let availableStoreCredit = null;
+let availableStoreCreditLookupSequence = 0;
 
 function getExactBillPayable() {
 
@@ -2767,6 +2768,7 @@ if (giftVoucherBtn) {
 }
 
 availableStoreCredit = null;
+availableStoreCreditLookupSequence += 1;
 
 if (storeCreditAppliedAmount) {
 
@@ -3077,7 +3079,7 @@ if (saleType === "RETURN") {
 paymentBtn.disabled = true;
 const returnReason = await showReturnReasonDialog();
 if (!returnReason) {
-    paymentBtn.disabled = false;
+    updateProceedToPaymentState();
     return;
 }
 
@@ -3090,7 +3092,7 @@ const proceed =
     );
 
 if (!proceed) {
-    paymentBtn.disabled = false;
+    updateProceedToPaymentState();
     return;
 }
 
@@ -3299,7 +3301,7 @@ clearCurrentBill();
 
         finally {
 
-            paymentBtn.disabled = false;
+            updateProceedToPaymentState();
 
         }
 
@@ -3648,12 +3650,18 @@ function formatGstRate(value) {
     return Number.isFinite(rate) ? `${rate}%` : "0%";
 }
 
-function setCartProductValidationBlocked(blocked) {
-    cartProductValidationBlocked = Boolean(blocked);
+function updateProceedToPaymentState() {
     if (paymentBtn) {
         paymentBtn.disabled = cartProductValidationBlocked || billItems.length === 0;
     }
 }
+
+function setCartProductValidationBlocked(blocked) {
+    cartProductValidationBlocked = Boolean(blocked);
+    updateProceedToPaymentState();
+}
+
+updateProceedToPaymentState();
 
 async function revalidateCurrentBillProducts() {
     if (saleType !== "SALE" || billItems.length === 0) {
@@ -5260,10 +5268,12 @@ if (customerMobile) {
 
             const mobile =
                 this.value.trim();
+            const lookupSequence = ++availableStoreCreditLookupSequence;
 
 availableStoreCredit = null;
 
 updateStoreCreditAvailabilityCard();
+window.updateNewBillCustomerStoreCredit?.(mobile, null);
 
 if (mobile.length !== 10) {
 
@@ -5279,9 +5289,14 @@ if (mobile.length !== 10) {
                             mobile
                         );
 
+if (lookupSequence !== availableStoreCreditLookupSequence || customerMobile.value.trim() !== mobile) {
+    return;
+}
+
 if (!storeCredit) {
 
     updateStoreCreditAvailabilityCard();
+    window.updateNewBillCustomerStoreCredit?.(mobile, null);
 
     return;
 
@@ -5291,13 +5306,19 @@ availableStoreCredit =
     storeCredit;
 
 updateStoreCreditAvailabilityCard();
+window.updateNewBillCustomerStoreCredit?.(mobile, storeCredit);
 
             }
 catch (error) {
 
+    if (lookupSequence !== availableStoreCreditLookupSequence || customerMobile.value.trim() !== mobile) {
+        return;
+    }
+
     availableStoreCredit = null;
 
     updateStoreCreditAvailabilityCard();
+    window.updateNewBillCustomerStoreCredit?.(mobile, null);
 
     console.error(
         "Available Store Credit lookup failed:",
@@ -5834,7 +5855,7 @@ onclick="removeItem(${index})">
     });
 
     updateSummary();
-    setCartProductValidationBlocked(cartProductValidationBlocked);
+    updateProceedToPaymentState();
 
 }
 
@@ -5877,6 +5898,7 @@ if (giftVoucherBtn) {
 }
 
 availableStoreCredit = null;
+availableStoreCreditLookupSequence += 1;
 
     if (storeCreditAppliedAmount) {
 
@@ -5932,7 +5954,7 @@ if (familyFriendsBtn) {
 
 }
 
-for (const id of ["customerProfileModal", "customerChooserModal", "customerHistoryModal", "variableValueDialog", "ffPinDialog", "ffDiscountDialog", "giftVoucherDialog", "storeCreditModal", "returnReasonDialog", "productNotFoundDialog", "insufficientStockDialog"]) {
+for (const id of ["customerProfileModal", "variableValueDialog", "ffPinDialog", "ffDiscountDialog", "giftVoucherDialog", "storeCreditModal", "returnReasonDialog", "productNotFoundDialog", "insufficientStockDialog"]) {
     const dialog = document.getElementById(id);
     if (dialog) dialog.style.display = "none";
 }
@@ -7256,8 +7278,9 @@ async function viewBill(billNo, returnContext = null){
     billHistoryScreen.style.display = "none";
     if (billDetailsReturnContext.type === "customer-profile") customersScreen.style.display = "none";
 
-    // Show View Bill Screen
-    document.getElementById("viewBillScreen").style.display = "block";
+    // Show the existing Bill Details screen for its existing callers.
+    const viewBillScreenElement = document.getElementById("viewBillScreen");
+    viewBillScreenElement.style.display = "block";
 
     resetScrollPosition();
 
@@ -7707,10 +7730,22 @@ document.addEventListener("keydown", (event) => {
     if (event.code !== "F6")
         return;
 
+    if (window.isNewBillCustomerDrawerOpen?.()) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        return;
+    }
+
     if (f6Timer)
         return;
 
     f6Timer = setTimeout(() => {
+
+    if (window.isNewBillCustomerDrawerOpen?.()) {
+        f6Timer = null;
+        return;
+    }
 
     systemStatusCard.style.display = "none";
     paymentSummaryCard.style.display = "block";
@@ -7728,6 +7763,12 @@ document.addEventListener("keyup", (event) => {
 
     if (event.code !== "F6")
         return;
+
+    if (window.isNewBillCustomerDrawerOpen?.()) {
+        if (f6Timer) clearTimeout(f6Timer);
+        f6Timer = null;
+        return;
+    }
 
     if (f6Timer) {
 

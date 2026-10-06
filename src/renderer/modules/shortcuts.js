@@ -482,11 +482,14 @@ function abandonNewBillDraftBeforeNavigation() {
 
 function handleEscape() {
 
+    if (window.isNewBillCustomerDrawerOpen?.()) {
+        window.closeNewBillCustomerDrawer?.();
+        return;
+    }
+
     // Customer dialogs own Escape before the New Bill page can navigate away.
     for (const [modalId, closeId] of [
-        ["customerProfileModal", "customerProfileCancel"],
-        ["customerChooserModal", "customerChooserCancel"],
-        ["customerHistoryModal", "customerHistoryClose"]
+        ["customerProfileModal", "customerProfileCancel"]
     ]) {
         const modal = document.getElementById(modalId);
         if (!modal) continue;
@@ -816,6 +819,8 @@ function saveAndPrintShortcut() {
 
 function isKLBSModalOpen() {
 
+    if (window.isNewBillCustomerDrawerOpen?.()) return true;
+
     const modalIds = [
         "processingDialog",
         "productNotFoundDialog",
@@ -830,8 +835,6 @@ function isKLBSModalOpen() {
         "returnReasonDialog",
         "variableValueDialog",
         "customerProfileModal",
-        "customerChooserModal",
-        "customerHistoryModal",
         "dayReopenReasonModal",
         "dayClosingLifecycleOverlay",
         "appLockOverlay"

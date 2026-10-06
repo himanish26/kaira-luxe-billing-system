@@ -817,8 +817,6 @@ maxlength="4">
 
             <button id="customerProfileOpen" class="customer-profile-open" type="button" aria-label="Customer details">+</button>
             <input type="hidden" id="selectedCustomerProfileId" value="">
-            <div class="customer-profile-status" id="customerProfileStatus" aria-live="polite"></div>
-            <button type="button" id="customerPurchaseHistory" class="customer-history-link" hidden>Purchase History</button>
 
         </div>
 
@@ -942,12 +940,73 @@ maxlength="4">
 
         </div>
 
-    <!-- Customer overlays are application-level so Business → Customers can reuse them. -->
-    <div class="modal" id="customerProfileModal" style="display:none;">
-        <div class="modal-content customer-profile-dialog">
-            <h3 id="customerProfileTitle">CUSTOMER DETAILS</h3>
-            <p class="customer-profile-subtitle">Customer Profile · Optional</p>
-            <div class="customer-profile-fields">
+    <!-- Shared customer form: modal for Customer Management, right drawer for New Bill. -->
+    <div class="modal" id="customerProfileModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="customerProfileTitle">
+        <div class="modal-content customer-profile-dialog customer-drawer-panel">
+            <header class="customer-drawer-header">
+                <h3 id="customerProfileTitle">CUSTOMER DETAILS</h3>
+                <button id="customerDrawerBack" type="button" class="customer-drawer-exit" aria-label="Exit customer drawer">EXIT</button>
+            </header>
+            <div id="customerDrawerBody" class="customer-drawer-body">
+                <section id="customerDrawerChooser" class="customer-drawer-chooser" hidden>
+                    <h4>Select a customer</h4>
+                    <p>This mobile number is shared by multiple customer profiles.</p>
+                    <div id="customerDrawerChoices"></div>
+                    <button id="customerDrawerNewChoice" type="button" class="klbs-cancel-btn">+ NEW CUSTOMER</button>
+                </section>
+                <section id="customerDrawerProfileView" class="customer-drawer-profile" hidden>
+                    <div class="customer-drawer-identity">
+                        <h4 id="drawerCustomerName"></h4>
+                        <p class="customer-drawer-identity-meta"><span id="drawerCustomerCode"></span><span id="drawerCustomerMobile"></span></p>
+                        <button id="customerDrawerEdit" type="button" class="klbs-cancel-btn">EDIT DETAILS</button>
+                    </div>
+                    <section class="customer-drawer-section">
+                        <h4>CUSTOMER DETAILS</h4>
+                        <dl class="customer-drawer-details">
+                            <div><dt id="drawerBirthdayLabel">Birthday</dt><dd id="drawerBirthday">—</dd></div>
+                            <div><dt id="drawerAnniversaryLabel">Marriage Anniversary</dt><dd id="drawerAnniversary">—</dd></div>
+                            <div><dt>Email</dt><dd id="drawerEmail">—</dd></div>
+                            <div><dt>Notes</dt><dd id="drawerNotes">—</dd></div>
+                        </dl>
+                    </section>
+                    <section id="drawerCustomerEvents" class="customer-drawer-section customer-drawer-events" hidden>
+                        <h4>CUSTOMER EVENTS</h4>
+                        <p id="drawerCustomerEventText"></p>
+                    </section>
+                    <section id="drawerStoreCreditSection" class="customer-drawer-section customer-drawer-credit" hidden>
+                        <h4>STORE CREDIT</h4>
+                        <p id="drawerStoreCreditEmpty">No available store credit</p>
+                        <strong id="drawerStoreCreditAmount"></strong>
+                        <span id="drawerStoreCreditValidity"></span>
+                        <span id="drawerStoreCreditReference"></span>
+                    </section>
+                    <section class="customer-drawer-section">
+                        <h4>PURCHASE SUMMARY</h4>
+                        <div class="customer-drawer-summary">
+                            <div><span>TOTAL BILLS</span><strong id="drawerBillCount">0</strong></div>
+                            <div><span>TOTAL SPEND</span><strong id="drawerSpend">₹0.00</strong></div>
+                            <div><span>LAST VISIT</span><strong id="drawerLastVisit">Never</strong></div>
+                            <div><span>AVERAGE BILL</span><strong id="drawerAverage">₹0.00</strong></div>
+                        </div>
+                    </section>
+                    <section class="customer-drawer-section">
+                        <h4>PURCHASE HISTORY</h4>
+                        <div id="drawerPurchaseEmpty" class="customer-info-empty" hidden>No linked purchases yet.</div>
+                        <div id="drawerPurchaseTableWrap" class="customer-drawer-table-wrap" hidden>
+                            <table class="customer-info-table customer-drawer-table">
+                                <thead><tr><th>DATE</th><th>BILL NO.</th><th>AMOUNT</th><th>ACTION</th></tr></thead>
+                                <tbody id="drawerPurchaseRows"></tbody>
+                            </table>
+                        </div>
+                        <div id="drawerPurchasePagination" class="customer-drawer-pagination" hidden>
+                            <span id="drawerPurchaseRange"></span>
+                            <div id="drawerPurchaseControls"><button id="drawerPurchasePrevious" type="button" class="pagination-nav-btn">Previous</button><span id="drawerPurchasePage">Page 1 of 1</span><label for="drawerPurchaseJump">Jump</label><input id="drawerPurchaseJump" type="number" min="1" step="1" value="1" aria-label="Jump to purchase history page"><button id="drawerPurchaseNext" type="button" class="pagination-nav-btn">Next</button></div>
+                        </div>
+                    </section>
+                </section>
+                <section id="customerDrawerFormView" class="customer-drawer-form">
+                    <p id="customerDrawerHelper" class="customer-profile-subtitle">Customer Profile · Optional</p>
+                    <div class="customer-profile-fields">
                 <label for="profileName">Name<input id="profileName" type="text" maxlength="120"></label>
                 <label for="profileMobile">Mobile<input id="profileMobile" type="tel" inputmode="numeric" maxlength="10"></label>
                 <label for="profileBirthday">Birthday (DD/MM)<input id="profileBirthday" type="text" inputmode="numeric" placeholder="DD/MM" maxlength="5"></label>
@@ -960,25 +1019,15 @@ maxlength="4">
                 <button id="customerProfileCancel" type="button" class="klbs-cancel-btn">CANCEL</button>
                 <button id="customerProfileSave" type="button" class="klbs-primary-btn">SAVE</button>
             </div>
-        </div>
-    </div>
-
-    <div class="modal" id="customerChooserModal" style="display:none;">
-        <div class="modal-content customer-profile-dialog">
-            <h3>Choose Customer</h3>
-            <div id="customerChooserList"></div>
-            <div class="customer-profile-actions">
-                <button id="customerChooserNew" type="button" class="klbs-primary-btn">+ New Customer</button>
-                <button id="customerChooserCancel" type="button" class="klbs-cancel-btn">Cancel</button>
+                <div id="drawerStoreCreditOnly" class="customer-drawer-section customer-drawer-credit" hidden>
+                    <h4>STORE CREDIT</h4>
+                    <strong id="drawerCreditOnlyAmount"></strong>
+                    <span id="drawerCreditOnlyValidity"></span>
+                    <span id="drawerCreditOnlyReference"></span>
+                </div>
+                </section>
+                <div id="customerDrawerError" class="customer-drawer-error" role="status" aria-live="polite"></div>
             </div>
-        </div>
-    </div>
-
-    <div class="modal" id="customerHistoryModal" style="display:none;">
-        <div class="modal-content customer-profile-dialog customer-history-dialog">
-            <h3>Purchase History</h3>
-            <div id="customerHistoryList"></div>
-            <div class="customer-profile-actions"><button id="customerHistoryClose" type="button" class="klbs-cancel-btn">Close</button></div>
         </div>
     </div>
 
@@ -1961,7 +2010,6 @@ returned after purchase.
         <section id="customerDirectoryView" class="customer-management-view">
             <div class="customer-directory-toolbar">
                 <label class="customer-search-wrap">
-                    <span class="sr-only">Search customers by name, mobile or Customer ID</span>
                     <input id="customerDirectorySearch" type="search" aria-label="Search customers by name, mobile or Customer ID" placeholder="Search by name, mobile or Customer ID" autocomplete="off">
                 </label>
                 <button id="customerDirectoryAdd" class="klbs-primary-btn customer-add-button" type="button">+ ADD CUSTOMER</button>

@@ -121,6 +121,11 @@
     margin: -16px 0 22px;
 }
 
+#customersScreen .business-page-header { margin-bottom: 30px; }
+#customersScreen .customer-directory-toolbar { align-items: center; margin: 0 0 24px; gap: 18px; }
+#customersScreen .customer-search-wrap { flex: 0 1 620px; }
+#customersScreen .customer-directory-toolbar .customer-add-button { min-height: 52px; align-self: center; }
+
 .customer-search-wrap {
     flex: 1;
     max-width: 620px;

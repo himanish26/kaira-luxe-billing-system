@@ -9,6 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, "../src/renderer/modules/sho
 const nodes = new Map();
 const clicks = [];
 let draftAbandonCount = 0;
+let customerDrawerOpen = false;
 const buttonIds = ["newBillBtn", "billHistoryBtn", "reportsBtn", "settingsBtn", "saveBillBtn", "printBillBtn", "paymentBackBtn", "backBtn"];
 for (const id of buttonIds) {
     nodes.set(id, { disabled: false, click: () => clicks.push(id) });
@@ -19,6 +20,8 @@ const context = {
     document: { getElementById: id => nodes.get(id) || null, querySelector: () => null },
     window: {
         getComputedStyle: node => ({ display: node.style.display || "flex", visibility: "visible", opacity: "1" }),
+        isNewBillCustomerDrawerOpen: () => customerDrawerOpen,
+        closeNewBillCustomerDrawer: () => { customerDrawerOpen = false; clicks.push("customerDrawerBack"); },
         guardNewBillBusinessDay: async () => false,
         abandonNewBillSession: () => { draftAbandonCount += 1; }
     }
@@ -41,8 +44,6 @@ async function main() {
         ["returnReasonDialog", "returnReasonCancelBtn"],
         ["variableValueDialog", "variableValueCancelBtn"],
         ["customerProfileModal", "customerProfileCancel"],
-        ["customerChooserModal", "customerChooserCancel"],
-        ["customerHistoryModal", "customerHistoryClose"],
         ["dayReopenReasonModal", "cancelDayReopenReasonBtn"],
         ["adminDialog", "adminCancelBtn"],
         ["ffPinDialog", "ffPinCancelBtn"],
@@ -68,6 +69,13 @@ async function main() {
         assert.deepStrictEqual(clicks, [], `${modalId} blocks navigation, save and Esc`);
         nodes.delete(modalId);
     }
+    customerDrawerOpen = true;
+    clicks.length = 0;
+    for (const key of ["F2", "F3", "F4", "F5", "F10", "F12"]) press(key);
+    assert.deepStrictEqual(clicks, [], "New Bill customer drawer blocks navigation, save and print shortcuts");
+    press("Escape");
+    assert.deepStrictEqual(clicks, ["customerDrawerBack"], "Escape closes only the active Customer Drawer");
+    assert.strictEqual(customerDrawerOpen, false);
     nodes.get("paymentScreen").style.display = "none";
     clicks.length = 0;
     press("Escape");

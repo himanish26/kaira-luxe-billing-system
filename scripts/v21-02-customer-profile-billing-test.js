@@ -174,7 +174,10 @@ async function child(root) {
     assert.match(appSource, /saveBillBtn\.addEventListener\([\s\S]*?saveCurrentBill/);
     assert.match(appSource, /printBillBtn\.addEventListener\([\s\S]*?saveAndPrintBill/);
     assert.match(html, /customerProfileOpen/);
-    assert.match(html, /customerPurchaseHistory/);
+    assert.match(html, /id="customerDrawerProfileView"/);
+    assert.match(html, /id="drawerPurchaseRows"/);
+    assert(!html.includes('id="customerInfoModal"') && !html.includes('id="customerHistoryModal"'), "New Bill intelligence uses one drawer rather than F2 popup layers");
+    assert(!html.includes('id="customerPurchaseHistory"') && !html.includes('id="customerProfileStatus"'), "New Bill no longer displays the loose customer status or Purchase History controls");
     assert.strictEqual(Number((await get(db, "SELECT net_amount FROM bills WHERE bill_no = 'V2102-AUTO'")).net_amount), 100);
 
     await close(db);

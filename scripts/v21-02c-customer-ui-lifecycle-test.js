@@ -9,17 +9,19 @@ class Element {
     constructor(id = "") {
         this.id = id;
         this.value = "";
+        this.isConnected = true;
         this.hidden = false;
         this.style = { display: "none" };
         this.dataset = {};
         this.listeners = {};
         this.children = [];
+        this.parentElement = null;
         this.attributes = {};
         this.classes = new Set();
         this.classList = {
             toggle: (name, force) => force ? this.classes.add(name) : this.classes.delete(name),
-            add: name => this.classes.add(name),
-            remove: name => this.classes.delete(name),
+            add: (...names) => names.forEach(name => this.classes.add(name)),
+            remove: (...names) => names.forEach(name => this.classes.delete(name)),
             contains: name => this.classes.has(name)
         };
         this.textContent = "";
@@ -31,9 +33,14 @@ class Element {
     setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; }
     setCustomValidity(message) { this.validationMessage = message; }
     setAttribute(name, value) { this.attributes[name] = value; }
+    removeAttribute(name) { delete this.attributes[name]; }
     focus() { this.focused = true; activeElement = this; }
-    replaceChildren(...children) { this.children = children; }
-    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children = []; this.append(...children); }
+    append(...children) { for (const child of children) { child.parentElement = this; this.children.push(child); } }
+    querySelector(selector) { return selector.includes("customer-drawer-panel") ? elements.get("drawerPanel") : null; }
+    querySelectorAll() { return focusables; }
+    getClientRects() { return this.hidden ? [] : [{}]; }
+    contains(element) { return element === this || (this.id === "customerProfileModal" && focusables.includes(element)) || this.children.some(child => child.contains?.(element)); }
     click() { for (const callback of this.listeners.click || []) callback({ type: "click", target: this }); }
 }
 
@@ -43,14 +50,14 @@ class TestEvent {
 }
 
 const ids = [
-    "customerMobile", "customerName", "newBillScreen", "selectedCustomerProfileId", "customerProfileStatus",
-    "customerPurchaseHistory", "customerProfileTitle", "profileName", "profileMobile",
+    "customerMobile", "customerName", "newBillScreen", "selectedCustomerProfileId", "customerProfileTitle", "profileName", "profileMobile",
+    "drawerPanel", "customerDrawerBack", "customerDrawerBody", "customerDrawerChooser", "customerDrawerChoices", "customerDrawerNewChoice", "customerDrawerProfileView", "customerDrawerFormView", "customerDrawerEdit", "customerDrawerError", "customerDrawerHelper", "drawerCustomerName", "drawerCustomerCode", "drawerCustomerMobile", "drawerBirthdayLabel", "drawerAnniversaryLabel", "drawerBirthday", "drawerAnniversary", "drawerEmail", "drawerNotes", "drawerBillCount", "drawerSpend", "drawerLastVisit", "drawerAverage", "drawerCustomerEvents", "drawerCustomerEventText", "drawerStoreCreditSection", "drawerStoreCreditEmpty", "drawerStoreCreditAmount", "drawerStoreCreditValidity", "drawerStoreCreditReference", "drawerStoreCreditOnly", "drawerCreditOnlyAmount", "drawerCreditOnlyValidity", "drawerCreditOnlyReference", "drawerPurchaseEmpty", "drawerPurchaseTableWrap", "drawerPurchaseRows", "drawerPurchasePagination", "drawerPurchaseControls", "drawerPurchaseRange", "drawerPurchasePage", "drawerPurchasePrevious", "drawerPurchaseNext", "drawerPurchaseJump",
     "profileBirthday", "profileAnniversary", "profileEmail", "profileNotes", "customerProfileModal",
     "customerProfileValidation", "customerProfileSave", "customerProfileCancel", "customerProfileOpen",
-    "customerChooserModal", "customerChooserList", "customerChooserNew", "customerChooserCancel",
-    "customerHistoryModal", "customerHistoryList", "customerHistoryClose"
+    "customerChooserModal", "customerChooserList", "customerChooserNew", "customerChooserCancel", "barcodeInput"
 ];
 const elements = new Map(ids.map(id => [id, new Element(id)]));
+elements.get("customerProfileModal").querySelector = selector => selector.includes("customer-drawer-panel") ? elements.get("drawerPanel") : elements.get("customerDrawerBack");
 elements.get("newBillScreen").style.display = "block";
 const document = {
     getElementById: id => elements.get(id) || null,
@@ -61,17 +68,23 @@ let profileUpdateCalls = 0;
 let customerLookupCalls = 0;
 let profileToLoad = null;
 let lastSavedProfileData = null;
-const window = { electronAPI: {
+const window = { setTimeout: callback => { callback(); return 1; }, electronAPI: {
     findCustomersByMobile: async () => { customerLookupCalls += 1; return []; },
     getCustomerProfile: async () => profileToLoad,
+    getCustomerManagementProfile: async () => profileToLoad,
+    getAvailableStoreCreditByMobile: async () => null,
+    getCustomerPurchaseHistoryPage: async () => ({ rows: [], totalCount: 0, page: 1, pageSize: 100, totalPages: 1 }),
     createCustomerProfile: async data => { profileCreateCalls += 1; lastSavedProfileData = { ...data }; return { id: 1, name: data.name, mobile: data.mobile }; }
 } };
 window.electronAPI.updateCustomerProfile = async (id, data) => { profileUpdateCalls += 1; lastSavedProfileData = { ...data }; return profileToLoad; };
 window.getComputedStyle = element => ({ display: element.style.display || "flex", visibility: "visible", opacity: "1" });
 let activeElement = null;
+const focusables = ["customerDrawerBack", "customerDrawerEdit", "drawerPurchasePrevious", "drawerPurchaseJump", "drawerPurchaseNext", "profileName", "profileMobile", "profileBirthday", "profileAnniversary", "profileEmail", "profileNotes", "customerProfileCancel", "customerProfileSave"].map(id => elements.get(id));
+const pendingAnimationFrames = [];
 Object.defineProperty(document, "activeElement", { get: () => activeElement });
 document.querySelector = () => null;
-const context = { document, window, Event: TestEvent, setTimeout: () => 1, clearTimeout() {}, console, alert() {} };
+document.addEventListener = () => {};
+const context = { document, window, Event: TestEvent, requestAnimationFrame: callback => { pendingAnimationFrames.push(callback); return pendingAnimationFrames.length; }, setTimeout: callback => { callback(); return 1; }, clearTimeout() {}, console, alert() {} };
 vm.createContext(context);
 const source = fs.readFileSync(path.join(__dirname, "../src/renderer/modules/customerProfile.js"), "utf8");
 vm.runInContext(source, context, { filename: "customerProfile.js" });
@@ -105,14 +118,19 @@ async function openCustomerDetails(name, mobile, profileId = "", profile = null)
     const lookupCallsBefore = customerLookupCalls;
     const openHandler = elements.get("customerProfileOpen").listeners.click[0];
     await openHandler({ type: "click" });
-    assert.strictEqual(elements.get("customerProfileModal").style.display, "flex");
+    while (pendingAnimationFrames.length) {
+        const frame = pendingAnimationFrames.splice(0);
+        for (const callback of frame) callback();
+        await Promise.resolve();
+    }
+    assert.strictEqual(elements.get("customerProfileModal").style.display, "block");
     assert.strictEqual(elements.get("customerName").value, name, "focus decision preserves bill name snapshot input");
     assert.strictEqual(elements.get("customerMobile").value, mobile, "focus decision preserves bill mobile input");
     assert.strictEqual(elements.get("selectedCustomerProfileId").value, profileId, "focus decision does not alter customer identity association");
-    assert.strictEqual(customerLookupCalls, lookupCallsBefore, "opening Customer Details does not trigger mobile lookup");
+    assert.strictEqual(customerLookupCalls, lookupCallsBefore + (!profileId && /^\d{10}$/.test(mobile) ? 1 : 0), "drawer entry uses the existing lookup only when needed to resolve a canonical mobile");
     assert.strictEqual(profileCreateCalls, 0, "opening Customer Details does not create a profile");
     assert.strictEqual(profileUpdateCalls, 0, "opening Customer Details does not update a profile");
-    return document.activeElement?.id;
+    return profileId ? document.activeElement?.id : document.activeElement?.id;
 }
 
 async function main() {
@@ -153,15 +171,15 @@ assert.strictEqual(await openCustomerDetails("", ""), "profileName", "blank iden
 assert.strictEqual(await openCustomerDetails("Cashier Entered", ""), "profileMobile", "name without mobile starts at Mobile");
 assert.strictEqual(await openCustomerDetails("Cashier Entered", "98765"), "profileMobile", "incomplete mobile starts at Mobile");
 assert.strictEqual(await openCustomerDetails("", "9876543210"), "profileName", "valid mobile without name starts at Name");
-assert.strictEqual(await openCustomerDetails("Cashier Entered", "9876543210"), "profileBirthday", "name and canonical mobile start at Birthday");
+assert.strictEqual(await openCustomerDetails("Cashier Entered", "9876543210"), "profileBirthday", "name and canonical mobile start at Birthday for an unresolved new profile");
 const existingProfile = {
     id: 82, name: "Existing Profile", mobile: "9876543210", birthday_ddmm: "29/02",
     marriage_anniversary_ddmm: "31/05", email: "", notes: ""
 };
-assert.strictEqual(await openCustomerDetails("Bill Snapshot", "9876543210", "82", existingProfile), "profileBirthday", "existing selected customer starts at Birthday");
-assert.strictEqual(elements.get("profileBirthday").value, "29/02", "focusing Birthday does not modify its existing value");
-assert.strictEqual(elements.get("profileName").value, "Existing Profile");
-assert.strictEqual(elements.get("profileMobile").value, "9876543210");
+assert.strictEqual(await openCustomerDetails("Bill Snapshot", "9876543210", "82", existingProfile), "customerDrawerBack", "resolved profile opens directly in the drawer rather than the edit form");
+assert.strictEqual(elements.get("drawerBirthday").textContent, "29-Feb", "existing DD/MM profile date is shown read-only without mutating storage");
+assert.strictEqual(elements.get("drawerCustomerName").textContent, "Existing Profile");
+assert.strictEqual(elements.get("drawerCustomerMobile").textContent, "9876543210");
 
 const shortcutSource = fs.readFileSync(path.join(__dirname, "../src/renderer/modules/shortcuts.js"), "utf8");
 vm.runInContext(shortcutSource, context, { filename: "shortcuts.js" });
@@ -213,18 +231,17 @@ elements.get("profileName").value = "Transient";
 elements.get("profileMobile").value = "9876543210";
 elements.get("profileBirthday").value = "26/03";
 elements.get("customerProfileModal").style.display = "flex";
-elements.get("customerChooserModal").style.display = "flex";
-elements.get("customerHistoryModal").style.display = "flex";
 elements.get("customerProfileValidation").textContent = "invalid";
 window.resetCustomerProfileDraft();
-for (const id of ["customerProfileModal", "customerChooserModal", "customerHistoryModal"]) {
+for (const id of ["customerProfileModal"]) {
     assert.strictEqual(elements.get(id).style.display, "none", `${id} is closed on fresh session`);
 }
 for (const id of ["profileName", "profileMobile", "profileBirthday", "profileAnniversary", "profileEmail", "profileNotes", "selectedCustomerProfileId"]) {
     assert.strictEqual(elements.get(id).value, "", `${id} is cleared on fresh session`);
 }
 assert.strictEqual(elements.get("customerProfileValidation").textContent, "");
-assert.strictEqual(elements.get("customerPurchaseHistory").hidden, true);
+assert.strictEqual(elements.has("customerPurchaseHistory"), false, "the obsolete New Bill Purchase History control is removed");
+assert.strictEqual(elements.has("customerProfileStatus"), false, "the obsolete Existing Customer status strip is removed");
 
 const appSource = fs.readFileSync(path.join(__dirname, "../src/renderer/app.js"), "utf8");
 assert.match(appSource, /function clearCurrentBill\(\)[\s\S]*?window\.resetCustomerProfileDraft\?\.\(\)/, "central new-bill reset clears customer profile state");

@@ -25,9 +25,10 @@ async function qualifyRendererDirectoryStates() {
             this.listeners = {};
             this.classes = new Set();
             this.classList = {
-                toggle: (name, force) => force ? this.classes.add(name) : this.classes.delete(name),
-                add: name => this.classes.add(name),
-                remove: name => this.classes.delete(name)
+            toggle: (name, force) => force ? this.classes.add(name) : this.classes.delete(name),
+                add: (...names) => names.forEach(name => this.classes.add(name)),
+                remove: (...names) => names.forEach(name => this.classes.delete(name)),
+                contains: name => this.classes.has(name)
             };
             this.dataset = {};
             this.attributes = {};
@@ -50,6 +51,11 @@ async function qualifyRendererDirectoryStates() {
         setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; }
         setCustomValidity(message) { this.validationMessage = message; }
         setAttribute(name, value) { this.attributes[name] = value; }
+        removeAttribute(name) { delete this.attributes[name]; }
+        querySelector(selector) { return selector.includes("customer-drawer-panel") ? elements.get("drawerPanel") : elements.get("customerDrawerBack"); }
+        querySelectorAll() { return []; }
+        getClientRects() { return this.hidden ? [] : [{}]; }
+        contains(element) { return element === this || this.children.some(child => child.contains?.(element)); }
     }
     const ids = [
         "customerDirectoryView", "customerManagementProfile", "customerDirectorySearch", "customerDirectoryAdd",
@@ -60,17 +66,19 @@ async function qualifyRendererDirectoryStates() {
         "managementCustomerName", "managementCustomerCode", "managementCustomerMobile", "managementCustomerBirthday",
         "managementCustomerAnniversary", "managementCustomerEmail", "managementCustomerNotes", "managementCustomerBillCount",
         "managementCustomerSpend", "managementCustomerLastVisit", "managementCustomerAverage"
-        , "customerMobile", "customerName", "selectedCustomerProfileId", "customerProfileStatus",
-        "customerPurchaseHistory", "customerProfileTitle", "customerProfileModal", "profileName", "profileMobile",
+        , "customerMobile", "customerName", "selectedCustomerProfileId", "drawerPanel", "customerDrawerBack", "customerDrawerBody", "customerDrawerChooser", "customerDrawerChoices", "customerDrawerNewChoice", "customerDrawerProfileView", "customerDrawerFormView", "customerDrawerEdit", "customerDrawerError", "customerDrawerHelper", "drawerCustomerName", "drawerCustomerCode", "drawerCustomerMobile", "drawerBirthday", "drawerAnniversary", "drawerEmail", "drawerNotes", "drawerBillCount", "drawerSpend", "drawerLastVisit", "drawerAverage", "drawerCustomerEvents", "drawerCustomerEventText", "drawerStoreCreditSection", "drawerStoreCreditEmpty", "drawerStoreCreditAmount", "drawerStoreCreditValidity", "drawerStoreCreditReference", "drawerStoreCreditOnly", "drawerCreditOnlyAmount", "drawerCreditOnlyValidity", "drawerCreditOnlyReference", "drawerPurchaseEmpty", "drawerPurchaseTableWrap", "drawerPurchaseRows", "drawerPurchasePagination", "drawerPurchaseControls", "drawerPurchaseRange", "drawerPurchasePage", "drawerPurchasePrevious", "drawerPurchaseNext", "drawerPurchaseJump", "barcodeInput",
+        "customerInfoOpen", "customerInfoModal", "customerInfoClose", "customerInfoName", "customerInfoCode", "customerInfoMobile", "customerInfoEvents", "customerInfoStoreCredit", "customerInfoCreditAmount", "customerInfoCreditValidity", "customerInfoCreditReference", "customerInfoRecentSection", "customerInfoRecentEmpty", "customerInfoRecentTable", "customerInfoRecentRows", "customerInfoViewAll", "customerInfoHistoryRows", "customerInfoHistoryEmpty", "customerInfoHistoryPagination", "customerInfoHistoryRange", "customerInfoHistoryPrevious", "customerInfoHistoryPage", "customerInfoHistoryJump", "customerInfoHistoryNext",
+        "customerProfileTitle", "customerProfileModal", "profileName", "profileMobile",
         "profileBirthday", "profileAnniversary", "profileEmail", "profileNotes", "customerProfileValidation",
         "customerProfileCancel", "customerProfileSave", "customerProfileOpen", "customerChooserModal",
         "customerChooserList", "customerChooserNew", "customerChooserCancel", "customerHistoryModal",
-        "customerHistoryList", "customerHistoryClose", "customersScreen", "newBillScreen", "paymentScreen",
+        "customerHistoryList", "customerHistoryClose", "customerHistoryModal", "customersScreen", "newBillScreen", "paymentScreen",
         "customerPurchaseTableWrap", "customerPurchasePagination", "customerPurchasePrevious", "customerPurchaseNext",
         "customerPurchasePageLabel", "customerPurchasePageJump", "customerPurchaseRangeLabel",
         "businessScreen", "customerProfileBackToDirectory", "customersBusinessBtn"
     ];
     const elements = new Map(ids.map(id => [id, new Element(id)]));
+    elements.get("customerProfileModal").querySelector = selector => selector.includes("customer-drawer-panel") ? elements.get("drawerPanel") : elements.get("customerDrawerBack");
     elements.get("customerDirectoryEmpty").hidden = true;
     elements.get("customerDirectoryNoResults").hidden = true;
     elements.get("customerDirectoryTableWrap").hidden = true;
@@ -92,6 +100,7 @@ async function qualifyRendererDirectoryStates() {
     elements.get("paymentScreen").style.display = "none";
     let profileCreateCalls = 0;
     const window = {
+        setTimeout(callback) { return setTimeout(callback, 0); },
         scrollY: 37,
         scrollTo(_x, y) { this.scrollY = y; },
         getComputedStyle(element) { return { display: element.style.display || "none", visibility: "visible", opacity: "1" }; },
@@ -115,6 +124,7 @@ async function qualifyRendererDirectoryStates() {
                     birthday_ddmm: "26/03", marriage_anniversary_ddmm: "14/02"
                 };
             },
+            async getAvailableStoreCreditByMobile() { return null; },
             async findCustomersByMobile() { return []; },
             async createCustomerProfile(data) { profileCreateCalls += 1; return { id: 99, ...data }; },
             async updateCustomerProfile(id, data) { return { id, ...data }; }
@@ -132,7 +142,7 @@ async function qualifyRendererDirectoryStates() {
         preventDefault() { this.defaultPrevented = true; }
     }
     const profileSource = fs.readFileSync(path.join(__dirname, "../src/renderer/modules/customerProfile.js"), "utf8");
-    vm.runInNewContext(profileSource, { document, window, Event: TestEvent, setTimeout, clearTimeout, console, alert() {} });
+    vm.runInNewContext(profileSource, { document, window, Event: TestEvent, setTimeout, clearTimeout, requestAnimationFrame: callback => callback(), console, alert() {} });
     let addEntry = null;
     const openSharedModal = window.openCustomerDetailsForManagement;
     window.openCustomerDetailsForManagement = (profile, onSaved) => {
@@ -469,7 +479,7 @@ async function main() {
         const billingCss = fs.readFileSync(path.join(root, "src/renderer/styles/billing.css"), "utf8");
         assert(html.includes("Customer directory and purchase history"));
         assert(html.includes("customerDirectorySearch") && html.includes("customerDirectoryAdd"));
-        assert.match(html, /<span class="sr-only">Search customers by name, mobile or Customer ID<\/span>/, "search label remains available to assistive technology without rendering above the input");
+        assert(!html.includes("Search customers by name, mobile or Customer ID</span>"), "redundant search label is removed from the rendered toolbar");
         assert.match(html, /id="customerDirectorySearch" type="search" aria-label="Search customers by name, mobile or Customer ID" placeholder="Search by name, mobile or Customer ID"/, "the existing placeholder is preserved exactly");
         assert(!html.includes("customer-search-label"), "no visible Customer Directory search label or reserved label styling remains");
         assert(html.includes("customerManagementProfile") && html.includes("customerPurchaseRows"));
