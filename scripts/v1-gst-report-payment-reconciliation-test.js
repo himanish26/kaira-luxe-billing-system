@@ -63,6 +63,10 @@ async function main() {
                 taxable_reversal REAL, gst_rate REAL, cgst_reversal REAL,
                 sgst_reversal REAL, gst_reversal REAL, net_reversal REAL
             );
+            CREATE TABLE stores (id INTEGER PRIMARY KEY, store_code TEXT, store_name TEXT, status TEXT);
+            CREATE TABLE store_context (id INTEGER PRIMARY KEY, current_store_id INTEGER);
+            INSERT INTO stores VALUES (1, 'KL001', 'Kaira Luxe', 'ACTIVE');
+            INSERT INTO store_context VALUES (1, 1);
         `);
 
         let itemId = 0;
@@ -151,7 +155,7 @@ async function main() {
         const reportServicePath = path.resolve(__dirname, "../src/database/reportService.js");
         Module._load = function(request, parent, isMain) {
             if (request === "./database" && parent && parent.filename === reportServicePath) {
-                return { all: (...args) => db.all(...args) };
+                return { all: (...args) => db.all(...args), get: (...args) => db.get(...args) };
             }
             return originalLoad.call(this, request, parent, isMain);
         };
@@ -171,6 +175,7 @@ async function main() {
         ], "existing GST sheets remain in their existing order and reconciliation is additive");
 
         const gstSheet = workbook.getWorksheet("GST Report");
+        equal(gstSheet.getCell("B6").value, "KL001", "GST export includes current Store Code metadata");
         equal(gstSheet.getRow(11).values.slice(1), [
             "Bill No", "Bill Date", "GST %", "Taxable Value", "CGST", "SGST", "GST Total", "Net Amount"
         ], "existing GST sales headers and order remain unchanged");

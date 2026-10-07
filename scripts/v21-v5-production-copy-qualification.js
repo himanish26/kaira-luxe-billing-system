@@ -61,7 +61,7 @@ async function main() {
     const expected = path.join(WORKSPACE, "working-billing.db");
     assert.strictEqual(dbPath, expected, "Qualification is restricted to the designated working copy.");
     assert(fs.existsSync(dbPath), "Working qualification DB is missing.");
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 5);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 7);
 
     const db = new sqlite3.Database(dbPath);
     await run(db, "PRAGMA foreign_keys = ON");
@@ -81,7 +81,7 @@ async function main() {
     });
     await prepare();
     const afterFirst = await controls(db);
-    assert.strictEqual(await readSchemaVersion(db), 5);
+    assert.strictEqual(await readSchemaVersion(db), 7);
     assert.deepStrictEqual(afterFirst, before, "V5 migration changed pre-existing business records or stock control totals.");
     assert.strictEqual((await get(db, "PRAGMA integrity_check")).integrity_check, "ok");
     assert.deepStrictEqual(await all(db, "PRAGMA foreign_key_check"), []);
@@ -99,7 +99,7 @@ async function main() {
     await prepare();
     const afterSecond = await controls(db);
     assert.deepStrictEqual(afterSecond, before, "Repeated startup changed business control totals.");
-    assert.strictEqual(await readSchemaVersion(db), 5);
+    assert.strictEqual(await readSchemaVersion(db), 7);
     assert.strictEqual((await get(db, "PRAGMA integrity_check")).integrity_check, "ok");
     assert.deepStrictEqual(await all(db, "PRAGMA foreign_key_check"), []);
     await close(db);
@@ -109,7 +109,7 @@ async function main() {
         databasePath: dbPath,
         databaseSizeBytes: fs.statSync(dbPath).size,
         schemaVersionBefore: beforeVersion,
-        schemaVersionAfter: 5,
+        schemaVersionAfter: 7,
         before,
         afterFirst,
         afterSecond,

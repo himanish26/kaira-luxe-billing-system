@@ -57,7 +57,7 @@ const prepare = (database, options = {}) => prepareDatabaseSchema({
 });
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 5);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 7);
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-schema-version-"));
     try {
         // 1, 2, 7: fresh initialization, legacy adoption, and data preservation.

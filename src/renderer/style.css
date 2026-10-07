@@ -9,6 +9,7 @@
 @import "./styles/reports.css";
 @import "./styles/business.css";
 @import "./styles/activitylog.css";
+@import "./styles/expense.css";
 
 #ffPinDialog .admin-error:not(:empty)::before{
     content:"❌ ";

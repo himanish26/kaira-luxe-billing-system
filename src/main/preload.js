@@ -327,6 +327,8 @@ reprintStoreCredit: (storeCreditNo) =>
         "get-settings"
     ),
 
+getCurrentStoreIdentity: () => ipcRenderer.invoke("store-identity:get-current"),
+
 saveSettings: (settings, grant) =>
     ipcRenderer.invoke(
         "save-settings",
@@ -402,12 +404,23 @@ resetInventory: (grant) =>
         grant
     ),
 
-exportReport: (request, grant) =>
-    ipcRenderer.invoke(
-        "export-report",
-        request,
-        grant
-    ),
+    exportReport: (request, grant) =>
+        ipcRenderer.invoke(
+            "export-report",
+            request,
+            grant
+        ),
+
+    getExpenseTrackerOptions: () => ipcRenderer.invoke("expenses:get-options"),
+    validateExpenseEntry: entry => ipcRenderer.invoke("expenses:validate-entry", entry),
+    findPostedExpenseDuplicates: entries => ipcRenderer.invoke("expenses:find-duplicates", entries),
+    postExpenseBatch: (entries, duplicateAcknowledged, grant) =>
+        ipcRenderer.invoke("expenses:post-batch", entries, duplicateAcknowledged, grant),
+    getPostedExpenseHistory: options => ipcRenderer.invoke("expenses:history", options),
+    getExpenseHeaderSummary: options => ipcRenderer.invoke("expenses:summary-by-header", options),
+    getPostedExpenseDetails: expenseCode => ipcRenderer.invoke("expenses:details", expenseCode),
+    exportPostedExpenseBatch: batchCode => ipcRenderer.invoke("expenses:export-batch", batchCode),
+    exportPostedExpenseHistory: options => ipcRenderer.invoke("expenses:export-history", options),
 
 getSystemStatus: () =>
     ipcRenderer.invoke(

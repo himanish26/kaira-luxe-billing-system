@@ -1,4 +1,6 @@
 const db = require("./database");
+const { createStoreIdentityService } = require("./storeIdentityService");
+const storeIdentityService = createStoreIdentityService(db);
 
 const {
 
@@ -663,6 +665,8 @@ async function exportReport(
     filePath
 ) {
 
+    const storeIdentity = await storeIdentityService.getCurrentStore();
+
     switch (request.reportType) {
 
         case "business": {
@@ -684,7 +688,8 @@ async function exportReport(
         creditNoteItems,
         filePath,
         request.fromDate,
-        request.toDate
+        request.toDate,
+        storeIdentity
     );
 
 }
@@ -713,7 +718,8 @@ async function exportReport(
     filePath,
     request.fromDate,
     request.toDate,
-    paymentReconciliation
+    paymentReconciliation,
+    storeIdentity
 );
 
         }
@@ -730,7 +736,8 @@ async function exportReport(
     data,
     filePath,
     request.fromDate,
-    request.toDate
+    request.toDate,
+    storeIdentity
 );
 
         }
@@ -747,7 +754,8 @@ async function exportReport(
     data,
     filePath,
     request.fromDate,
-    request.toDate
+    request.toDate,
+    storeIdentity
 );
 
 }
@@ -763,7 +771,8 @@ async function exportReport(
                 data,
                 filePath,
                 request.fromDate,
-                request.toDate
+                request.toDate,
+                storeIdentity
             );
 
         }

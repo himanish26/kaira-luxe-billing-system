@@ -1970,10 +1970,10 @@ returned after purchase.
 ===================================== -->
 
 <div id="businessScreen" class="screen" style="display:none;">
-    <div class="business-page">
-        <div class="business-page-topbar">
-            <button id="businessDashboardBtn" class="back-btn">← Dashboard</button>
-        </div>
+    <div class="bill-top-bar">
+        <button id="businessDashboardBtn" class="back-btn">← Dashboard</button>
+    </div>
+    <div class="business-page business-page-after-topbar">
         <header class="business-page-header">
             <h1>BUSINESS</h1>
             <p>Management and back-office workspace</p>
@@ -1992,17 +1992,17 @@ returned after purchase.
             <button id="businessAccountingBtn" class="business-workspace-card" type="button">
                 <span class="business-workspace-icon" aria-hidden="true">🧾</span>
                 <strong>ACCOUNTING &amp; DATA</strong>
-                <span class="business-workspace-description">Expenses, management accounts,<br>GST and data exports</span>
+                <span class="business-workspace-description">Expenses, profitability and supplier accounts</span>
             </button>
         </nav>
     </div>
 </div>
 
 <div id="customersScreen" class="screen" style="display:none;">
-    <div class="business-page">
-        <div class="business-page-topbar">
-            <button id="customersBusinessBtn" class="back-btn">← Business</button>
-        </div>
+    <div class="bill-top-bar">
+        <button id="customersBusinessBtn" class="back-btn">← Business</button>
+    </div>
+    <div class="business-page business-page-after-topbar">
         <header class="business-page-header">
             <h1>CUSTOMERS</h1>
             <p>Customer directory and purchase history</p>
@@ -2038,7 +2038,7 @@ returned after purchase.
             </div>
         </section>
         <section id="customerManagementProfile" class="customer-management-view" hidden>
-            <div class="customer-profile-toolbar">
+            <div class="page-top-bar customer-profile-toolbar">
                 <button id="customerProfileBackToDirectory" class="back-btn" type="button">← Customers</button>
                 <button id="customerProfileEdit" class="klbs-primary-btn" type="button">EDIT CUSTOMER</button>
             </div>
@@ -2084,16 +2084,147 @@ returned after purchase.
 </div>
 
 <div id="accountingDataScreen" class="screen" style="display:none;">
-    <div class="business-page">
-        <div class="business-page-topbar">
-            <button id="accountingBusinessBtn" class="back-btn">← Business</button>
-        </div>
+    <div class="bill-top-bar">
+        <button id="accountingBusinessBtn" class="back-btn">← Business</button>
+    </div>
+    <div class="business-page business-page-after-topbar">
         <header class="business-page-header">
             <h1>ACCOUNTING &amp; DATA</h1>
-            <p>Accounting and data workspace</p>
+            <p>Expenses, profitability and supplier accounts</p>
         </header>
-        <section class="business-subpage-shell">
-            <p>This workspace is being prepared.</p>
+        <nav class="business-workspace-grid accounting-workspace-grid" aria-label="Accounting and data sections">
+            <button id="accountingExpenseTrackerBtn" class="business-workspace-card" type="button">
+                <span class="business-workspace-icon" aria-hidden="true">💰</span>
+                <strong>EXPENSE TRACKER</strong>
+                <span class="business-workspace-description">Record and review operating expenses</span>
+            </button>
+            <button id="accountingManagementPLBtn" class="business-workspace-card" type="button">
+                <span class="business-workspace-icon" aria-hidden="true">📈</span>
+                <strong>MANAGEMENT P&amp;L</strong>
+                <span class="business-workspace-description">Revenue, cost, expenses and profitability</span>
+            </button>
+            <button id="accountingSupplierAccountsBtn" class="business-workspace-card" type="button">
+                <span class="business-workspace-icon" aria-hidden="true">🧾</span>
+                <strong>SUPPLIER / DISTRIBUTOR<br>ACCOUNTS</strong>
+                <span class="business-workspace-description">Invoices, payments and outstanding balances</span>
+            </button>
+        </nav>
+    </div>
+</div>
+
+<div id="expenseTrackerScreen" class="screen" style="display:none;">
+    <div class="bill-top-bar expense-page-topbar">
+        <button id="expenseTrackerBackBtn" class="back-btn" type="button">← Accounting &amp; Data</button>
+        <button id="expenseHistoryOpenBtn" class="klbs-cancel-btn" type="button">HISTORY</button>
+    </div>
+    <div class="business-page expense-page business-page-after-topbar">
+        <header class="business-page-header expense-page-header">
+            <h1>EXPENSE TRACKER</h1>
+            <p>Record and review operating expenses</p>
+        </header>
+
+        <section id="expenseEntryPanel" class="expense-panel">
+            <h2>ADD EXPENSE</h2>
+            <form id="expenseEntryForm" novalidate>
+                <div class="expense-entry-grid">
+                    <label>Date *<input id="expenseDate" type="date" required></label>
+                    <label>Expense Header *<select id="expenseHeader" required><option value="">Select Expense Header</option></select></label>
+                    <label>Business Segment *<select id="expenseBusinessSegment" required><option value="">Select Business Segment</option></select></label>
+                    <label>Transaction Type *<select id="expensePaymentMode" required><option value="">Select Transaction Type</option></select></label>
+                    <label>Receipt / Reference No.<input id="expenseReference" type="text" maxlength="128" autocomplete="off"></label>
+                    <label>Amount *<input id="expenseAmount" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" required></label>
+                    <label class="expense-entry-wide">Remarks<textarea id="expenseRemarks" rows="2" maxlength="2000"></textarea><small id="expenseRemarksRequiredHint" hidden>Remarks are required for Miscellaneous.</small></label>
+                </div>
+                <div class="expense-form-actions">
+                    <button id="expenseAddBtn" class="klbs-primary-btn" type="submit">ADD EXPENSE</button>
+                </div>
+                <p id="expenseEntryMessage" class="expense-message" role="status" aria-live="polite"></p>
+            </form>
+        </section>
+
+        <section id="expenseDraftPanel" class="expense-panel">
+            <div class="expense-section-heading"><h2>CURRENT EXPENSE BATCH</h2><button id="expenseClearAllBtn" class="klbs-cancel-btn expense-clear-btn" type="button" disabled>CLEAR ALL</button></div>
+            <p id="expenseDraftEmpty" class="expense-empty">No expenses have been added to this draft batch.</p>
+            <div id="expenseDraftTableWrap" class="table-container expense-table-wrap" hidden>
+                <table class="expense-table">
+                    <thead><tr><th>#</th><th>Date</th><th>Expense Header</th><th>Business Segment</th><th>Transaction Type</th><th>Receipt / Reference No.</th><th>Amount</th><th>Remarks</th><th>Action</th></tr></thead>
+                    <tbody id="expenseDraftRows"></tbody>
+                </table>
+            </div>
+            <div id="expenseDraftSummary" class="expense-draft-summary" aria-live="polite"></div>
+            <div id="expenseDraftActions" class="expense-form-actions">
+                <button id="expensePostBtn" class="klbs-primary-btn" type="button" disabled>POST EXPENSES</button>
+            </div>
+        </section>
+
+        <section id="expensePostedPanel" class="expense-panel expense-posted-panel" hidden>
+            <div class="expense-posted-heading"><strong>✓ POSTED</strong><span id="expensePostedBatchMessage"></span></div>
+            <div id="expensePostedBatchTableWrap" class="table-container expense-table-wrap">
+                <table class="expense-table">
+                    <thead><tr><th>#</th><th>Date</th><th>Expense Header</th><th>Business Segment</th><th>Transaction Type</th><th>Receipt / Reference No.</th><th>Amount</th><th>Remarks</th><th>Expense ID</th></tr></thead>
+                    <tbody id="expensePostedBatchRows"></tbody>
+                </table>
+            </div>
+            <div class="expense-posted-actions">
+                <button id="expenseBatchExportBtn" class="klbs-primary-btn" type="button" disabled>EXPORT TO EXCEL</button>
+                <button id="expenseNewBatchBtn" class="klbs-cancel-btn" type="button">NEW EXPENSE BATCH</button>
+            </div>
+        </section>
+    </div>
+</div>
+
+<div id="expenseHistoryScreen" class="screen" style="display:none;">
+    <div class="bill-top-bar expense-page-topbar">
+        <button id="expenseHistoryBackBtn" class="back-btn" type="button">← Expense Tracker</button>
+        <button id="expenseHistoryExportBtn" class="klbs-primary-btn" type="button" disabled>EXPORT TO EXCEL</button>
+    </div>
+    <div class="business-page expense-page business-page-after-topbar">
+        <header class="business-page-header expense-page-header">
+            <h1>EXPENSE HISTORY</h1>
+            <p>Review posted operating expenses</p>
+        </header>
+        <section class="expense-panel expense-history-panel">
+            <div class="expense-history-month-row" role="group" aria-label="Expense History month navigation">
+                <button id="expenseHistoryPreviousMonth" class="expense-month-nav" type="button" aria-label="Previous month">‹</button>
+                <label class="expense-month-label" for="expenseHistoryMonth">
+                    <input id="expenseHistoryMonth" type="month" aria-label="Expense History month">
+                </label>
+                <button id="expenseHistoryNextMonth" class="expense-month-nav" type="button" aria-label="Next month">›</button>
+            </div>
+            <div class="expense-history-filters">
+                <label>Expense Header<select id="expenseHistoryCategory"><option value="">All Expense Headers</option></select></label>
+                <label>Business Segment<select id="expenseHistorySegment"><option value="">All Segments</option></select></label>
+                <label>Transaction Type<select id="expenseHistoryPaymentMode"><option value="">All Transaction Types</option></select></label>
+                <label class="expense-history-search">Search<input id="expenseHistorySearch" type="search" placeholder="Expense ID, Batch ID, reference or remarks" autocomplete="off"></label>
+            </div>
+            <div class="expense-history-summary-row">
+                <span id="expenseHistoryTotals">0 matching expenses · ₹0.00</span>
+                <button id="expenseHistorySummaryBtn" class="klbs-cancel-btn" type="button" disabled>VIEW SUMMARY</button>
+            </div>
+            <div id="expenseHeaderSummary" class="expense-header-summary" hidden></div>
+            <p id="expenseHistoryEmpty" class="expense-empty" hidden>No posted expenses match this month and filter.</p>
+            <div id="expenseHistoryTableWrap" class="table-container expense-table-wrap" hidden>
+                <table class="expense-table">
+                    <thead><tr><th>#</th><th>Date</th><th>Expense ID</th><th>Batch ID</th><th>Expense Header</th><th>Business Segment</th><th>Transaction Type</th><th>Receipt / Reference No.</th><th>Amount</th><th>Remarks</th></tr></thead>
+                    <tbody id="expenseHistoryRows"></tbody>
+                </table>
+            </div>
+            <div id="expenseHistoryPagination" class="history-pagination expense-history-pagination" hidden>
+                <div class="pagination-controls">
+                    <button id="expenseHistoryPrevious" class="pagination-nav-btn" type="button" disabled>Previous</button>
+                    <span id="expenseHistoryPageLabel">Page 1 of 1</span>
+                    <label for="expenseHistoryPageJump">Jump to Page</label>
+                    <input id="expenseHistoryPageJump" type="number" min="1" step="1" inputmode="numeric" value="1" disabled>
+                    <button id="expenseHistoryNext" class="pagination-nav-btn" type="button" disabled>Next</button>
+                </div>
+                <span id="expenseHistoryRangeLabel">Showing 0–0 of 0</span>
+            </div>
+        </section>
+    </div>
+    <div id="expenseDetailOverlay" class="expense-detail-overlay" role="dialog" aria-modal="true" aria-labelledby="expenseDetailTitle" hidden>
+        <section class="expense-detail-modal">
+            <header><h2 id="expenseDetailTitle">EXPENSE DETAILS</h2><button id="expenseDetailCloseBtn" class="klbs-cancel-btn" type="button">CLOSE</button></header>
+            <dl id="expenseDetailFields" class="expense-detail-fields"></dl>
         </section>
     </div>
 </div>
@@ -2860,6 +2991,9 @@ style="display:none;">
 <script src="app.js"></script>
 <script src="modules/customerProfile.js"></script>
 <script src="modules/customerManagement.js"></script>
+<script src="modules/expenseDraftState.js"></script>
+<script src="modules/expenseHistoryCalendar.js"></script>
+<script src="modules/expenseTracker.js"></script>
 
 </body>
 </html>

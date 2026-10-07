@@ -842,6 +842,14 @@ if (storeCard){
 
 <div class="store-row">
 
+<span class="store-label">Store Code</span>
+
+<span class="store-value" id="storeCodeValue">Loading…</span>
+
+</div>
+
+<div class="store-row">
+
 <span class="store-label">
 
 Store Name
@@ -855,6 +863,14 @@ id="storeNameValue">
 KAIRA LUXE
 
 </span>
+
+</div>
+
+<div class="store-row">
+
+<span class="store-label">Status</span>
+
+<span class="store-value" id="storeStatusValue">Loading…</span>
 
 </div>
 
@@ -1079,6 +1095,15 @@ function formatKLBSLastUpdated(value) {
 
         const settings =
             await window.electronAPI.getSettings();
+
+        try {
+            const currentStore = await window.electronAPI.getCurrentStoreIdentity();
+            document.getElementById("storeNameValue").textContent = currentStore.storeName;
+            document.getElementById("storeCodeValue").textContent = currentStore.storeCode;
+            document.getElementById("storeStatusValue").textContent = currentStore.status;
+        } catch (identityError) {
+            console.error("Current Store identity could not be loaded in Settings:", identityError);
+        }
 
         receiptMessage.innerText =
             settings.receipt_message || "Not Set";
@@ -1332,7 +1357,8 @@ function requireAdminAuthorization(purpose, callback){
         "GIFT_VOUCHER",
         "INVENTORY_INWARD",
         "INVENTORY_OUTWARD",
-        "DAY_REOPEN"
+        "DAY_REOPEN",
+        "EXPENSE_POST"
     ].includes(purpose);
     const title = document.getElementById("authorizationDialogTitle");
     if (title) title.textContent = managerPurpose ? "Manager Access" : "Administrator Access";
@@ -1905,6 +1931,9 @@ document.getElementById("businessAccountingBtn")?.addEventListener("click", () =
     hideAllScreens();
     accountingDataScreen.style.display = "block";
 });
+document.getElementById("accountingExpenseTrackerBtn")?.addEventListener("click", () => window.openExpenseTracker?.());
+document.getElementById("accountingManagementPLBtn")?.addEventListener("click", () => showComingSoon("Management P&L"));
+document.getElementById("accountingSupplierAccountsBtn")?.addEventListener("click", () => showComingSoon("Supplier / Distributor Accounts"));
 document.getElementById("customersBusinessBtn")?.addEventListener("click", showBusinessWorkspace);
 document.getElementById("accountingBusinessBtn")?.addEventListener("click", showBusinessWorkspace);
 
@@ -8218,6 +8247,8 @@ function hideAllScreens() {
     businessScreen.style.display = "none";
     customersScreen.style.display = "none";
     accountingDataScreen.style.display = "none";
+    document.getElementById("expenseTrackerScreen").style.display = "none";
+    document.getElementById("expenseHistoryScreen").style.display = "none";
 
     billHistoryScreen.style.display = "none";
 

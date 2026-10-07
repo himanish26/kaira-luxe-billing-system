@@ -1,6 +1,8 @@
-const CURRENT_DB_SCHEMA_VERSION = 5;
+const CURRENT_DB_SCHEMA_VERSION = 7;
 const SCHEMA_METADATA_TABLE = "klbs_schema_metadata";
 const { migrateV5Foundation } = require("./v5FoundationMigration");
+const { migrateStoreIdentity } = require("./storeIdentityMigration");
+const { migrateExpenseTracker } = require("./expenseTrackerMigration");
 
 function run(database, sql, params = []) {
     return new Promise((resolve, reject) => {
@@ -199,6 +201,14 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
     migrations = [], currentVersion = CURRENT_DB_SCHEMA_VERSION }) {
     await ensureMetadataTable(database);
     const detectedVersion = await readSchemaVersion(database);
+    const defaultMigrations = [
+        { from: 1, to: 2, name: "automatic_backup_settings", up: migrateAutomaticBackupSettings },
+        { from: 2, to: 3, name: "business_segment_columns", up: migrateBusinessSegmentColumns },
+        { from: 3, to: 4, name: "variable_value_billing_foundation", up: migrateVariableValueBillingFoundation },
+        { from: 4, to: 5, name: "v2_1_database_foundation", up: migrateV5Foundation },
+        { from: 5, to: 6, name: "v2_1_store_identity", up: migrateStoreIdentity },
+        { from: 6, to: 7, name: "v2_1_expense_tracker", up: migrateExpenseTracker }
+    ];
     if (detectedVersion === null) {
         logger?.info("DATABASE", "Legacy KLBS database detected; schema metadata is absent");
     }
@@ -216,12 +226,6 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
             }
             throw error;
         }
-        const defaultMigrations = [
-            { from: 1, to: 2, name: "automatic_backup_settings", up: migrateAutomaticBackupSettings },
-            { from: 2, to: 3, name: "business_segment_columns", up: migrateBusinessSegmentColumns },
-            { from: 3, to: 4, name: "variable_value_billing_foundation", up: migrateVariableValueBillingFoundation },
-            { from: 4, to: 5, name: "v2_1_database_foundation", up: migrateV5Foundation }
-        ];
         await runForwardMigrations(
             database,
             detectedVersion,
@@ -235,23 +239,30 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
     // must also run for databases whose version marker already equals the
     // current numbered schema, because release-level objects can be added
     // without changing the numbered compatibility version.
+    if (detectedVersion === null) {
+        await runCurrentMigrations();
+        await validateCurrentSchema(database);
+        // Current migrations reconcile a metadata-free database through the
+        // V5 foundation. Apply every subsequent numbered migration in order;
+        // this is required when more than one numbered migration follows V5.
+        const reconciledVersion = Math.min(5, currentVersion);
+        const numberedMigrations = [...defaultMigrations, ...migrations]
+            .filter(step => step.from >= reconciledVersion);
+        if (currentVersion > reconciledVersion) {
+            await runForwardMigrations(database, reconciledVersion, currentVersion, numberedMigrations, logger);
+        }
+        else {
+            // A caller may intentionally reconcile only through V5 (for
+            // migration qualification or compatibility). Record that
+            // completed version instead of leaving metadata absent.
+            await writeSchemaVersion(database, currentVersion);
+        }
+        await validateCurrentSchema(database);
+        return { detectedVersion: null, schemaVersion: currentVersion };
+    }
+
     await runCurrentMigrations();
     await validateCurrentSchema(database);
-
-    if (detectedVersion === null) {
-        await run(database, "BEGIN IMMEDIATE TRANSACTION");
-        try {
-            await writeSchemaVersion(database, currentVersion);
-            await run(database, "COMMIT");
-            logger?.info("DATABASE", "Legacy KLBS database adopted at current schema version", {
-                schemaVersion: currentVersion
-            });
-        }
-        catch (error) {
-            await run(database, "ROLLBACK").catch(() => {});
-            throw error;
-        }
-    }
     return { detectedVersion, schemaVersion: currentVersion };
 }
 

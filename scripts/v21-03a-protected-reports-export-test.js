@@ -47,6 +47,10 @@ async function main() {
                 sgst_reversal REAL, gst_reversal REAL, net_reversal REAL
             );
             CREATE TABLE products (barcode TEXT PRIMARY KEY, segment TEXT, style_code TEXT, supplier TEXT, hsn_code TEXT);
+            CREATE TABLE stores (id INTEGER PRIMARY KEY, store_code TEXT, store_name TEXT, status TEXT);
+            CREATE TABLE store_context (id INTEGER PRIMARY KEY, current_store_id INTEGER);
+            INSERT INTO stores VALUES (1, 'KL001', 'Kaira Luxe', 'ACTIVE');
+            INSERT INTO store_context VALUES (1, 1);
         `);
         await run(db, `INSERT INTO bills
             (id,bill_no,bill_date,bill_time,customer_name,customer_mobile,total_qty,gross_amount,
@@ -87,6 +91,7 @@ async function main() {
             await workbook.xlsx.readFile(file);
             const sheet = workbook.getWorksheet(sheetName);
             assert(sheet, `${sheetName} worksheet exists`);
+            assert.strictEqual(sheet.getCell("B6").value, "KL001", `${sheetName} includes resolved Store Code metadata`);
             assert.strictEqual(sheet.getRow(11).getCell(1).value, expectedHeader);
             assert(sheet.rowCount >= 12, `${sheetName} includes its synthetic fixture row`);
         }

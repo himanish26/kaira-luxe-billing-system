@@ -28,13 +28,32 @@ for (const id of ["businessReportsBtn", "businessCustomersBtn", "businessAccount
 for (const [id, icon, title, description] of [
     ["businessReportsBtn", "📊", "REPORTS", "Sales, inventory, payments and<br>business reports"],
     ["businessCustomersBtn", "👥", "CUSTOMERS", "Customer directory, profiles and<br>purchase history"],
-    ["businessAccountingBtn", "🧾", "ACCOUNTING &amp; DATA", "Expenses, management accounts,<br>GST and data exports"]
+    ["businessAccountingBtn", "🧾", "ACCOUNTING &amp; DATA", "Expenses, profitability and supplier accounts"]
 ]) {
     const card = html.match(new RegExp(`<button id="${id}"[\\s\\S]*?<\\/button>`))?.[0] || "";
     assert(card.includes(icon) && card.includes(title) && card.includes(description), `${title} card has its icon and approved concise copy`);
 }
 assert.match(html, /id="customersScreen"[\s\S]*?CUSTOMERS[\s\S]*?Customer directory and purchase history[\s\S]*?customerDirectorySearch[\s\S]*?customerDirectoryRows[\s\S]*?customerManagementProfile/);
-assert.match(html, /id="accountingDataScreen"[\s\S]*?ACCOUNTING &amp; DATA[\s\S]*?This workspace is being prepared\./);
+const accountingMarkup = html.slice(html.indexOf('id="accountingDataScreen"'), html.indexOf("<!-- =====================================\n     REPORTS SCREEN"));
+assert.match(accountingMarkup, /ACCOUNTING &amp; DATA[\s\S]*?Expenses, profitability and supplier accounts/);
+const accountingCards = [...accountingMarkup.matchAll(/<button id="(accounting[^\"]+)" class="business-workspace-card"[\s\S]*?<\/button>/g)];
+assert.deepStrictEqual(accountingCards.map(match => match[1]), [
+    "accountingExpenseTrackerBtn", "accountingManagementPLBtn", "accountingSupplierAccountsBtn"
+], "Accounting & Data contains exactly the three approved cards");
+for (const text of ["EXPENSE TRACKER", "Record and review operating expenses", "MANAGEMENT P&amp;L",
+    "Revenue, cost, expenses and profitability", "SUPPLIER / DISTRIBUTOR", "Invoices, payments and outstanding balances"]) {
+    assert(accountingMarkup.includes(text), `approved Accounting & Data content includes ${text}`);
+}
+for (const forbidden of ["STORE MANAGEMENT", "STOCK MANAGEMENT", "MONTHLY GST", "EXPORT DATA", "ACCOUNTING LEDGER", "accountingStoreManagementView"]) {
+    assert(!accountingMarkup.toUpperCase().includes(forbidden.toUpperCase()), `Accounting & Data excludes ${forbidden}`);
+}
+assert.match(app, /accountingExpenseTrackerBtn[\s\S]*?openExpenseTracker/,
+    "Expense Tracker card opens the implemented expense workspace");
+assert(html.includes('id="expenseTrackerScreen"') && html.includes('id="expenseHistoryScreen"'),
+    "Expense Tracker and History screens are present");
+for (const [id, feature] of [["accountingManagementPLBtn", "Management P&L"], ["accountingSupplierAccountsBtn", "Supplier / Distributor Accounts"]]) {
+    assert.match(app, new RegExp(`${id}[^\\n]*showComingSoon\\("${feature.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}"\\)`), `${feature} uses the existing Coming Soon interaction`);
+}
 
 for (const route of [
     /reportsBtn\.addEventListener\("click", async[\s\S]*?businessScreen\.style\.display = "block"/,
@@ -43,7 +62,6 @@ for (const route of [
     /businessAccountingBtn[\s\S]*?accountingDataScreen\.style\.display = "block"/,
     /reportsDashboardBtn\.addEventListener\("click", returnFromReports/,
     /customersBusinessBtn[\s\S]*?showBusinessWorkspace/,
-    /accountingBusinessBtn[\s\S]*?showBusinessWorkspace/,
     /function hideAllScreens\(\)[\s\S]*?businessScreen\.style\.display = "none"[\s\S]*?customersScreen\.style\.display = "none"[\s\S]*?accountingDataScreen\.style\.display = "none"/
 ]) assert.match(app, route, `navigation contract ${route}`);
 
@@ -86,5 +104,7 @@ assert.match(app, /historyBackBtn[\s\S]*?dashboardScreen\.style\.display = "bloc
 assert.match(app, /settingsDashboardBtn[\s\S]*?dashboardScreen\.style\.display = "block"/);
 assert.match(read("src/renderer/modules/system.js"), /showComingSoon\("Export Data"\)/, "legacy System Export Data card remains untouched");
 assert.match(read("src/renderer/modules/system/exportData.js"), /function showExportDataPage\(\)/, "existing Export Data page implementation remains available");
+assert.match(app, /getCurrentStoreIdentity\(\)[\s\S]*?storeNameValue[\s\S]*?storeCodeValue[\s\S]*?storeStatusValue/, "Settings Store Information resolves Code, Name, and Status through the current Store authority");
+assert(!app.includes("accountingStoreManagementBtn") && !app.includes("accountingStoreManagementView"), "Accounting & Data no longer has a Store Management route");
 
 console.log("V21-03A Business workspace/navigation and Reports preservation contracts: PASS");

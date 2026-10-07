@@ -56,6 +56,15 @@ function setReportMetadata(sheet, reportName, fromDate, toDate) {
         `${formatDate(fromDate)} to ${formatDate(toDate)}`;
 }
 
+function setStoreCodeMetadata(sheet, storeIdentity) {
+    if (!storeIdentity) return;
+    if (!/^[A-Z0-9]{2,12}$/.test(String(storeIdentity.storeCode || ""))) {
+        throw new Error("A valid current Store identity is required for report export.");
+    }
+    sheet.getCell("A6").value = "Store Code";
+    sheet.getCell("B6").value = storeIdentity.storeCode;
+}
+
 function styleNewRegister(sheet, headerRowNumber) {
     const header = sheet.getRow(headerRowNumber);
     header.eachCell(cell => {
@@ -95,7 +104,8 @@ function addBusinessCreditNoteSheets(
     salesData,
     creditNoteItems,
     fromDate,
-    toDate
+    toDate,
+    storeIdentity
 ) {
     const sheet = workbook.addWorksheet("Returns & Credit Notes");
     setReportMetadata(
@@ -104,6 +114,7 @@ function addBusinessCreditNoteSheets(
         fromDate,
         toDate
     );
+    setStoreCodeMetadata(sheet, storeIdentity);
     sheet.columns = [
         { width: 18 }, { width: 16 }, { width: 18 }, { width: 18 },
         { width: 18 }, { width: 24 }, { width: 20 }, { width: 20 }, { width: 16 }, { width: 18 },
@@ -247,6 +258,7 @@ function addBusinessCreditNoteSheets(
 
     const summary = workbook.addWorksheet("Summary");
     setReportMetadata(summary, "Business Report - Summary", fromDate, toDate);
+    setStoreCodeMetadata(summary, storeIdentity);
     summary.columns = [{ width: 32 }, { width: 20 }];
     expandSummaryMetadata(summary);
     setSummarySection(summary, 11, "SALES");
@@ -289,7 +301,8 @@ function addGSTCreditNoteSheets(
     salesData,
     creditNoteGST,
     fromDate,
-    toDate
+    toDate,
+    storeIdentity
 ) {
     const sheet = workbook.addWorksheet("Credit Note GST Reversal");
     setReportMetadata(
@@ -298,6 +311,7 @@ function addGSTCreditNoteSheets(
         fromDate,
         toDate
     );
+    setStoreCodeMetadata(sheet, storeIdentity);
     sheet.columns = [
         { width: 18 }, { width: 16 }, { width: 18 }, { width: 18 },
         { width: 18 }, { width: 10 }, { width: 19 }, { width: 17 },
@@ -378,6 +392,7 @@ function addGSTCreditNoteSheets(
     );
     const summary = workbook.addWorksheet("GST Summary");
     setReportMetadata(summary, "GST Report - Summary", fromDate, toDate);
+    setStoreCodeMetadata(summary, storeIdentity);
     summary.columns = [{ width: 32 }, { width: 20 }];
     expandSummaryMetadata(summary);
     setSummarySection(summary, 11, "SALES GST");
@@ -493,7 +508,8 @@ async function exportBusinessReport(
     creditNoteItems,
     filePath,
     fromDate,
-    toDate
+    toDate,
+    storeIdentity
 ) {
 
     const workbook = new ExcelJS.Workbook();
@@ -520,6 +536,7 @@ worksheet.getCell("B4").value = "kairaluxe@gmail.com";
 
 worksheet.getCell("A5").value = "GSTIN";
 worksheet.getCell("B5").value = "21BBLPP6327G1ZO";
+setStoreCodeMetadata(worksheet, storeIdentity);
 
 worksheet.getCell("A7").value = "Report Name";
 worksheet.getCell("B7").value = "Business Report";
@@ -749,7 +766,8 @@ addBusinessCreditNoteSheets(
     data,
     creditNoteItems,
     fromDate,
-    toDate
+    toDate,
+    storeIdentity
 );
 
 {
@@ -773,7 +791,8 @@ async function exportGSTReport(
     filePath,
     fromDate,
     toDate,
-    paymentReconciliation = []
+    paymentReconciliation = [],
+    storeIdentity
 ) {
 
     const totalColumns = 8;
@@ -805,6 +824,7 @@ worksheet.getCell("B4").value = "kairaluxe@gmail.com";
 
 worksheet.getCell("A5").value = "GSTIN";
 worksheet.getCell("B5").value = "21BBLPP6327G1ZO";
+setStoreCodeMetadata(worksheet, storeIdentity);
 
 worksheet.getCell("A7").value = "Report Name";
 worksheet.getCell("B7").value = "GST Report";
@@ -917,7 +937,8 @@ worksheet.getRow(currentRow).font = {
         data,
         creditNoteGST,
         fromDate,
-        toDate
+        toDate,
+        storeIdentity
     );
 
     addGSTPaymentReconciliationSheet(
@@ -945,7 +966,8 @@ async function exportProductSalesReport(
     data,
     filePath,
     fromDate,
-    toDate
+    toDate,
+    storeIdentity
 ) {
 
     const totalColumns = 19;
@@ -977,6 +999,7 @@ worksheet.getCell("B4").value = "kairaluxe@gmail.com";
 
 worksheet.getCell("A5").value = "GSTIN";
 worksheet.getCell("B5").value = "21BBLPP6327G1ZO";
+setStoreCodeMetadata(worksheet, storeIdentity);
 
 worksheet.getCell("A7").value = "Report Name";
 worksheet.getCell("B7").value = "Product Sales Report";
@@ -1126,7 +1149,8 @@ async function exportCustomerPurchaseReport(
     data,
     filePath,
     fromDate,
-    toDate
+    toDate,
+    storeIdentity
 )
 
 {
@@ -1157,6 +1181,7 @@ async function exportCustomerPurchaseReport(
 
     sheet.getCell("A5").value = "GSTIN";
     sheet.getCell("B5").value = "21BBLPP6327G1ZO";
+    setStoreCodeMetadata(sheet, storeIdentity);
 
     sheet.getCell("A7").value = "Report Name";
     sheet.getCell("B7").value = "Customer Purchase Report";
@@ -1352,7 +1377,8 @@ async function exportBillSummaryReport(
     data,
     filePath,
     fromDate,
-    toDate
+    toDate,
+    storeIdentity
 ) {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Bill Summary Report");
@@ -1363,6 +1389,7 @@ async function exportBillSummaryReport(
         fromDate,
         toDate
     );
+    setStoreCodeMetadata(sheet, storeIdentity);
 
     sheet.columns = [
         { key: "bill_no", width: 18 },

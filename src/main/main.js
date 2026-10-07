@@ -279,6 +279,13 @@ const {
 
 } = require("../database/settingsService");
 
+const storeIdentityService = require("../database/storeIdentityService");
+const expenseTrackerService = require("../database/expenseTrackerService");
+const {
+    exportPostedExpenseBatch,
+    exportExpenseHistory
+} = require("../database/expenseExcelExporter");
+
 const {
 
     importProducts
@@ -2197,6 +2204,15 @@ ipcMain.handle(
 
 );
 
+ipcMain.handle("store-identity:get-current", async () => {
+    const store = await storeIdentityService.getCurrentStore();
+    return {
+        storeCode: store.storeCode,
+        storeName: store.storeName,
+        status: store.status
+    };
+});
+
 ipcMain.handle(
     "get-transaction-history-page",
     async (event, options) => {
@@ -2492,6 +2508,127 @@ ipcMain.handle(
 
     }
 );
+
+ipcMain.handle(
+
+    "expenses:get-options",
+
+    async () => ({ success: true, ...expenseTrackerService.getExpenseTrackerOptions() })
+);
+
+ipcMain.handle(
+
+    "expenses:validate-entry",
+
+    async (_event, entry) => {
+        try {
+            return { success: true, entry: await expenseTrackerService.validateEntry(entry || {}) };
+        }
+        catch (error) {
+            return { success: false, error: error.message, code: error.code || null };
+        }
+    }
+);
+
+ipcMain.handle("expenses:find-duplicates", async (_event, entries) => {
+    try {
+        if (!Array.isArray(entries)) throw new Error("Expense entries must be a list.");
+        return { success: true, duplicates: await expenseTrackerService.findPostedDuplicates(entries) };
+    }
+    catch (error) {
+        return { success: false, error: error.message, code: error.code || null };
+    }
+});
+
+ipcMain.handle("expenses:post-batch", async (_event, entries, duplicateAcknowledged, grant) => {
+    try {
+        requireSecurityGrant(grant, "EXPENSE_POST");
+        const batch = await expenseTrackerService.postExpenseBatch(entries, { duplicateAcknowledged: duplicateAcknowledged === true });
+        return { success: true, batch };
+    }
+    catch (error) {
+        return { success: false, error: error.message, code: error.code || null, duplicates: error.duplicates || [] };
+    }
+});
+
+ipcMain.handle("expenses:history", async (_event, options) => {
+    try {
+        return { success: true, ...(await expenseTrackerService.listPostedExpenses(options || {})) };
+    }
+    catch (error) {
+        return { success: false, error: error.message, code: error.code || null };
+    }
+});
+
+ipcMain.handle("expenses:summary-by-header", async (_event, options) => {
+    try {
+        return { success: true, rows: await expenseTrackerService.getExpenseSummaryByHeader(options || {}) };
+    }
+    catch (error) {
+        return { success: false, error: error.message, code: error.code || null };
+    }
+});
+
+ipcMain.handle("expenses:details", async (_event, expenseCode) => {
+    try {
+        const expense = await expenseTrackerService.getPostedExpenseDetails(expenseCode);
+        return expense ? { success: true, expense } : { success: false, error: "Posted expense was not found." };
+    }
+    catch (error) {
+        return { success: false, error: error.message, code: error.code || null };
+    }
+});
+
+ipcMain.handle("expenses:export-batch", async (_event, batchCode) => {
+    try {
+        const batch = await expenseTrackerService.getPostedExpenseBatch(batchCode);
+        if (!batch) throw new Error("Posted expense batch was not found.");
+        const result = await dialog.showSaveDialog(mainWindow, {
+            defaultPath: `KL_Expense_Batch_${batch.batch_code}.xlsx`,
+            filters: [{ name: "Excel Workbook", extensions: ["xlsx"] }]
+        });
+        if (result.canceled) return { success: false, cancelled: true };
+        const exported = await exportPostedExpenseBatch(batch, result.filePath);
+        let activityWarning = null;
+        try {
+            await logDataExported("EXPENSE_BATCH_EXPORTED", "EXPENSE_BATCH", `Expense Batch ${batch.batch_code} exported`, "OPERATOR");
+        }
+        catch (logError) {
+            activityWarning = "Expense batch exported, but its Activity Log event could not be recorded.";
+        }
+        return { ...exported, activityWarning };
+    }
+    catch (error) {
+        return { success: false, error: error.message, code: error.code || null };
+    }
+});
+
+ipcMain.handle("expenses:export-history", async (_event, options) => {
+    try {
+        const filters = options || {};
+        const [data, store] = await Promise.all([
+            expenseTrackerService.getPostedExpensesForExport(filters),
+            storeIdentityService.getCurrentStore()
+        ]);
+        const result = await dialog.showSaveDialog(mainWindow, {
+            defaultPath: `KL_Expense_History_${store.storeCode}_${filters.month}.xlsx`,
+            filters: [{ name: "Excel Workbook", extensions: ["xlsx"] }]
+        });
+        if (result.canceled) return { success: false, cancelled: true };
+        const exported = await exportExpenseHistory(data, filters, store, result.filePath);
+        let activityWarning = null;
+        try {
+            await logDataExported("EXPENSE_HISTORY_EXPORTED", "EXPENSE_HISTORY", `Expense History ${filters.month} exported: ${data.totalCount} expenses`, "OPERATOR");
+        }
+        catch (logError) {
+            activityWarning = "Expense history exported, but its Activity Log event could not be recorded.";
+        }
+        return { ...exported, activityWarning };
+    }
+    catch (error) {
+        return { success: false, error: error.message, code: error.code || null };
+    }
+});
 
 ipcMain.handle(
 

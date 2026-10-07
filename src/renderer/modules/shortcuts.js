@@ -724,6 +724,8 @@ function handleEscape() {
         return;
     }
     for (const [screenId, backId] of [
+        ["expenseHistoryScreen", "expenseHistoryBackBtn"],
+        ["expenseTrackerScreen", "expenseTrackerBackBtn"],
         ["customersScreen", "customersBusinessBtn"],
         ["accountingDataScreen", "accountingBusinessBtn"]
     ]) {

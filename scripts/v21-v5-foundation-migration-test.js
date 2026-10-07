@@ -4,7 +4,6 @@ const os = require("os");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 const {
-    CURRENT_DB_SCHEMA_VERSION,
     SCHEMA_METADATA_TABLE,
     prepareDatabaseSchema,
     readSchemaVersion,
@@ -23,6 +22,7 @@ const exec = (db, sql) => new Promise((resolve, reject) =>
     db.exec(sql, error => error ? reject(error) : resolve()));
 const close = db => new Promise((resolve, reject) =>
     db.close(error => error ? reject(error) : resolve()));
+const V5_SCHEMA_VERSION = 5;
 
 const V4_SCHEMA = `
     CREATE TABLE products (id INTEGER PRIMARY KEY, barcode TEXT UNIQUE, product_name TEXT,
@@ -55,7 +55,7 @@ const V4_SCHEMA = `
 async function prepare(db) {
     return prepareDatabaseSchema({
         database: db,
-        currentVersion: CURRENT_DB_SCHEMA_VERSION,
+        currentVersion: V5_SCHEMA_VERSION,
         migrations: [],
         runCurrentMigrations: async () => {
             await migrateBusinessSegmentColumns(db);
@@ -92,7 +92,7 @@ async function migrateAndAssert(filePath, fresh = false) {
     }
 
     await prepare(db);
-    assert.strictEqual(await readSchemaVersion(db), 5);
+    assert.strictEqual(await readSchemaVersion(db), V5_SCHEMA_VERSION);
     const tables = new Set((await all(db, "SELECT name FROM sqlite_master WHERE type='table'")).map(row => row.name));
     for (const name of ["stock_movements", "stock_movement_lines", "expenses"]) assert(tables.has(name));
     const fkViolations = await all(db, "PRAGMA foreign_key_check");
@@ -170,14 +170,14 @@ async function migrateAndAssert(filePath, fresh = false) {
     await prepare(db);
     const secondCounts = await get(db, "SELECT (SELECT COUNT(*) FROM stock_movements) movements, (SELECT COUNT(*) FROM stock_movement_lines) lines, (SELECT COUNT(*) FROM expenses) expenses");
     assert.deepStrictEqual(secondCounts, firstCounts);
-    assert.strictEqual(await readSchemaVersion(db), 5);
+    assert.strictEqual(await readSchemaVersion(db), V5_SCHEMA_VERSION);
     assert.deepStrictEqual(await all(db, "PRAGMA foreign_key_check"), []);
     assert.strictEqual((await get(db, "PRAGMA integrity_check")).integrity_check, "ok");
     await close(db);
 }
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 5);
+    assert.strictEqual(V5_SCHEMA_VERSION, 5);
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-v21-v5-test-"));
     try {
         await migrateAndAssert(path.join(directory, "v4.db"));
