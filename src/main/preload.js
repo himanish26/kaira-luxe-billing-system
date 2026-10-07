@@ -329,6 +329,14 @@ reprintStoreCredit: (storeCreditNo) =>
 
 getCurrentStoreIdentity: () => ipcRenderer.invoke("store-identity:get-current"),
 
+getManagementPnlPeriod: options => ipcRenderer.invoke("management-pnl:resolve-period", options),
+
+getManagementPnl: options => ipcRenderer.invoke("management-pnl:get", options),
+
+getManagementPnlFinancialYear: options => ipcRenderer.invoke("management-pnl:get-financial-year", options),
+
+exportManagementPnlFinancialYear: options => ipcRenderer.invoke("management-pnl:export-financial-year", options),
+
 saveSettings: (settings, grant) =>
     ipcRenderer.invoke(
         "save-settings",

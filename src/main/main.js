@@ -281,10 +281,15 @@ const {
 
 const storeIdentityService = require("../database/storeIdentityService");
 const expenseTrackerService = require("../database/expenseTrackerService");
+const managementPnlService = require("../database/managementPnlService");
+const { resolveManagementPnlPeriod } = require("../database/managementPnlPeriods");
+const { getBusinessDate } = require("../database/businessDate");
+const { CURRENT_DB_SCHEMA_VERSION } = require("../database/schemaVersion");
 const {
     exportPostedExpenseBatch,
     exportExpenseHistory
 } = require("../database/expenseExcelExporter");
+const { exportManagementPnlFinancialYear, managementPnlFilename } = require("../database/managementPnlExcelExporter");
 
 const {
 
@@ -2211,6 +2216,108 @@ ipcMain.handle("store-identity:get-current", async () => {
         storeName: store.storeName,
         status: store.status
     };
+});
+
+function requireManagementPnlRenderer(event) {
+    if (!mainWindow || event.sender !== mainWindow.webContents) {
+        throw new Error("Management P&L request rejected.");
+    }
+}
+
+ipcMain.handle("management-pnl:resolve-period", (event, options) => {
+    requireManagementPnlRenderer(event);
+    try {
+        const request = options && typeof options === "object" && !Array.isArray(options) ? options : {};
+        const period = resolveManagementPnlPeriod({
+            preset: request.preset,
+            month: request.month,
+            financialYear: request.financialYear,
+            fromDate: request.fromDate,
+            toDate: request.toDate
+        });
+        return { success: true, period, businessDate: getBusinessDate() };
+    }
+    catch (error) {
+        return { success: false, error: error.message || "The selected P&L period is invalid." };
+    }
+});
+
+ipcMain.handle("management-pnl:get", async (event, options) => {
+    requireManagementPnlRenderer(event);
+    try {
+        if (!options || typeof options !== "object" || Array.isArray(options)) {
+            throw new Error("Management P&L filters are required.");
+        }
+        const { fromDate, toDate, comparison, businessSegment } = options;
+        if (typeof fromDate !== "string" || typeof toDate !== "string" ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(fromDate) || !/^\d{4}-\d{2}-\d{2}$/.test(toDate)) {
+            throw new Error("Select a valid P&L date range.");
+        }
+        if (!new Set(["NONE", "PREVIOUS_PERIOD", "PREVIOUS_MONTH", "SAME_MONTH_PREVIOUS_YEAR", "PREVIOUS_FYTD", "PREVIOUS_FY"]).has(comparison)) {
+            throw new Error("Select a supported P&L comparison.");
+        }
+        if (!new Set(["ALL", "KL", "MENS", "KIDS"]).has(businessSegment)) {
+            throw new Error("Select ALL, KL, MENS, or KIDS for the P&L Business Segment.");
+        }
+        return { success: true, result: await managementPnlService.getManagementPnl({ fromDate, toDate, comparison, businessSegment }) };
+    }
+    catch (error) {
+        return { success: false, error: error.message || "Management P&L could not be loaded." };
+    }
+});
+
+ipcMain.handle("management-pnl:get-financial-year", async (event, options) => {
+    requireManagementPnlRenderer(event);
+    try {
+        if (!options || typeof options !== "object" || Array.isArray(options) ||
+            !Number.isInteger(Number(options.financialYearStart)) ||
+            !new Set(["ALL", "KL", "MENS", "KIDS"]).has(options.businessSegment)) {
+            throw new Error("Select a valid Financial Year and Business Segment.");
+        }
+        return { success: true, result: await managementPnlService.getManagementPnlFinancialYear({
+            financialYearStart: Number(options.financialYearStart), businessSegment: options.businessSegment
+        }) };
+    }
+    catch (error) {
+        return { success: false, error: error.message || "Management P&L Financial Year could not be loaded." };
+    }
+});
+
+ipcMain.handle("management-pnl:export-financial-year", async (event, options) => {
+    requireManagementPnlRenderer(event);
+    try {
+        if (!options || typeof options !== "object" || Array.isArray(options) ||
+            !Number.isInteger(Number(options.financialYearStart)) ||
+            !new Set(["ALL", "KL", "MENS", "KIDS"]).has(options.businessSegment)) {
+            throw new Error("Select a valid Financial Year and Business Segment for export.");
+        }
+        const report = await managementPnlService.getManagementPnlFinancialYear({
+            financialYearStart: Number(options.financialYearStart), businessSegment: options.businessSegment
+        });
+        const storeCode = report.metadata.store?.storeCode;
+        if (!storeCode) throw new Error("Current Store identity is unavailable. Management P&L export was stopped.");
+        const defaultPath = managementPnlFilename(storeCode, report.metadata.financialYearLabel, getBusinessDate());
+        const selected = await dialog.showSaveDialog(mainWindow, {
+            defaultPath,
+            filters: [{ name: "Excel Workbook", extensions: ["xlsx"] }]
+        });
+        if (selected.canceled) return { success: false, cancelled: true };
+        const exported = await exportManagementPnlFinancialYear(report, selected.filePath, {
+            version: app.getVersion(), schemaVersion: CURRENT_DB_SCHEMA_VERSION
+        });
+        let activityWarning = null;
+        try {
+            await logDataExported("MANAGEMENT_PNL_EXPORTED", "MANAGEMENT_PNL",
+                `Management P&L ${report.metadata.financialYearLabel} · ${report.metadata.businessSegment} exported`, "OPERATOR");
+        }
+        catch (_logError) {
+            activityWarning = "Management P&L was exported, but its Activity Log event could not be recorded.";
+        }
+        return { ...exported, activityWarning };
+    }
+    catch (error) {
+        return { success: false, error: error.message || "Management P&L export failed." };
+    }
 });
 
 ipcMain.handle(

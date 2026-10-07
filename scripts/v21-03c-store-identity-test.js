@@ -125,7 +125,8 @@ async function main() {
     assert(accounting.includes("Expenses, profitability and supplier accounts"));
     assert.match(app, /accountingExpenseTrackerBtn[\s\S]*?openExpenseTracker/);
     assert(html.includes('id="expenseTrackerScreen"') && html.includes('modules/expenseTracker.js'));
-    assert.match(app, /showComingSoon\("Management P&L"\)/);
+    assert.match(app, /accountingManagementPLBtn[^\n]*window\.openManagementPnl/);
+    assert(html.includes('id="managementPnlScreen"') && html.includes('modules/managementPnl.js'));
     assert.match(app, /showComingSoon\("Supplier \/ Distributor Accounts"\)/);
     const settingsStoreInfo = app.slice(app.indexOf("🏪 Store Information"), app.indexOf("function formatKLBSLastUpdated"));
     assert(settingsStoreInfo.includes("id=\"storeCodeValue\"") && settingsStoreInfo.includes("id=\"storeNameValue\"") && settingsStoreInfo.includes("id=\"storeStatusValue\""));

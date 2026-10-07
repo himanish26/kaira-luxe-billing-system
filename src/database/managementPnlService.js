@@ -4,7 +4,7 @@ const { BUSINESS_SEGMENT_CODES, normalizeBusinessSegment } = require("../shared/
 const { EXPENSE_HEADERS } = require("./expenseTrackerService");
 const { createReturnCogsService } = require("./returnCogsService");
 const { getBusinessDate } = require("./businessDate");
-const { parseDate, comparisonPeriod } = require("./managementPnlPeriods");
+const { parseDate, comparisonPeriod, getFinancialYearStart, monthRange } = require("./managementPnlPeriods");
 
 const CATEGORY_GROUPS = Object.freeze([
     { name: "Employee Costs", categories: ["Salary & Wages", "Staff Welfare"] },
@@ -53,6 +53,44 @@ function addField(total, row, field, label, warnings, context) {
 
 function addWarning(warnings, code, severity, message, count, value = null) {
     if (count > 0) warnings.push({ code, severity, message, affectedCount: count, affectedValuePaise: value });
+}
+
+function deriveLegacyGrossPaise(row) {
+    const toPaise = value => {
+        const number = Number(value);
+        if (value === null || value === undefined || value === "" || !Number.isFinite(number) || number < 0) return null;
+        const paise = Math.round((number + Number.EPSILON) * 100);
+        return Number.isSafeInteger(paise) ? paise : null;
+    };
+    const net = toPaise(row.net_amount);
+    const discount = toPaise(row.discount_amount);
+    const taxable = toPaise(row.taxable_amount);
+    const gst = toPaise(row.gst_amount);
+    if ([net, discount, taxable, gst].some(value => value === null) || Math.abs(net - taxable - gst) > 1) return null;
+    const gross = net + discount;
+    return Number.isSafeInteger(gross) ? gross : null;
+}
+
+function compactWarnings(warnings) {
+    const grouped = new Map();
+    for (const warning of warnings) {
+        const key = `${warning.code}\u0000${warning.severity}\u0000${warning.message}`;
+        const existing = grouped.get(key);
+        if (!existing) {
+            grouped.set(key, { ...warning, affectedCount: Number(warning.affectedCount || 0),
+                affectedValuePaise: Number.isSafeInteger(warning.affectedValuePaise) ? warning.affectedValuePaise : null });
+            continue;
+        }
+        existing.affectedCount += Number(warning.affectedCount || 0);
+        if (Number.isSafeInteger(warning.affectedValuePaise)) {
+            existing.affectedValuePaise = (existing.affectedValuePaise || 0) + warning.affectedValuePaise;
+        }
+        delete existing.billNo;
+        delete existing.billItemId;
+        delete existing.returnNo;
+        delete existing.returnItemId;
+    }
+    return [...grouped.values()];
 }
 
 function percent(numerator, denominator) {
@@ -199,6 +237,34 @@ function createManagementPnlService(database, options = {}) {
         return { count: Number(rows[0]?.issue_count || 0), amountPaise: Number(rows[0]?.issue_amount_paise || 0) };
     }
 
+    async function queryPostedExpenseDetails(period, segment, store) {
+        if (!store) return { rows: [], totalCount: 0, totalAmountPaise: 0 };
+        const params = [period.fromDate, period.toDate, store.id];
+        const segmentFilter = segment === "ALL" ? "" : " AND e.business_segment IN (?, 'COMMON')";
+        if (segment !== "ALL") params.push(segment);
+        const rows = await dbAll(database, `
+            SELECT e.expense_code, b.batch_code, e.expense_date, e.category,
+                   e.business_segment, e.payment_mode, e.reference, e.amount_paise,
+                   e.remarks, e.posted_at, s.store_code, s.store_name
+            FROM expenses e
+            JOIN expense_batches b ON b.id = e.batch_id
+            JOIN stores s ON s.id = e.store_id AND s.id = b.store_id
+            WHERE e.expense_date >= ? AND e.expense_date <= ? AND e.store_id = ?
+              AND b.status = 'POSTED' AND e.lifecycle_status = 'ACTIVE'
+              AND e.expense_code IS NOT NULL AND e.batch_id IS NOT NULL AND e.posted_at IS NOT NULL
+              AND b.expense_count = (SELECT COUNT(*) FROM expenses bx WHERE bx.batch_id = b.id)
+              AND b.total_amount_paise = (SELECT COALESCE(SUM(bx.amount_paise),0) FROM expenses bx WHERE bx.batch_id = b.id)
+              AND NOT EXISTS (SELECT 1 FROM expenses bx WHERE bx.batch_id = b.id AND
+                  (bx.lifecycle_status <> 'ACTIVE' OR bx.expense_code IS NULL OR bx.posted_at IS NULL OR bx.store_id <> b.store_id))
+              ${segmentFilter}
+            ORDER BY e.expense_date, e.expense_code
+        `, params);
+        const totalAmountPaise = rows.reduce((sum, row) => safeAdd(sum, Number(row.amount_paise), "exported posted expense amount"), 0);
+        return { rows: rows.map(row => ({ ...row, management_group:
+            CATEGORY_GROUPS.find(group => group.categories.includes(row.category))?.name || "Unclassified" })),
+            totalCount: rows.length, totalAmountPaise };
+    }
+
     async function calculatePeriod(period, segment, store) {
         const warnings = [];
         const saleRowsPromise = querySales(period, segment);
@@ -218,7 +284,7 @@ function createManagementPnlService(database, options = {}) {
         const scopedSales = segment === "ALL" ? allSales : allSales.filter(row => row.business_segment === segment);
         const scopedReturns = segment === "ALL" ? allReturns : allReturns.filter(row => row.business_segment === segment);
 
-        const revenue = { grossBillingsInclGstPaise: 0, discountsInclGstEffectPaise: 0,
+        const revenue = { grossBillingsInclGstPaise: 0, grossCompatibilityAppliedCount: 0, grossCompatibilityAppliedPaise: 0, discountsInclGstEffectPaise: 0,
             salesTaxableBeforeReturnsPaise: 0, salesGstPaise: 0, salesNetInclGstPaise: 0,
             completedReturnGrossReversalPaise: 0, completedReturnDiscountReversalPaise: 0,
             completedReturnTaxableReversalPaise: 0, completedReturnGstReversalPaise: 0,
@@ -236,10 +302,25 @@ function createManagementPnlService(database, options = {}) {
         ];
         for (const row of scopedSales) {
             for (const [field, target, label] of revenueFields) {
+                if (field === "gross_amount" && (row.gross_amount === null || row.gross_amount === undefined || row.gross_amount === "")) {
+                    const derived = deriveLegacyGrossPaise(row);
+                    if (derived !== null) {
+                        revenue.grossBillingsInclGstPaise = safeAdd(revenue.grossBillingsInclGstPaise, derived, "legacy gross billing");
+                        revenue.grossCompatibilityAppliedCount += 1;
+                        revenue.grossCompatibilityAppliedPaise = safeAdd(revenue.grossCompatibilityAppliedPaise, derived, "legacy gross billing compatibility total");
+                        continue;
+                    }
+                }
                 const result = addField(revenue[target], row, field, label, warnings, { billNo: row.bill_no, billItemId: row.bill_item_id });
                 revenue[target] = result.total;
                 if (result.missing || result.invalid) revenue.available = false;
             }
+        }
+        if (revenue.grossCompatibilityAppliedCount > 0) {
+            warnings.push({ code: "HISTORICAL_GROSS_COMPATIBILITY_APPLIED", severity: "INFO",
+                message: "Historical gross billing was reconstructed from persisted line snapshots.",
+                affectedCount: revenue.grossCompatibilityAppliedCount,
+                affectedValuePaise: revenue.grossCompatibilityAppliedPaise });
         }
 
         const returnsByStatus = { CAPTURED: { taxable: 0, cogs: 0, count: 0 }, UNKNOWN: { taxable: 0, cogs: 0, count: 0 }, NOT_APPLICABLE: { taxable: 0, cogs: 0, count: 0 } };
@@ -477,7 +558,7 @@ function createManagementPnlService(database, options = {}) {
                 profitBeforeTax: { status: "NOT_AVAILABLE", amountPaise: null },
                 profitAfterTax: { status: "NOT_AVAILABLE", amountPaise: null }
             },
-            dataQuality: { warnings, errorCount: warnings.filter(row => row.severity === "ERROR").length,
+            dataQuality: { warnings: compactWarnings(warnings), errorCount: warnings.filter(row => row.severity === "ERROR").length,
                 warningCount: warnings.filter(row => row.severity === "WARNING").length },
             reconciliation
         };
@@ -543,7 +624,127 @@ function createManagementPnlService(database, options = {}) {
         };
     }
 
-    return { getManagementPnl };
+    async function getManagementPnlFinancialYear({ financialYearStart, businessSegment = "ALL" } = {}) {
+        const startYear = Number(financialYearStart);
+        if (!Number.isInteger(startYear) || startYear < 1900 || startYear > 9998) {
+            throw new Error("Select a valid Financial Year.");
+        }
+        const today = getBusinessDate(now());
+        const currentYearStart = getFinancialYearStart(today);
+        if (startYear > currentYearStart) throw new Error("Future Financial Years are not available.");
+        const segment = String(businessSegment || "ALL").toUpperCase();
+        if (!VALID_SEGMENTS.has(segment)) throw new Error("Select ALL, KL, MENS, or KIDS for the P&L Business Segment.");
+        const active = startYear === currentYearStart;
+        const fyStartDate = `${startYear}-04-01`;
+        const fyEndDate = `${startYear + 1}-03-31`;
+        const asOfDate = active ? today : fyEndDate;
+        const comparisonStartDate = `${startYear - 1}-04-01`;
+        let comparisonEndDate = `${startYear}-03-31`;
+        if (active) {
+            const asOf = parseDate(asOfDate);
+            const comparisonEnd = new Date(Date.UTC(startYear - 1, asOf.getUTCMonth(), 1));
+            const lastDay = new Date(Date.UTC(comparisonEnd.getUTCFullYear(), comparisonEnd.getUTCMonth() + 1, 0)).getUTCDate();
+            comparisonEnd.setUTCDate(Math.min(asOf.getUTCDate(), lastDay));
+            comparisonEndDate = `${comparisonEnd.getUTCFullYear()}-${String(comparisonEnd.getUTCMonth() + 1).padStart(2, "0")}-${String(comparisonEnd.getUTCDate()).padStart(2, "0")}`;
+        }
+        const selectedEnd = active ? asOfDate : fyEndDate;
+        const [selectedSummaryResult, comparisonSummaryResult] = await Promise.all([
+            getManagementPnl({ fromDate: fyStartDate, toDate: selectedEnd, comparison: "NONE", businessSegment: segment }),
+            getManagementPnl({ fromDate: comparisonStartDate, toDate: comparisonEndDate, comparison: "NONE", businessSegment: segment })
+        ]);
+        const months = await Promise.all(Array.from({ length: 12 }, async (_, index) => {
+            const year = startYear + Math.floor((index + 3) / 12);
+            const monthIndex = (index + 3) % 12;
+            const range = monthRange(year, monthIndex);
+            if (range.fromDate > selectedEnd) return { index, label: new Date(Date.UTC(year, monthIndex, 1)).toLocaleString("en", { month: "short", timeZone: "UTC" }), fromDate: range.fromDate, toDate: range.toDate, future: true, result: null };
+            const endDate = range.toDate > selectedEnd ? selectedEnd : range.toDate;
+            const result = await getManagementPnl({ fromDate: range.fromDate, toDate: endDate, comparison: "NONE", businessSegment: segment });
+            return { index, label: new Date(Date.UTC(year, monthIndex, 1)).toLocaleString("en", { month: "short", timeZone: "UTC" }), fromDate: range.fromDate, toDate: endDate, future: false, result: result.selected };
+        }));
+        const selectedSummary = selectedSummaryResult.selected;
+        const comparisonSummary = comparisonSummaryResult.selected;
+        let storeForExpenseDetails = null;
+        try { storeForExpenseDetails = await getCurrentStore(); } catch (_error) { /* The P&L summary already reports Store identity failure. */ }
+        const postedExpenseDetails = await queryPostedExpenseDetails({ fromDate: fyStartDate, toDate: selectedEnd }, segment, storeForExpenseDetails);
+        const expectedPostedExpenseTotal = segment === "ALL" ? selectedSummary.expenses.totalOperatingExpensesPaise :
+            selectedSummary.expenses.directOperatingExpensesPaise + selectedSummary.expenses.commonOperatingExpensesPaise;
+        if (selectedSummary.expenses.available !== false && selectedSummary.reconciliation.expense.reconciles === true &&
+            (postedExpenseDetails.totalAmountPaise !== expectedPostedExpenseTotal || postedExpenseDetails.totalCount !== selectedSummary.expenses.managementGroups.reduce((sum, group) => sum + group.expenseCount, 0) +
+                (segment === "ALL" ? 0 : selectedSummary.expenses.commonCategories.reduce((sum, category) => sum + category.expenseCount, 0)))) {
+            throw new Error("Posted Expense export details do not reconcile to the selected Management P&L expense summary.");
+        }
+        const varianceByKey = buildFinancialYearVariances(selectedSummary, comparisonSummary);
+        return {
+            metadata: {
+                store: selectedSummaryResult.metadata.store,
+                financialYearStart: startYear,
+                financialYearLabel: `FY ${startYear}-${String(startYear + 1).slice(-2)}`,
+                currentFinancialYearStart: currentYearStart,
+                asOfDate,
+                businessSegment: segment,
+                activeFinancialYear: active,
+                comparisonLabel: active ? `LAST FYTD · ${startYear - 1}-${String(startYear).slice(-2)}` : `LAST FY · ${startYear - 1}-${String(startYear).slice(-2)}`,
+                comparisonFromDate: comparisonStartDate,
+                comparisonToDate: comparisonEndDate,
+                generatedAt: selectedSummaryResult.metadata.generatedAt
+            },
+            months,
+            selectedSummary,
+            comparisonSummary,
+            varianceByKey,
+            postedExpenseDetails
+        };
+    }
+
+    return { getManagementPnl, getManagementPnlFinancialYear };
+}
+
+function buildFinancialYearVariances(selected, comparison) {
+    const revenueAvailable = selected.revenue.available && comparison.revenue.available;
+    const values = {
+        gross: [revenueAvailable ? selected.revenue.grossBillingsInclGstPaise : null, revenueAvailable ? comparison.revenue.grossBillingsInclGstPaise : null, "HIGHER"],
+        discounts: [revenueAvailable ? selected.revenue.discountsInclGstEffectPaise : null, revenueAvailable ? comparison.revenue.discountsInclGstEffectPaise : null, "LOWER"],
+        returns: [revenueAvailable ? selected.revenue.completedReturnNetReversalPaise : null, revenueAvailable ? comparison.revenue.completedReturnNetReversalPaise : null, "LOWER"],
+        netGst: [revenueAvailable ? selected.revenue.netGstOnSalesPaise : null, revenueAvailable ? comparison.revenue.netGstOnSalesPaise : null, "LOWER"],
+        netSales: [revenueAvailable ? selected.revenue.netSalesExGstPaise : null, revenueAvailable ? comparison.revenue.netSalesExGstPaise : null, "HIGHER"],
+        saleCogs: [selected.cogs.capturedSaleCogsPaise, comparison.cogs.capturedSaleCogsPaise, "LOWER"],
+        returnCogs: [selected.cogs.capturedReturnCogsReversalPaise, comparison.cogs.capturedReturnCogsReversalPaise, "LOWER"],
+        netCogs: [selected.cogs.netCapturedCogsPaise, comparison.cogs.netCapturedCogsPaise, "LOWER"],
+        capturedSales: [selected.cogs.capturedNetSalesPaise, comparison.cogs.capturedNetSalesPaise, "HIGHER"],
+        unknownSales: [selected.cogs.unknownNetSalesPaise, comparison.cogs.unknownNetSalesPaise, "LOWER"],
+        vvpSales: [selected.cogs.notApplicableNetSalesPaise, comparison.cogs.notApplicableNetSalesPaise, "LOWER"],
+        coverage: [selected.cogs.costCoveragePercent, comparison.cogs.costCoveragePercent, "HIGHER", true],
+        grossProfit: [selected.cogs.fullGrossProfitPaise, comparison.cogs.fullGrossProfitPaise, "HIGHER", false, selected.cogs.fullGrossProfitAvailable && comparison.cogs.fullGrossProfitAvailable],
+        grossMargin: [selected.cogs.fullGrossMarginPercent, comparison.cogs.fullGrossMarginPercent, "HIGHER", true, selected.cogs.fullGrossProfitAvailable && comparison.cogs.fullGrossProfitAvailable],
+        totalExpenses: [selected.expenses.available === false ? null : selected.expenses.totalOperatingExpensesPaise,
+            comparison.expenses.available === false ? null : comparison.expenses.totalOperatingExpensesPaise, "LOWER"],
+        commonExpenses: [selected.expenses.available === false ? null : selected.expenses.commonOperatingExpensesPaise,
+            comparison.expenses.available === false ? null : comparison.expenses.commonOperatingExpensesPaise, "LOWER"],
+        operatingResult: [selected.operatingResult.operatingProfitPaise ?? selected.operatingResult.segmentDirectOperatingResultPaise,
+            comparison.operatingResult.operatingProfitPaise ?? comparison.operatingResult.segmentDirectOperatingResultPaise, "HIGHER",
+            false, selected.operatingResult.operatingProfitAvailable === true || selected.operatingResult.segmentDirectOperatingResultAvailable === true]
+    };
+    values.operatingMargin = [selected.operatingResult.operatingMarginPercent ?? selected.operatingResult.segmentDirectOperatingMarginPercent,
+        comparison.operatingResult.operatingMarginPercent ?? comparison.operatingResult.segmentDirectOperatingMarginPercent,
+        "HIGHER", true,
+        selected.operatingResult.operatingProfitAvailable === true || selected.operatingResult.segmentDirectOperatingResultAvailable === true];
+    for (const group of selected.expenses.managementGroups) {
+        const prior = comparison.expenses.managementGroups.find(row => row.name === group.name);
+        values[`group:${group.name}`] = [selected.expenses.available === false ? null : group.amountPaise,
+            comparison.expenses.available === false ? null : prior?.amountPaise ?? null, "LOWER"];
+    }
+    for (const category of selected.expenses.categories) {
+        const prior = comparison.expenses.categories.find(row => row.category === category.category);
+        values[`category:${category.category}`] = [selected.expenses.available === false ? null : category.amountPaise,
+            comparison.expenses.available === false ? null : prior?.amountPaise ?? null, "LOWER"];
+    }
+    return Object.fromEntries(Object.entries(values).map(([key, [current, prior, favorableWhen, percentagePoint = false, permitted = true]]) => {
+        const valid = permitted && Number.isFinite(current) && Number.isFinite(prior);
+        const delta = valid ? current - prior : null;
+        const deltaPercent = valid && prior !== 0 ? delta * 100 / Math.abs(prior) : null;
+        const favorable = delta === null || delta === 0 || favorableWhen === "NEUTRAL" ? null : (favorableWhen === "HIGHER" ? delta > 0 : delta < 0);
+        return [key, { amount: delta, percent: deltaPercent, favorable, percentagePoint }];
+    }));
 }
 
 function deriveVariance(selected, comparison) {
@@ -580,4 +781,6 @@ function getDefaultService() {
 }
 
 module.exports = { CATEGORY_GROUPS, createManagementPnlService,
-    getManagementPnl: options => getDefaultService().getManagementPnl(options), deriveVariance };
+    getManagementPnl: options => getDefaultService().getManagementPnl(options),
+    getManagementPnlFinancialYear: options => getDefaultService().getManagementPnlFinancialYear(options),
+    deriveVariance };

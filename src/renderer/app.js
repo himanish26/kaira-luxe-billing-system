@@ -1932,7 +1932,7 @@ document.getElementById("businessAccountingBtn")?.addEventListener("click", () =
     accountingDataScreen.style.display = "block";
 });
 document.getElementById("accountingExpenseTrackerBtn")?.addEventListener("click", () => window.openExpenseTracker?.());
-document.getElementById("accountingManagementPLBtn")?.addEventListener("click", () => showComingSoon("Management P&L"));
+document.getElementById("accountingManagementPLBtn")?.addEventListener("click", () => window.openManagementPnl?.());
 document.getElementById("accountingSupplierAccountsBtn")?.addEventListener("click", () => showComingSoon("Supplier / Distributor Accounts"));
 document.getElementById("customersBusinessBtn")?.addEventListener("click", showBusinessWorkspace);
 document.getElementById("accountingBusinessBtn")?.addEventListener("click", showBusinessWorkspace);
@@ -8247,6 +8247,7 @@ function hideAllScreens() {
     businessScreen.style.display = "none";
     customersScreen.style.display = "none";
     accountingDataScreen.style.display = "none";
+    document.getElementById("managementPnlScreen").style.display = "none";
     document.getElementById("expenseTrackerScreen").style.display = "none";
     document.getElementById("expenseHistoryScreen").style.display = "none";
 

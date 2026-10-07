@@ -2112,6 +2112,60 @@ returned after purchase.
     </div>
 </div>
 
+<div id="managementPnlScreen" class="screen" style="display:none;">
+    <div class="bill-top-bar management-pnl-topbar">
+        <button id="managementPnlBackBtn" class="back-btn" type="button">← Accounting &amp; Data</button>
+        <h1>MANAGEMENT P&amp;L</h1>
+        <button id="managementPnlExportBtn" class="klbs-primary-btn" type="button" title="Export the selected Financial Year and Business Segment to Excel." aria-label="Export the selected Financial Year and Business Segment to Excel.">EXPORT EXCEL</button>
+    </div>
+    <main class="management-pnl-page" aria-labelledby="managementPnlPageTitle">
+        <h2 id="managementPnlPageTitle" class="management-pnl-visually-hidden">Management Profit and Loss</h2>
+        <section class="management-pnl-controls" aria-label="Financial year and segment">
+            <div class="management-pnl-fy-navigation">
+                <button id="managementPnlPreviousFy" class="klbs-cancel-btn" type="button" title="Previous Financial Year" aria-label="Previous Financial Year">‹</button>
+                <strong id="managementPnlFyLabel">Financial Year</strong>
+                <button id="managementPnlNextFy" class="klbs-cancel-btn" type="button" disabled title="Next Financial Year" aria-label="Next Financial Year">›</button>
+            </div>
+            <label class="management-pnl-segment-control">Business Segment
+                <select id="managementPnlSegment" aria-label="Business Segment">
+                    <option value="ALL">ALL SEGMENTS</option>
+                    <option value="KL">KL</option>
+                    <option value="MENS">MENS</option>
+                    <option value="KIDS">KIDS</option>
+                </select>
+            </label>
+            <div class="management-pnl-metadata">
+                <span id="managementPnlStore">Store information loading…</span>
+                <span>As of: <time id="managementPnlAsOf"></time></span>
+            </div>
+        </section>
+
+        <section id="managementPnlQualityStrip" class="management-pnl-quality-strip" aria-live="polite" aria-label="Data quality"></section>
+
+        <section class="management-pnl-statement-card" aria-label="Financial Year profit and loss statement">
+            <div id="managementPnlLoading" class="management-pnl-state" role="status" hidden>Loading Management P&amp;L…</div>
+            <div id="managementPnlError" class="management-pnl-state management-pnl-error" role="alert" hidden>
+                <span id="managementPnlErrorMessage"></span>
+                <button id="managementPnlRetryBtn" class="klbs-cancel-btn" type="button">RETRY</button>
+            </div>
+            <div id="managementPnlEmpty" class="management-pnl-state" hidden>No sales, returns, or posted expenses are recorded for this Financial Year and segment.</div>
+            <div id="managementPnlTableWrap" class="management-pnl-table-wrap" tabindex="0" aria-label="Financial Year statement. Scroll within this table to view all months and comparison columns.">
+                <table class="management-pnl-table">
+                    <colgroup>
+                        <col style="width:310px">
+                        <col span="12" style="width:125px">
+                        <col span="2" style="width:130px">
+                        <col style="width:160px">
+                        <col style="width:110px">
+                    </colgroup>
+                    <thead id="managementPnlTableHead"></thead>
+                    <tbody id="managementPnlTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+</div>
+
 <div id="expenseTrackerScreen" class="screen" style="display:none;">
     <div class="bill-top-bar expense-page-topbar">
         <button id="expenseTrackerBackBtn" class="back-btn" type="button">← Accounting &amp; Data</button>
@@ -2994,6 +3048,7 @@ style="display:none;">
 <script src="modules/expenseDraftState.js"></script>
 <script src="modules/expenseHistoryCalendar.js"></script>
 <script src="modules/expenseTracker.js"></script>
+<script src="modules/managementPnl.js"></script>
 
 </body>
 </html>

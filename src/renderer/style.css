@@ -10,6 +10,7 @@
 @import "./styles/business.css";
 @import "./styles/activitylog.css";
 @import "./styles/expense.css";
+@import "./styles/management-pnl.css";
 
 #ffPinDialog .admin-error:not(:empty)::before{
     content:"❌ ";

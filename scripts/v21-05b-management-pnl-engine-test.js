@@ -122,6 +122,19 @@ async function main() {
         await addSale(db, { billNo: "OCT-1", date: "2026-10-02", lines: [
             { qty: 1, segment: "MENS", gross: 120, discount: 0, taxable: 100, gst: 20, net: 120, unitCostPaise: 3000, status: "CAPTURED", currentCost: 30 }
         ] });
+        await addSale(db, { billNo: "LEGACY-GROSS", date: "2026-07-15", lines: [
+            { qty: 1, segment: "KL", gross: 110, discount: 10, taxable: 83.33, gst: 16.67, net: 100, unitCostPaise: null, status: "UNKNOWN" }
+        ] });
+        await run(db, "UPDATE bill_items SET gross_amount=NULL WHERE bill_no='LEGACY-GROSS'");
+        await addSale(db, { billNo: "AUG-ZERO-PROFIT", date: "2026-08-12", lines: [
+            { qty: 1, segment: "KL", gross: 100, discount: 0, taxable: 100, gst: 0, net: 100, unitCostPaise: 10000, status: "CAPTURED", currentCost: 100 }
+        ] });
+        await addSale(db, { billNo: "PRIOR-FY", date: "2025-09-29", lines: [
+            { qty: 1, segment: "MENS", gross: 240, discount: 20, taxable: 200, gst: 20, net: 220, unitCostPaise: 5000, status: "CAPTURED", currentCost: 50 }
+        ] });
+        await addSale(db, { billNo: "OLDER-FY", date: "2024-09-29", lines: [
+            { qty: 1, segment: "KL", gross: 120, discount: 0, taxable: 100, gst: 20, net: 120, unitCostPaise: 3000, status: "CAPTURED", currentCost: 30 }
+        ] });
         await run(db, `INSERT INTO returns(return_no,credit_note_no,original_bill_no,business_date,accounting_status,
             accounting_snapshot_version,gross_reversal,discount_reversal,taxable_reversal,gst_reversal,net_reversal)
             VALUES('RET-1','CN000000001','SEP-1','2026-10-03','COMPLETED',1,60,6,45,9,54)`);
@@ -203,7 +216,7 @@ async function main() {
         const repeat = await service.getManagementPnl({ fromDate: "2026-10-01", toDate: "2026-10-31" });
         assert.deepStrictEqual(repeat.selected, (await service.getManagementPnl({ fromDate: "2026-10-01", toDate: "2026-10-31" })).selected);
 
-        const noRows = await service.getManagementPnl({ fromDate: "2026-08-01", toDate: "2026-08-31" });
+        const noRows = await service.getManagementPnl({ fromDate: "2026-05-01", toDate: "2026-05-31" });
         assert.strictEqual(noRows.selected.cogs.costCoveragePercent, null);
         assert.strictEqual(noRows.selected.cogs.coverageStatus, "NO_ELIGIBLE_SALES");
         assert.strictEqual(noRows.selected.cogs.fullGrossProfitPaise, 0);
@@ -223,6 +236,97 @@ async function main() {
         assert(missingStore.selected.dataQuality.warnings.some(row => row.code === "STORE_IDENTITY_UNAVAILABLE"));
         assert.strictEqual(missingStore.selected.expenses.totalOperatingExpensesPaise, null);
         assert.strictEqual(missingStore.selected.operatingResult.operatingProfitAvailable, false);
+
+        await run(db, "UPDATE expense_batches SET total_amount_paise=total_amount_paise-1 WHERE batch_code='KLEXPB000003'");
+        const beforeFyCounts = await get(db, "SELECT (SELECT COUNT(*) FROM bills) bills,(SELECT COUNT(*) FROM expenses) expenses,(SELECT COUNT(*) FROM returns) returns");
+        const fy = await service.getManagementPnlFinancialYear({ financialYearStart: 2026, businessSegment: "ALL" });
+        assert.strictEqual(fy.postedExpenseDetails.totalCount, 3, "FY export detail source includes posted current-Store expenses only");
+        assert.strictEqual(fy.postedExpenseDetails.totalAmountPaise, 3250, "FY export detail amount reconciles to posted expense totals");
+        assert(fy.postedExpenseDetails.rows.every(row => row.management_group), "posted export rows carry the approved management group");
+        assert.deepStrictEqual(fy.months.map(row => row.label), ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"]);
+        assert.strictEqual(fy.metadata.financialYearLabel, "FY 2026-27");
+        assert.strictEqual(fy.metadata.asOfDate, "2026-10-07");
+        assert.strictEqual(fy.metadata.activeFinancialYear, true);
+        assert.strictEqual(fy.metadata.currentFinancialYearStart, 2026);
+        const julyResult = fy.months[3].result;
+        assert.strictEqual(julyResult.cogs.fullGrossProfitAvailable, false, "July UNKNOWN cost prevents complete monthly Gross Profit");
+        assert.strictEqual(julyResult.operatingResult.operatingProfitAvailable, false, "zero OPEX cannot make incomplete July Operating Profit available");
+        assert.strictEqual(julyResult.operatingResult.operatingProfitPaise, null, "incomplete July Operating Profit stays null");
+        assert.strictEqual(julyResult.operatingResult.operatingMarginPercent, null, "incomplete July Operating Margin stays null");
+        assert.strictEqual(julyResult.expenses.totalOperatingExpensesPaise, 0, "July fixture has zero OPEX while cost remains incomplete");
+        const augustResult = fy.months[4].result;
+        assert.strictEqual(augustResult.cogs.fullGrossProfitAvailable, true, "complete August cost supports full monthly Gross Profit");
+        assert.strictEqual(augustResult.cogs.fullGrossProfitPaise, 0, "complete-cost zero-profit month preserves valid zero Gross Profit");
+        assert.strictEqual(augustResult.operatingResult.operatingProfitAvailable, true, "complete-cost August Operating Profit is available");
+        assert.strictEqual(augustResult.operatingResult.operatingProfitPaise, 0, "complete-cost zero-profit month renders as numeric zero");
+        assert.strictEqual(augustResult.operatingResult.operatingMarginPercent, 0, "complete-cost zero-profit month has valid zero margin");
+        assert.strictEqual(fy.months[5].result.cogs.fullGrossProfitAvailable, false, "September VVP/UNKNOWN cost remains incomplete independently");
+        assert.strictEqual(fy.months[5].result.operatingResult.operatingProfitPaise, null);
+        assert.strictEqual(fy.months[6].result.cogs.fullGrossProfitAvailable, true, "October completeness is evaluated independently");
+        assert.strictEqual(fy.months[6].result.operatingResult.operatingProfitAvailable, true);
+        assert.strictEqual(fy.selectedSummary.cogs.fullGrossProfitAvailable, false, "mixed FYTD remains incomplete as a whole");
+        assert.strictEqual(fy.selectedSummary.operatingResult.operatingProfitPaise, null, "incomplete FYTD Operating Profit remains unavailable");
+        assert.strictEqual(fy.selectedSummary.operatingResult.operatingMarginPercent, null, "incomplete FYTD Operating Margin remains unavailable");
+        assert.deepStrictEqual(fy.months.slice(7).map(row => row.future), [true, true, true, true, true]);
+        assert.strictEqual(fy.months[6].toDate, "2026-10-07");
+        assert.strictEqual(fy.months[3].result.revenue.grossBillingsInclGstPaise, 11000);
+        assert.strictEqual(fy.months[3].result.revenue.grossCompatibilityAppliedCount, 1);
+        assert(fy.months[3].result.dataQuality.warnings.some(row => row.code === "HISTORICAL_GROSS_COMPATIBILITY_APPLIED" && row.severity === "INFO"));
+        assert(!fy.months[3].result.dataQuality.warnings.some(row => row.code === "REVENUE_GST_RECONCILIATION_MISMATCH"));
+        const monthlyNetSales = fy.months.filter(row => row.result).reduce((sum, row) => sum + row.result.revenue.netSalesExGstPaise, 0);
+        assert.strictEqual(monthlyNetSales, fy.selectedSummary.revenue.netSalesExGstPaise, "monthly values reconcile to FYTD summary");
+        const monthlyGross = fy.months.filter(row => row.result).reduce((sum, row) => sum + row.result.revenue.grossBillingsInclGstPaise, 0);
+        assert.strictEqual(monthlyGross, fy.selectedSummary.revenue.grossBillingsInclGstPaise, "monthly gross values reconcile to FYTD summary");
+        const monthlyOpex = fy.months.filter(row => row.result).reduce((sum, row) => sum + row.result.expenses.totalOperatingExpensesPaise, 0);
+        assert.strictEqual(monthlyOpex, fy.selectedSummary.expenses.totalOperatingExpensesPaise, "monthly posted OPEX reconciles to FYTD summary");
+        for (const field of ["discountsInclGstEffectPaise", "salesTaxableBeforeReturnsPaise", "salesGstPaise", "salesNetInclGstPaise",
+            "completedReturnGrossReversalPaise", "completedReturnDiscountReversalPaise", "completedReturnTaxableReversalPaise",
+            "completedReturnGstReversalPaise", "completedReturnNetReversalPaise", "netGstOnSalesPaise", "netBillingsInclGstAfterReturnsPaise"]) {
+            const sum = fy.months.filter(row => row.result).reduce((total, row) => total + row.result.revenue[field], 0);
+            assert.strictEqual(sum, fy.selectedSummary.revenue[field], `monthly revenue ${field} reconciles to FYTD`);
+        }
+        for (const field of ["capturedSaleCogsPaise", "capturedSaleTaxableValuePaise", "capturedReturnCogsReversalPaise",
+            "capturedReturnTaxableReversalPaise", "unknownSaleTaxableValuePaise", "unknownReturnTaxableReversalPaise",
+            "notApplicableSaleTaxableValuePaise", "notApplicableReturnTaxableReversalPaise", "capturedNetSalesPaise",
+            "unknownNetSalesPaise", "notApplicableNetSalesPaise", "eligibleNetSalesPaise", "netCapturedCogsPaise"]) {
+            const sum = fy.months.filter(row => row.result).reduce((total, row) => total + row.result.cogs[field], 0);
+            assert.strictEqual(sum, fy.selectedSummary.cogs[field], `monthly cost population ${field} reconciles to FYTD`);
+        }
+        for (const group of fy.selectedSummary.expenses.managementGroups) {
+            const sum = fy.months.filter(row => row.result).reduce((total, row) => total + row.result.expenses.managementGroups.find(item => item.name === group.name).amountPaise, 0);
+            assert.strictEqual(sum, group.amountPaise, `monthly OPEX group ${group.name} reconciles to FYTD`);
+        }
+        assert.strictEqual(fy.comparisonSummary.revenue.netSalesExGstPaise, 20000);
+        assert.strictEqual(fy.metadata.comparisonToDate, "2025-10-07");
+        assert.strictEqual(fy.varianceByKey.netSales.amount,
+            fy.selectedSummary.revenue.netSalesExGstPaise - fy.comparisonSummary.revenue.netSalesExGstPaise);
+        assert.strictEqual(fy.varianceByKey.netSales.percent,
+            fy.varianceByKey.netSales.amount * 100 / Math.abs(fy.comparisonSummary.revenue.netSalesExGstPaise));
+        assert.strictEqual(fy.varianceByKey.netSales.favorable, fy.varianceByKey.netSales.amount > 0);
+        assert.strictEqual(fy.varianceByKey.discounts.favorable, fy.varianceByKey.discounts.amount < 0);
+        assert.notStrictEqual(fy.varianceByKey.returns.amount, 0, "return variance amount remains available against a zero prior period");
+        assert.strictEqual(fy.varianceByKey.returns.percent, null, "zero comparison denominator keeps variance percent unavailable");
+        assert.strictEqual(fy.varianceByKey.grossProfit.amount, null, "full-profit variance unavailable when cost basis is incomplete");
+        assert.strictEqual(fy.varianceByKey.grossProfit.percent, null, "unavailable comparison percentage remains null");
+        const completedFy = await service.getManagementPnlFinancialYear({ financialYearStart: 2025, businessSegment: "ALL" });
+        assert.strictEqual(completedFy.metadata.activeFinancialYear, false);
+        assert.strictEqual(completedFy.months[11].toDate, "2026-03-31");
+        assert.strictEqual(completedFy.metadata.comparisonLabel, "LAST FY · 2024-25");
+        assert.strictEqual(completedFy.comparisonSummary.revenue.netSalesExGstPaise, 10000);
+        const completedMonthlyNet = completedFy.months.reduce((sum, row) => sum + (row.result?.revenue.netSalesExGstPaise || 0), 0);
+        assert.strictEqual(completedMonthlyNet, completedFy.selectedSummary.revenue.netSalesExGstPaise, "completed monthly values reconcile to FY total");
+        assert.strictEqual(completedFy.selectedSummary.cogs.fullGrossProfitAvailable, true);
+        assert.strictEqual(completedFy.comparisonSummary.cogs.fullGrossProfitAvailable, true);
+        assert.strictEqual(completedFy.varianceByKey.grossProfit.amount,
+            completedFy.selectedSummary.cogs.fullGrossProfitPaise - completedFy.comparisonSummary.cogs.fullGrossProfitPaise);
+        const mensFy = await service.getManagementPnlFinancialYear({ financialYearStart: 2026, businessSegment: "MENS" });
+        assert.strictEqual(mensFy.selectedSummary.expenses.commonOperatingExpensesPaise, 2000);
+        assert.strictEqual(mensFy.selectedSummary.operatingResult.segmentDirectOperatingResultAvailable, false);
+        assert.strictEqual(mensFy.postedExpenseDetails.totalCount, 2, "segment export retains its direct and COMMON expense detail");
+        assert.strictEqual(mensFy.postedExpenseDetails.totalAmountPaise, 2250);
+        const afterFyCounts = await get(db, "SELECT (SELECT COUNT(*) FROM bills) bills,(SELECT COUNT(*) FROM expenses) expenses,(SELECT COUNT(*) FROM returns) returns");
+        assert.deepStrictEqual(afterFyCounts, beforeFyCounts, "FY read API performs no accounting writes");
+        await assert.rejects(() => service.getManagementPnlFinancialYear({ financialYearStart: 2027, businessSegment: "ALL" }), /Future Financial Years/);
 
         await run(db, "DROP TRIGGER trg_return_items_cost_basis_insert_valid");
         await run(db, `INSERT INTO returns(return_no,credit_note_no,original_bill_no,business_date,accounting_status,

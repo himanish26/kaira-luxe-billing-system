@@ -51,9 +51,10 @@ assert.match(app, /accountingExpenseTrackerBtn[\s\S]*?openExpenseTracker/,
     "Expense Tracker card opens the implemented expense workspace");
 assert(html.includes('id="expenseTrackerScreen"') && html.includes('id="expenseHistoryScreen"'),
     "Expense Tracker and History screens are present");
-for (const [id, feature] of [["accountingManagementPLBtn", "Management P&L"], ["accountingSupplierAccountsBtn", "Supplier / Distributor Accounts"]]) {
-    assert.match(app, new RegExp(`${id}[^\\n]*showComingSoon\\("${feature.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}"\\)`), `${feature} uses the existing Coming Soon interaction`);
-}
+assert.match(app, /accountingManagementPLBtn[^\n]*window\.openManagementPnl/,
+    "Management P&L opens its implemented screen");
+assert.match(app, /accountingSupplierAccountsBtn[^\n]*showComingSoon\("Supplier \/ Distributor Accounts"\)/,
+    "Supplier / Distributor Accounts retains the existing Coming Soon interaction");
 
 for (const route of [
     /reportsBtn\.addEventListener\("click", async[\s\S]*?businessScreen\.style\.display = "block"/,
