@@ -34,6 +34,13 @@ async function testMigrationAndConstraints() {
             CREATE TABLE settings(id INTEGER PRIMARY KEY);
             CREATE TABLE inventory_transactions(id INTEGER PRIMARY KEY, quantity INTEGER);
             CREATE TABLE day_closing(id INTEGER PRIMARY KEY, business_date TEXT);
+            CREATE TABLE customers(id INTEGER PRIMARY KEY, name TEXT);
+            CREATE TABLE stock_movements(id INTEGER PRIMARY KEY, movement_no TEXT);
+            CREATE TABLE stock_movement_lines(id INTEGER PRIMARY KEY, movement_id INTEGER);
+            CREATE TABLE expenses(id INTEGER PRIMARY KEY, expense_date TEXT);
+            CREATE TABLE stores(id INTEGER PRIMARY KEY, store_code TEXT UNIQUE, store_name TEXT,
+                status TEXT, created_at TEXT, updated_at TEXT);
+            CREATE TABLE store_context(id INTEGER PRIMARY KEY CHECK(id=1), current_store_id INTEGER REFERENCES stores(id));
             CREATE TABLE klbs_schema_metadata(id INTEGER PRIMARY KEY CHECK(id=1), schema_version INTEGER NOT NULL);
             CREATE TABLE returns(id INTEGER PRIMARY KEY, original_bill_no TEXT, accounting_status TEXT,
                 business_date TEXT, accounting_snapshot_version INTEGER);
@@ -42,13 +49,20 @@ async function testMigrationAndConstraints() {
             CREATE TABLE return_items(id INTEGER PRIMARY KEY, return_id INTEGER,
                 original_bill_item_id INTEGER, quantity INTEGER);
             INSERT INTO klbs_schema_metadata VALUES (1,7);
+            INSERT INTO stores VALUES (1,'KL001','Kaira Luxe','ACTIVE','2026-01-01','2026-01-01');
+            INSERT INTO store_context VALUES (1,1);
             INSERT INTO returns VALUES (1,'OLD-BILL','COMPLETED','2026-10-01',1);
             INSERT INTO bill_items VALUES (11,'OLD-BILL','KL',10000,'CAPTURED','PRODUCT_MASTER','SALE_TIME_COST_PRICE_PAISE');
             INSERT INTO return_items VALUES (21,1,11,1);
         `);
-        await prepareDatabaseSchema({ database: db, currentVersion: 8, runCurrentMigrations: async () => {} });
-        assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 8);
-        assert.strictEqual(await readSchemaVersion(db), 8);
+        await prepareDatabaseSchema({ database: db, runCurrentMigrations: async () => {} });
+        assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 9);
+        assert.strictEqual(await readSchemaVersion(db), 9);
+        assert.strictEqual(Number((await get(db, `SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table'
+            AND name IN ('management_accounting_entries','management_accounting_entry_sequences')`)).count), 2,
+        "the isolated V7 fixture completes the real V8 and V9 migration chain");
+        assert.strictEqual(Number((await get(db, "SELECT COUNT(*) AS count FROM management_accounting_entries")).count), 0,
+            "schema migration creates no synthetic management accounting entries");
         assert.deepStrictEqual(await get(db, "SELECT return_cost_basis_status, return_unit_cost_paise, return_cost_paise FROM return_items WHERE id=21"), {
             return_cost_basis_status: "UNKNOWN", return_unit_cost_paise: null, return_cost_paise: null
         }, "legacy return rows remain UNKNOWN without any backfill");
@@ -296,7 +310,7 @@ async function testReturnFlow() {
 async function main() {
     await testMigrationAndConstraints();
     await testReturnFlow();
-    console.log("PASS V21-05A V7→V8 migration, captured/unknown/not-applicable cost states, integer partial reversal, multi-line returns, source cost immutability, return-date/segment query, atomic rollback, legacy UNKNOWN, row immutability, unchanged return values/Store Credit/inventory, and one-return-per-bill rule");
+    console.log("PASS V21-05A V7→V9 migration path (including V8 Return COGS), captured/unknown/not-applicable cost states, integer partial reversal, multi-line returns, source cost immutability, return-date/segment query, atomic rollback, legacy UNKNOWN, row immutability, unchanged return values/Store Credit/inventory, and one-return-per-bill rule");
 }
 
 main().catch(error => {

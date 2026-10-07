@@ -5,6 +5,7 @@ const { EXPENSE_HEADERS } = require("./expenseTrackerService");
 const { createReturnCogsService } = require("./returnCogsService");
 const { getBusinessDate } = require("./businessDate");
 const { parseDate, comparisonPeriod, getFinancialYearStart, monthRange } = require("./managementPnlPeriods");
+const { createManagementAccountingEntryService } = require("./managementAccountingEntryService");
 
 const CATEGORY_GROUPS = Object.freeze([
     { name: "Employee Costs", categories: ["Salary & Wages", "Staff Welfare"] },
@@ -25,6 +26,19 @@ function safeAdd(left, right, label) {
     const result = left + right;
     if (!Number.isSafeInteger(result)) throw new Error(`Management P&L ${label} exceeds safe integer-paise limits.`);
     return result;
+}
+
+function invalidateProfitability(summary, reason) {
+    if (!summary?.profitability) return;
+    summary.profitability.available = false;
+    summary.profitability.unavailableReason = reason;
+    for (const key of ["interestIncomePaise", "otherNonOperatingIncomePaise", "financeCostsPaise", "depreciationPaise",
+        "amortisationPaise", "otherNonOperatingExpensePaise", "exceptionalIncomePaise", "exceptionalExpensePaise",
+        "exceptionalAdjustmentPaise", "incomeTaxProvisionPaise", "ebitdaPaise", "ebitdaMarginPercent", "ebitaPaise",
+        "ebitaMarginPercent", "ebitPaise", "ebitMarginPercent", "totalOtherIncomePaise", "pbtPaise", "pbtMarginPercent",
+        "patPaise", "netProfitMarginPercent"]) {
+        summary.profitability[key] = null;
+    }
 }
 
 function moneyPaise(value, label, warnings, context = {}) {
@@ -177,6 +191,7 @@ function createManagementPnlService(database, options = {}) {
     const getCurrentStore = options.getCurrentStore || (() => require("./storeIdentityService").getCurrentStore());
     const returnCogs = options.returnCogsService || createReturnCogsService(database);
     const now = options.now || (() => new Date());
+    const accountingEntries = options.accountingEntryService || createManagementAccountingEntryService(database, { getCurrentStore, now });
 
     async function querySales(period, segment) {
         const params = [period.fromDate, period.toDate];
@@ -273,16 +288,59 @@ function createManagementPnlService(database, options = {}) {
         });
         const expenseRowsPromise = queryExpenses(period, store, segment);
         const expenseBatchIssuesPromise = queryExpenseBatchIssues(period, store, segment);
+        const accountingEntriesPromise = store ? accountingEntries.listEntries({ fromDate: period.fromDate, toDate: period.toDate }) : Promise.resolve([]);
         const unassessedParams = [period.fromDate, period.toDate];
         const unassessedPromise = dbAll(database, `SELECT COUNT(*) AS row_count, COALESCE(SUM(net_reversal),0) AS net_value FROM returns r
             WHERE r.business_date >= ? AND r.business_date <= ?
               AND (r.accounting_status <> 'COMPLETED' OR r.accounting_snapshot_version IS NOT 1
                    OR r.credit_note_no IS NULL OR TRIM(r.credit_note_no) NOT GLOB 'CN[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]')`, unassessedParams);
-        const [sales, returns, expenseRows, expenseBatchIssues, unassessedRows] = await Promise.all([saleRowsPromise, returnRowsPromise, expenseRowsPromise, expenseBatchIssuesPromise, unassessedPromise]);
+        const [sales, returns, expenseRows, expenseBatchIssues, unassessedRows, accountingEntryRows] = await Promise.all([saleRowsPromise, returnRowsPromise, expenseRowsPromise, expenseBatchIssuesPromise, unassessedPromise, accountingEntriesPromise]);
         const allSales = sales;
         const allReturns = returns;
         const scopedSales = segment === "ALL" ? allSales : allSales.filter(row => row.business_segment === segment);
         const scopedReturns = segment === "ALL" ? allReturns : allReturns.filter(row => row.business_segment === segment);
+
+        const HEAD_KEYS = {
+            INTEREST_INCOME: "interestIncomePaise",
+            OTHER_NON_OPERATING_INCOME: "otherNonOperatingIncomePaise",
+            INTEREST_FINANCE_CHARGES: "financeCostsPaise",
+            DEPRECIATION: "depreciationPaise",
+            AMORTISATION: "amortisationPaise",
+            OTHER_NON_OPERATING_EXPENSE: "otherNonOperatingExpensePaise",
+            INCOME_TAX_PROVISION: "incomeTaxProvisionPaise"
+        };
+        const makeEntryTotals = () => ({ interestIncomePaise: 0, otherNonOperatingIncomePaise: 0,
+            financeCostsPaise: 0, depreciationPaise: 0, amortisationPaise: 0,
+            otherNonOperatingExpensePaise: 0, incomeTaxProvisionPaise: 0,
+            exceptionalIncomePaise: 0, exceptionalExpensePaise: 0,
+            entryCount: 0 });
+        const accounting = { selected: makeEntryTotals(), common: makeEntryTotals(), all: makeEntryTotals(), rows: [] };
+        for (const entry of accountingEntryRows) {
+            if (!['KL', 'MENS', 'KIDS', 'COMMON'].includes(entry.business_segment) || entry.status !== 'POSTED' ||
+                !Number.isSafeInteger(Number(entry.amount_paise)) || Number(entry.amount_paise) <= 0 ||
+                ![-1, 1].includes(Number(entry.accounting_sign))) continue;
+            const sign = Number(entry.accounting_sign);
+            const target = entry.accounting_head === 'EXCEPTIONAL_ADJUSTMENT'
+                ? (entry.adjustment_effect === 'INCOME' ? 'exceptionalIncomePaise' : entry.adjustment_effect === 'EXPENSE' ? 'exceptionalExpensePaise' : null)
+                : HEAD_KEYS[entry.accounting_head];
+            if (!target) continue;
+            const signed = safeAdd(0, Number(entry.amount_paise) * sign, 'management accounting entry');
+            accounting.all[target] = safeAdd(accounting.all[target], signed, 'management accounting entries');
+            accounting.all.entryCount += 1;
+            if (entry.business_segment === 'COMMON') {
+                accounting.common[target] = safeAdd(accounting.common[target], signed, 'COMMON management accounting entries');
+                accounting.common.entryCount += 1;
+            }
+            if (entry.business_segment === segment || segment === 'ALL') {
+                accounting.selected[target] = safeAdd(accounting.selected[target], signed, 'selected management accounting entries');
+                accounting.selected.entryCount += 1;
+            }
+            const naturalSign = entry.accounting_head === 'EXCEPTIONAL_ADJUSTMENT'
+                ? (entry.adjustment_effect === 'INCOME' ? 1 : -1)
+                : ['INTEREST_INCOME', 'OTHER_NON_OPERATING_INCOME'].includes(entry.accounting_head) ? 1 : -1;
+            accounting.rows.push({ ...entry, pnl_effect_paise: safeAdd(0, Number(entry.amount_paise) * sign * naturalSign, 'management accounting P&L effect') });
+        }
+        if (segment === 'ALL') accounting.selected = accounting.all;
 
         const revenue = { grossBillingsInclGstPaise: 0, grossCompatibilityAppliedCount: 0, grossCompatibilityAppliedPaise: 0, discountsInclGstEffectPaise: 0,
             salesTaxableBeforeReturnsPaise: 0, salesGstPaise: 0, salesNetInclGstPaise: 0,
@@ -508,6 +566,53 @@ function createManagementPnlService(database, options = {}) {
             ? coveredGrossProfitPaise - expenses.directOperatingExpensesPaise : null;
         const allOperatingProfitPaise = segment === "ALL" && gpAvailable && expenseSummaryAvailable
             ? coveredGrossProfitPaise - expenses.totalOperatingExpensesPaise : null;
+        const operatingResult = segment === "ALL" ? {
+            operatingProfitAvailable: allOperatingProfitPaise !== null,
+            operatingProfitPaise: allOperatingProfitPaise,
+            operatingMarginPercent: allOperatingProfitPaise === null ? null : percent(allOperatingProfitPaise, revenue.netSalesExGstPaise),
+            unavailableReason: allOperatingProfitPaise !== null ? null : "FULL_GROSS_PROFIT_UNAVAILABLE"
+        } : {
+            segmentDirectOperatingResultAvailable: segmentResultAvailable,
+            segmentDirectOperatingResultPaise: directOperatingResultPaise,
+            segmentDirectOperatingMarginPercent: directOperatingResultPaise === null ? null : percent(directOperatingResultPaise, revenue.netSalesExGstPaise),
+            label: "Operating Result Before COMMON Expenses",
+            commonOperatingExpensesPaise: expenses.commonOperatingExpensesPaise,
+            unavailableReason: segmentResultAvailable ? null : "FULL_SEGMENT_GROSS_PROFIT_UNAVAILABLE"
+        };
+        const baseProfitAvailable = (operatingResult.operatingProfitAvailable === true || operatingResult.segmentDirectOperatingResultAvailable === true) &&
+            expenses.available !== false;
+        const ebitdaPaise = baseProfitAvailable ? safeAdd(coveredGrossProfitPaise, -expectedExpenseTotal, "EBITDA") : null;
+        const ebitaPaise = ebitdaPaise === null ? null : safeAdd(ebitdaPaise, -accounting.selected.depreciationPaise, "EBITA");
+        const ebitPaise = ebitaPaise === null ? null : safeAdd(ebitaPaise, -accounting.selected.amortisationPaise, "EBIT");
+        const totalOtherIncomePaise = safeAdd(accounting.selected.interestIncomePaise, accounting.selected.otherNonOperatingIncomePaise, "other income");
+        const pbtPaise = ebitPaise === null ? null : safeAdd(
+            safeAdd(safeAdd(safeAdd(ebitPaise, totalOtherIncomePaise, "PBT"), -accounting.selected.financeCostsPaise, "PBT"),
+                -accounting.selected.otherNonOperatingExpensePaise, "PBT"),
+            safeAdd(accounting.selected.exceptionalIncomePaise, -accounting.selected.exceptionalExpensePaise, "exceptional adjustment"), "PBT");
+        const patPaise = pbtPaise === null ? null : safeAdd(pbtPaise, -accounting.selected.incomeTaxProvisionPaise, "PAT");
+        const profitability = {
+            available: baseProfitAvailable,
+            ebitdaPaise, ebitdaMarginPercent: ebitdaPaise === null ? null : percent(ebitdaPaise, revenue.netSalesExGstPaise),
+            depreciationPaise: accounting.selected.depreciationPaise,
+            ebitaPaise, ebitaMarginPercent: ebitaPaise === null ? null : percent(ebitaPaise, revenue.netSalesExGstPaise),
+            amortisationPaise: accounting.selected.amortisationPaise,
+            ebitPaise, ebitMarginPercent: ebitPaise === null ? null : percent(ebitPaise, revenue.netSalesExGstPaise),
+            interestIncomePaise: accounting.selected.interestIncomePaise,
+            otherNonOperatingIncomePaise: accounting.selected.otherNonOperatingIncomePaise,
+            totalOtherIncomePaise,
+            financeCostsPaise: accounting.selected.financeCostsPaise,
+            otherNonOperatingExpensePaise: accounting.selected.otherNonOperatingExpensePaise,
+            exceptionalIncomePaise: accounting.selected.exceptionalIncomePaise,
+            exceptionalExpensePaise: accounting.selected.exceptionalExpensePaise,
+            exceptionalAdjustmentPaise: safeAdd(accounting.selected.exceptionalIncomePaise, -accounting.selected.exceptionalExpensePaise, "exceptional adjustment"),
+            pbtPaise, pbtMarginPercent: pbtPaise === null ? null : percent(pbtPaise, revenue.netSalesExGstPaise),
+            incomeTaxProvisionPaise: accounting.selected.incomeTaxProvisionPaise,
+            patPaise, netProfitMarginPercent: patPaise === null ? null : percent(patPaise, revenue.netSalesExGstPaise),
+            unavailableReason: baseProfitAvailable ? null : operatingResult.unavailableReason
+        };
+        if (accounting.selected.entryCount > 0) warnings.push({ code: "MANAGEMENT_ACCOUNTING_ENTRIES_MANUAL", severity: "INFO",
+            message: "Below-operating accounting values are management-entered and may be incomplete.",
+            affectedCount: accounting.selected.entryCount, affectedValuePaise: null });
         return {
             revenue,
             cogs: {
@@ -534,30 +639,10 @@ function createManagementPnlService(database, options = {}) {
                             unknownNetSalesPaise !== 0 || unknownSaleLineCount > 0 || returnsByStatus.UNKNOWN.count > 0 ? "INCOMPLETE_COST_COVERAGE" : !revenue.available ? "REVENUE_SNAPSHOT_INCOMPLETE" : "NO_ELIGIBLE_COST_BASIS")
             },
             expenses,
-            operatingResult: segment === "ALL" ? {
-                operatingProfitAvailable: allOperatingProfitPaise !== null,
-                operatingProfitPaise: allOperatingProfitPaise,
-                operatingMarginPercent: allOperatingProfitPaise === null ? null : percent(allOperatingProfitPaise, revenue.netSalesExGstPaise),
-                unavailableReason: allOperatingProfitPaise !== null ? null : "FULL_GROSS_PROFIT_UNAVAILABLE"
-            } : {
-                segmentDirectOperatingResultAvailable: segmentResultAvailable,
-                segmentDirectOperatingResultPaise: directOperatingResultPaise,
-                segmentDirectOperatingMarginPercent: directOperatingResultPaise === null ? null : percent(directOperatingResultPaise, capturedNetSalesPaise),
-                label: "Operating Result Before COMMON Expenses",
-                commonOperatingExpensesPaise: expenses.commonOperatingExpensesPaise,
-                unavailableReason: segmentResultAvailable ? null : "FULL_SEGMENT_GROSS_PROFIT_UNAVAILABLE"
-            },
-            unsupportedAccountingLines: {
-                otherOperatingIncome: { status: "NOT_TRACKED", amountPaise: null },
-                depreciation: { status: "NOT_TRACKED", amountPaise: null },
-                amortisation: { status: "NOT_TRACKED", amountPaise: null },
-                financeCosts: { status: "NOT_TRACKED", amountPaise: null },
-                otherNonOperatingIncomeExpense: { status: "NOT_TRACKED", amountPaise: null },
-                incomeTax: { status: "NOT_TRACKED", amountPaise: null },
-                deferredTax: { status: "NOT_TRACKED", amountPaise: null },
-                profitBeforeTax: { status: "NOT_AVAILABLE", amountPaise: null },
-                profitAfterTax: { status: "NOT_AVAILABLE", amountPaise: null }
-            },
+            operatingResult,
+            otherAccounting: { available: Boolean(store), selected: accounting.selected, common: accounting.common, entryCount: accounting.selected.entryCount,
+                commonEntryCount: accounting.common.entryCount, rows: accounting.rows },
+            profitability,
             dataQuality: { warnings: compactWarnings(warnings), errorCount: warnings.filter(row => row.severity === "ERROR").length,
                 warningCount: warnings.filter(row => row.severity === "WARNING").length },
             reconciliation
@@ -605,8 +690,10 @@ function createManagementPnlService(database, options = {}) {
                 selected.operatingResult.operatingMarginPercent = null;
                 selected.operatingResult.unavailableReason = "STORE_IDENTITY_UNAVAILABLE";
             }
+            invalidateProfitability(selected, "STORE_IDENTITY_UNAVAILABLE");
         }
         const comparisonResult = comparedPeriod ? await calculatePeriod(comparedPeriod, segment, store) : null;
+        if (storeWarning && comparisonResult) invalidateProfitability(comparisonResult, "STORE_IDENTITY_UNAVAILABLE");
         const variance = comparisonResult ? deriveVariance(selected, comparisonResult) : null;
         return {
             metadata: {
@@ -659,7 +746,9 @@ function createManagementPnlService(database, options = {}) {
             if (range.fromDate > selectedEnd) return { index, label: new Date(Date.UTC(year, monthIndex, 1)).toLocaleString("en", { month: "short", timeZone: "UTC" }), fromDate: range.fromDate, toDate: range.toDate, future: true, result: null };
             const endDate = range.toDate > selectedEnd ? selectedEnd : range.toDate;
             const result = await getManagementPnl({ fromDate: range.fromDate, toDate: endDate, comparison: "NONE", businessSegment: segment });
-            return { index, label: new Date(Date.UTC(year, monthIndex, 1)).toLocaleString("en", { month: "short", timeZone: "UTC" }), fromDate: range.fromDate, toDate: endDate, future: false, result: result.selected };
+            const monthSummary = result.selected;
+            return { index, label: new Date(Date.UTC(year, monthIndex, 1)).toLocaleString("en", { month: "short", timeZone: "UTC" }), fromDate: range.fromDate, toDate: endDate, future: false,
+                result: { ...monthSummary, otherAccounting: { ...monthSummary.otherAccounting, rows: [] } } };
         }));
         const selectedSummary = selectedSummaryResult.selected;
         const comparisonSummary = comparisonSummaryResult.selected;
@@ -728,6 +817,22 @@ function buildFinancialYearVariances(selected, comparison) {
         comparison.operatingResult.operatingMarginPercent ?? comparison.operatingResult.segmentDirectOperatingMarginPercent,
         "HIGHER", true,
         selected.operatingResult.operatingProfitAvailable === true || selected.operatingResult.segmentDirectOperatingResultAvailable === true];
+    const profitFields = [
+        ["ebitda", "ebitdaPaise", "HIGHER", false, true], ["ebitdaMargin", "ebitdaMarginPercent", "HIGHER", true, true],
+        ["depreciation", "depreciationPaise", "LOWER", false, false], ["ebita", "ebitaPaise", "HIGHER", false, true],
+        ["ebitaMargin", "ebitaMarginPercent", "HIGHER", true, true], ["amortisation", "amortisationPaise", "LOWER", false, false],
+        ["ebit", "ebitPaise", "HIGHER", false, true], ["ebitMargin", "ebitMarginPercent", "HIGHER", true, true],
+        ["interestIncome", "interestIncomePaise", "HIGHER", false, false], ["otherIncome", "otherNonOperatingIncomePaise", "HIGHER", false, false],
+        ["totalOtherIncome", "totalOtherIncomePaise", "HIGHER", false, false], ["financeCosts", "financeCostsPaise", "LOWER", false, false],
+        ["totalFinanceCosts", "financeCostsPaise", "LOWER", false, false], ["otherNonOperatingExpense", "otherNonOperatingExpensePaise", "LOWER", false, false],
+        ["exceptionalAdjustment", "exceptionalAdjustmentPaise", "HIGHER", false, false], ["pbt", "pbtPaise", "HIGHER", false, true],
+        ["pbtMargin", "pbtMarginPercent", "HIGHER", true, true], ["taxProvision", "incomeTaxProvisionPaise", "LOWER", false, false],
+        ["pat", "patPaise", "HIGHER", false, true], ["netProfitMargin", "netProfitMarginPercent", "HIGHER", true, true]
+    ];
+    for (const [key, field, favorableWhen, percentagePoint, requiresProfitAvailability] of profitFields) {
+        values[key] = [selected.profitability[field], comparison.profitability[field], favorableWhen, percentagePoint,
+            requiresProfitAvailability ? selected.profitability.available === true && comparison.profitability.available === true : true];
+    }
     for (const group of selected.expenses.managementGroups) {
         const prior = comparison.expenses.managementGroups.find(row => row.name === group.name);
         values[`group:${group.name}`] = [selected.expenses.available === false ? null : group.amountPaise,

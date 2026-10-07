@@ -1,11 +1,15 @@
 "use strict";
 
 const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 const { migrateExpenseTracker } = require("../src/database/expenseTrackerMigration");
 const { migrateReturnCogsReversal } = require("../src/database/returnCogsReversalMigration");
+const { migrateManagementAccountingEntries } = require("../src/database/managementAccountingEntryMigration");
 const { CATEGORY_GROUPS, createManagementPnlService } = require("../src/database/managementPnlService");
 const { resolveManagementPnlPeriod, comparisonPeriod } = require("../src/database/managementPnlPeriods");
+const { createManagementPnlWorkbook, exportManagementPnlFinancialYear, managementPnlFilename } = require("../src/database/managementPnlExcelExporter");
 
 const run = (db, sql, params = []) => new Promise((resolve, reject) => db.run(sql, params, function(error) {
     error ? reject(error) : resolve({ lastID: this.lastID, changes: this.changes });
@@ -42,6 +46,7 @@ async function fixture() {
     await run(db, "INSERT INTO store_context VALUES(1,1)");
     await migrateExpenseTracker(db);
     await migrateReturnCogsReversal(db);
+    await migrateManagementAccountingEntries(db);
     return db;
 }
 
@@ -77,6 +82,20 @@ async function addExpense(db, { date, category, segment, paise, posted = true, s
     await run(db, `INSERT INTO expenses(expense_date,category,business_segment,amount_paise,lifecycle_status,
         expense_code,batch_id,store_id,posted_at) VALUES(?,?,?,?,'ACTIVE',?,?,?,?)`,
     [date, category, segment, paise, expenseCode, batchId, storeId, postedAt]);
+}
+
+async function addAccountingEntry(db, { date, head, segment = "KL", paise, effect = null, code, reversalOf = null, remarks = "golden fixture" }) {
+    const next = Number((await get(db, "SELECT next_sequence FROM management_accounting_entry_sequences WHERE id=1")).next_sequence);
+    if (code) assert.strictEqual(code, `KLPAE${String(next).padStart(6, "0")}`);
+    await run(db, "UPDATE management_accounting_entry_sequences SET next_sequence=? WHERE id=1", [next + 1]);
+    const original = reversalOf ? await get(db, "SELECT id FROM management_accounting_entries WHERE entry_code=?", [reversalOf]) : null;
+    const entryCode = code || `KLPAE${String(next).padStart(6, "0")}`;
+    const stamp = `${date}T12:00:00.000Z`;
+    await run(db, `INSERT INTO management_accounting_entries(entry_code,store_id,accounting_date,accounting_head,business_segment,
+        amount_paise,adjustment_effect,reference_no,remarks,status,created_at,created_by,posted_at,posted_by,source,reverses_entry_id,reversal_reason)
+        VALUES(?,1,?,?,?,?,?,NULL,?,'POSTED',?,'MANAGER',?,'MANAGER','MANUAL',?,?)`,
+    [entryCode, date, head, segment, paise, effect, remarks, stamp, stamp, original?.id || null, reversalOf ? "correction fixture" : null]);
+    return entryCode;
 }
 
 async function main() {
@@ -135,6 +154,26 @@ async function main() {
         await addSale(db, { billNo: "OLDER-FY", date: "2024-09-29", lines: [
             { qty: 1, segment: "KL", gross: 120, discount: 0, taxable: 100, gst: 20, net: 120, unitCostPaise: 3000, status: "CAPTURED", currentCost: 30 }
         ] });
+        await addSale(db, { billNo: "E3-GOLDEN-APR", date: "2026-04-10", lines: [
+            { qty: 1, segment: "KL", gross: 1200, discount: 120, taxable: 900, gst: 180, net: 1080, unitCostPaise: 30000, status: "CAPTURED", currentCost: 300 }
+        ] });
+        for (const [category, paise] of [["Salary & Wages",1000],["Rent",2000],["Electricity",3000],["Marketing & Advertising",4000],
+            ["Packaging",5000],["Stationery & Printing",6000],["Bank & Payment Charges",7000]]) {
+            await addExpense(db, { date: "2026-04-10", category, segment: "KL", paise });
+        }
+        const goldenEntries = [
+            ["INTEREST_INCOME",3000,null],["OTHER_NON_OPERATING_INCOME",1500,null],["INTEREST_FINANCE_CHARGES",2500,null],
+            ["DEPRECIATION",5000,null],["AMORTISATION",2000,null],["OTHER_NON_OPERATING_EXPENSE",1000,null],
+            ["EXCEPTIONAL_ADJUSTMENT",4000,"INCOME"],["EXCEPTIONAL_ADJUSTMENT",1500,"EXPENSE"],["INCOME_TAX_PROVISION",3500,null]
+        ];
+        for (const [head, paise, effect] of goldenEntries) await addAccountingEntry(db, { date: "2026-04-10", head, paise, effect });
+        const depreciationOriginal = await addAccountingEntry(db, { date: "2026-04-20", head: "DEPRECIATION", paise: 1200 });
+        await addAccountingEntry(db, { date: "2026-05-02", head: "DEPRECIATION", segment: "KL", paise: 1200, reversalOf: depreciationOriginal });
+        const exceptionalOriginal = await addAccountingEntry(db, { date: "2026-04-21", head: "EXCEPTIONAL_ADJUSTMENT", paise: 800, effect: "INCOME" });
+        await addAccountingEntry(db, { date: "2026-05-03", head: "EXCEPTIONAL_ADJUSTMENT", paise: 800, effect: "INCOME", reversalOf: exceptionalOriginal });
+        await addAccountingEntry(db, { date: "2026-05-04", head: "INTEREST_INCOME", segment: "COMMON", paise: 200 });
+        await addAccountingEntry(db, { date: "2026-05-04", head: "INTEREST_INCOME", segment: "MENS", paise: 100 });
+        await addAccountingEntry(db, { date: "2025-05-15", head: "DEPRECIATION", paise: 700 });
         await run(db, `INSERT INTO returns(return_no,credit_note_no,original_bill_no,business_date,accounting_status,
             accounting_snapshot_version,gross_reversal,discount_reversal,taxable_reversal,gst_reversal,net_reversal)
             VALUES('RET-1','CN000000001','SEP-1','2026-10-03','COMPLETED',1,60,6,45,9,54)`);
@@ -168,8 +207,8 @@ async function main() {
         assert.strictEqual(sep.selected.cogs.coveredGrossProfitPaise, 5000);
         assert.strictEqual(sep.selected.cogs.fullGrossProfitAvailable, false);
         assert.strictEqual(sep.selected.operatingResult.operatingProfitPaise, null);
-        assert.strictEqual(sep.selected.unsupportedAccountingLines.depreciation.status, "NOT_TRACKED");
-        assert.strictEqual(sep.selected.unsupportedAccountingLines.depreciation.amountPaise, null);
+        assert.strictEqual(sep.selected.profitability.depreciationPaise, 0);
+        assert.strictEqual(sep.selected.profitability.pbtPaise, null, "incomplete COGS prevents PBT even when manual heads are zero");
         assert.strictEqual(sep.selected.expenses.totalOperatingExpensesPaise, 3000);
         assert.strictEqual(sep.selected.expenses.commonOperatingExpensesPaise, 2000);
         assert.strictEqual(sep.selected.expenses.categories.length, 20);
@@ -223,8 +262,134 @@ async function main() {
         assert.strictEqual(noRows.selected.cogs.fullGrossMarginPercent, null);
         assert.strictEqual(noRows.selected.operatingResult.operatingMarginPercent, null);
 
+        const golden = await service.getManagementPnl({ fromDate: "2026-04-01", toDate: "2026-04-30", businessSegment: "ALL" });
+        const g = golden.selected;
+        assert.strictEqual(g.revenue.netSalesExGstPaise, 90000);
+        assert.strictEqual(g.cogs.netCapturedCogsPaise, 30000);
+        assert.strictEqual(g.cogs.fullGrossProfitPaise, 60000);
+        assert.strictEqual(g.cogs.fullGrossMarginPercent, 60000 * 100 / 90000);
+        assert.strictEqual(g.expenses.totalOperatingExpensesPaise, 28000);
+        assert.deepStrictEqual(g.expenses.managementGroups.map(group => group.amountPaise), [1000, 2000, 3000, 4000, 5000, 6000, 7000]);
+        assert.strictEqual(g.profitability.ebitdaPaise, 32000);
+        assert.strictEqual(g.profitability.ebitdaMarginPercent, 32000 * 100 / 90000);
+        assert.strictEqual(g.profitability.depreciationPaise, 6200);
+        assert.strictEqual(g.profitability.ebitaPaise, 25800);
+        assert.strictEqual(g.profitability.ebitaMarginPercent, 25800 * 100 / 90000);
+        assert.strictEqual(g.profitability.amortisationPaise, 2000);
+        assert.strictEqual(g.profitability.ebitPaise, 23800);
+        assert.strictEqual(g.profitability.ebitdaPaise, g.operatingResult.operatingProfitPaise, "EBITDA reconciles to the established gross-profit-less-OPEX result");
+        assert.strictEqual(g.profitability.ebitMarginPercent, 23800 * 100 / 90000);
+        assert.strictEqual(g.profitability.interestIncomePaise, 3000);
+        assert.strictEqual(g.profitability.otherNonOperatingIncomePaise, 1500);
+        assert.strictEqual(g.profitability.totalOtherIncomePaise, 4500);
+        assert.strictEqual(g.profitability.financeCostsPaise, 2500);
+        assert.strictEqual(g.profitability.otherNonOperatingExpensePaise, 1000);
+        assert.strictEqual(g.profitability.exceptionalAdjustmentPaise, 3300);
+        assert.strictEqual(g.profitability.pbtPaise, 28100);
+        assert.strictEqual(g.profitability.pbtMarginPercent, 28100 * 100 / 90000);
+        assert.strictEqual(g.profitability.incomeTaxProvisionPaise, 3500);
+        assert.strictEqual(g.profitability.patPaise, 24600);
+        assert.strictEqual(g.profitability.netProfitMarginPercent, 24600 * 100 / 90000);
+        const may = await service.getManagementPnl({ fromDate: "2026-05-01", toDate: "2026-05-31", businessSegment: "ALL" });
+        assert.strictEqual(may.selected.profitability.depreciationPaise, -1200, "reversal is reported on its own accounting date");
+        assert.strictEqual(may.selected.profitability.exceptionalAdjustmentPaise, -800, "exceptional reversal offsets on its accounting date");
+        assert.strictEqual(may.selected.profitability.interestIncomePaise, 300, "ALL includes direct and COMMON accounting entries");
+        const mensMay = await service.getManagementPnl({ fromDate: "2026-05-01", toDate: "2026-05-31", businessSegment: "MENS" });
+        assert.strictEqual(mensMay.selected.profitability.interestIncomePaise, 100, "segment result includes direct entries only");
+        assert.strictEqual(mensMay.selected.otherAccounting.common.interestIncomePaise, 200, "COMMON stays separately disclosed and unallocated");
+        const klMay = await service.getManagementPnl({ fromDate: "2026-05-01", toDate: "2026-05-31", businessSegment: "KL" });
+        assert.strictEqual(klMay.selected.profitability.interestIncomePaise, 0, "COMMON is not allocated into KL");
+        const goldenFy = await service.getManagementPnlFinancialYear({ financialYearStart: 2026, businessSegment: "ALL" });
+        assert.strictEqual(goldenFy.months[0].result.profitability.patPaise, 24600);
+        assert.strictEqual(goldenFy.months[1].result.profitability.depreciationPaise, -1200);
+        assert.strictEqual(goldenFy.selectedSummary.profitability.patPaise, null, "FY population with UNKNOWN/VVP cost keeps downstream PAT unavailable");
+        assert.strictEqual(goldenFy.selectedSummary.otherAccounting.rows.length, 15);
+        assert.strictEqual(goldenFy.comparisonSummary.profitability.depreciationPaise, 700, "Last FYTD includes management entries by accounting date");
+        assert.strictEqual(goldenFy.varianceByKey.depreciation.amount, 4300);
+        const incompletePnl = await service.getManagementPnl({ fromDate: "2026-09-01", toDate: "2026-09-30", businessSegment: "ALL" });
+        assert.strictEqual(incompletePnl.selected.profitability.available, false);
+        assert.strictEqual(incompletePnl.selected.profitability.ebitdaPaise, null);
+        assert.strictEqual(incompletePnl.selected.profitability.pbtPaise, null);
+        assert.strictEqual(incompletePnl.selected.profitability.patPaise, null);
+        const zeroActivity = await service.getManagementPnl({ fromDate: "2026-06-01", toDate: "2026-06-30", businessSegment: "ALL" });
+        assert.strictEqual(zeroActivity.selected.profitability.interestIncomePaise, 0);
+        assert.strictEqual(zeroActivity.selected.profitability.depreciationPaise, 0);
+        assert.strictEqual(zeroActivity.selected.profitability.patPaise, 0, "a zero-activity month with no manual entries is a valid zero result");
+        assert.strictEqual(zeroActivity.selected.profitability.netProfitMarginPercent, null, "zero Net Sales has no margin denominator");
+        const march = await service.getManagementPnl({ fromDate: "2026-03-01", toDate: "2026-03-31", businessSegment: "ALL" });
+        assert.strictEqual(march.selected.profitability.patPaise, 0, "March remains in the prior Indian FY");
+        assert.strictEqual(goldenFy.metadata.comparisonFromDate, "2025-04-01", "April starts the next FY and its comparable period uses the preceding FY");
+        const reinitialized = createManagementPnlService(db, {
+            getCurrentStore: async () => ({ id: 1, storeCode: "KL001", storeName: "Kaira Luxe", status: "ACTIVE" }), now: fixedNow
+        });
+        assert.deepStrictEqual((await reinitialized.getManagementPnl({ fromDate: "2026-04-01", toDate: "2026-04-30" })).selected, g,
+            "reinitializing the service against the same persisted facts is deterministic");
+        const workbook = await createManagementPnlWorkbook(goldenFy, { version: "2.0.0", schemaVersion: 9 });
+        const pnlSheet = workbook.getWorksheet("Management P&L");
+        const findRow = label => {
+            for (let row = 9; row <= pnlSheet.rowCount; row += 1) if (pnlSheet.getCell(row, 1).value === label) return row;
+            throw new Error(`Workbook row missing: ${label}`);
+        };
+        const excelSourceChecks = [
+            ["Gross Billings (incl. GST)", g.revenue.grossBillingsInclGstPaise], ["Less: Discounts", g.revenue.discountsInclGstEffectPaise],
+            ["Less: Sales Returns", g.revenue.completedReturnNetReversalPaise], ["Less: Net GST", g.revenue.netGstOnSalesPaise],
+            ["Captured Sale COGS", g.cogs.capturedSaleCogsPaise], ["Less: Return COGS Reversal", g.cogs.capturedReturnCogsReversalPaise],
+            ["Captured-cost Net Sales", g.cogs.capturedNetSalesPaise], ["Unknown-cost Net Sales", g.cogs.unknownNetSalesPaise],
+            ["VVP / Cost Pending Net Sales", g.cogs.notApplicableNetSalesPaise],
+            ["Depreciation", g.profitability.depreciationPaise],
+            ["Amortisation", g.profitability.amortisationPaise], ["Interest Income", g.profitability.interestIncomePaise],
+            ["Other Non-Operating Income", g.profitability.otherNonOperatingIncomePaise],
+            ["Interest / Finance Charges", g.profitability.financeCostsPaise],
+            ["Other Non-Operating Expense", g.profitability.otherNonOperatingExpensePaise],
+            ["Exceptional / Adjustment Items", g.profitability.exceptionalAdjustmentPaise],
+            ["Income Tax / Tax Provision", g.profitability.incomeTaxProvisionPaise]
+        ];
+        for (const [label, paise] of excelSourceChecks) {
+            assert.strictEqual(pnlSheet.getCell(`B${findRow(label)}`).value, paise / 100,
+                `Excel April source value for ${label} reconciles to central engine paise`);
+        }
+        assert.strictEqual(g.expenses.totalOperatingExpensesPaise, 28000);
+        for (const [index, group] of g.expenses.managementGroups.entries()) {
+            const groupRow = findRow(group.name);
+            assert.match(pnlSheet.getCell(`B${groupRow}`).value.formula, /SUM\(B\d+:B\d+\)/,
+                `Excel ${group.name} subtotal is a formula over underlying categories`);
+            assert.strictEqual(group.amountPaise, [1000, 2000, 3000, 4000, 5000, 6000, 7000][index]);
+        }
+        assert.match(pnlSheet.getCell(`B${findRow("TOTAL OPERATING EXPENSES")}`).value.formula, /SUM\(/,
+            "Excel total OPEX is a formula over the seven management groups");
+        assert.strictEqual(g.profitability.ebitdaPaise, 32000);
+        assert.strictEqual(g.profitability.ebitaPaise, 25800);
+        assert.strictEqual(g.profitability.ebitPaise, 23800);
+        assert.strictEqual(g.profitability.pbtPaise, 28100);
+        assert.strictEqual(g.profitability.patPaise, 24600);
+        assert.strictEqual(pnlSheet.getCell(`O${findRow("Depreciation")}`).value, goldenFy.comparisonSummary.profitability.depreciationPaise / 100,
+            "Last FYTD depreciation input reconciles to the central comparison summary");
+        assert.match(pnlSheet.getCell(`N${findRow("NET SALES (EXCL. GST)")}`).value.formula, /COUNT\(N\d+,N\d+,N\d+,N\d+\)=4/);
+        assert.match(pnlSheet.getCell(`P${findRow("NET SALES (EXCL. GST)")}`).value.formula, /N\d+-O\d+/);
+        assert.match(pnlSheet.getCell(`Q${findRow("NET SALES (EXCL. GST)")}`).value.formula, /O\d+=0/);
+        assert.match(pnlSheet.getCell(`B${findRow("EBITDA")}`).value.formula, /COGS Coverage/);
+        assert.match(pnlSheet.getCell(`B${findRow("EBITA")}`).value.formula, /COGS Coverage/);
+        assert.match(pnlSheet.getCell(`B${findRow("EBIT / OPERATING PROFIT")}`).value.formula, /COGS Coverage/);
+        assert.match(pnlSheet.getCell(`B${findRow("PBT")}`).value.formula, /COGS Coverage/);
+        assert.match(pnlSheet.getCell(`B${findRow("PAT / NET PROFIT")}`).value.formula, /COGS Coverage/);
+        assert.match(pnlSheet.getCell(`N${findRow("EBITDA")}`).value.formula, /N\d+/);
+        const financeDetailsRow = findRow("Interest / Finance Charges");
+        const financeTotalRow = findRow("TOTAL FINANCE COSTS");
+        assert.strictEqual(pnlSheet.getCell(`B${financeTotalRow}`).value.formula, `B${financeDetailsRow}`,
+            "finance-cost total references its detail row, never itself");
+        assert.match(pnlSheet.getCell(`B${findRow("PBT")}`).value.formula, new RegExp(`B${findRow("EBIT / OPERATING PROFIT")}\\+B${findRow("TOTAL OTHER INCOME")}-B${financeTotalRow}`));
+        const accountingSheet = workbook.getWorksheet("Other Accounting Entries");
+        assert.strictEqual(accountingSheet.getCell("A9").value, "KLPAE000001");
+        const accountingRow = code => {
+            for (let row = 9; row <= accountingSheet.rowCount; row += 1) if (accountingSheet.getCell(row, 1).value === code) return row;
+            throw new Error(`Accounting workbook row missing: ${code}`);
+        };
+        assert.strictEqual(accountingSheet.getCell(`J${accountingRow("KLPAE000011")}`).value, "REVERSAL");
+        assert.strictEqual(accountingSheet.getCell(`K${accountingRow("KLPAE000011")}`).value, "KLPAE000010");
+        assert.strictEqual(accountingSheet.getCell(`L${accountingRow("KLPAE000010")}`).value, "KLPAE000011");
+
         await run(db, "DROP TRIGGER trg_expense_batches_immutable");
-        await run(db, "UPDATE expense_batches SET total_amount_paise=total_amount_paise+1 WHERE batch_code='KLEXPB000003'");
+        await run(db, "UPDATE expense_batches SET total_amount_paise=total_amount_paise+1 WHERE id=(SELECT batch_id FROM expenses WHERE expense_date='2026-10-01' AND category='Electricity')");
         const invalidExpenseBatch = await service.getManagementPnl({ fromDate: "2026-10-01", toDate: "2026-10-31" });
         assert(invalidExpenseBatch.selected.dataQuality.warnings.some(row => row.code === "EXPENSE_POSTED_BATCH_INVALID"));
         assert.strictEqual(invalidExpenseBatch.selected.operatingResult.operatingProfitAvailable, false);
@@ -236,12 +401,15 @@ async function main() {
         assert(missingStore.selected.dataQuality.warnings.some(row => row.code === "STORE_IDENTITY_UNAVAILABLE"));
         assert.strictEqual(missingStore.selected.expenses.totalOperatingExpensesPaise, null);
         assert.strictEqual(missingStore.selected.operatingResult.operatingProfitAvailable, false);
+        assert.strictEqual(missingStore.selected.profitability.available, false);
+        assert.strictEqual(missingStore.selected.profitability.patPaise, null);
+        assert.strictEqual(missingStore.selected.profitability.depreciationPaise, null);
 
-        await run(db, "UPDATE expense_batches SET total_amount_paise=total_amount_paise-1 WHERE batch_code='KLEXPB000003'");
+        await run(db, "UPDATE expense_batches SET total_amount_paise=total_amount_paise-1 WHERE id=(SELECT batch_id FROM expenses WHERE expense_date='2026-10-01' AND category='Electricity')");
         const beforeFyCounts = await get(db, "SELECT (SELECT COUNT(*) FROM bills) bills,(SELECT COUNT(*) FROM expenses) expenses,(SELECT COUNT(*) FROM returns) returns");
         const fy = await service.getManagementPnlFinancialYear({ financialYearStart: 2026, businessSegment: "ALL" });
-        assert.strictEqual(fy.postedExpenseDetails.totalCount, 3, "FY export detail source includes posted current-Store expenses only");
-        assert.strictEqual(fy.postedExpenseDetails.totalAmountPaise, 3250, "FY export detail amount reconciles to posted expense totals");
+        assert.strictEqual(fy.postedExpenseDetails.totalCount, 10, "FY export detail source includes posted current-Store expenses only");
+        assert.strictEqual(fy.postedExpenseDetails.totalAmountPaise, 31250, "FY export detail amount reconciles to posted expense totals");
         assert(fy.postedExpenseDetails.rows.every(row => row.management_group), "posted export rows carry the approved management group");
         assert.deepStrictEqual(fy.months.map(row => row.label), ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"]);
         assert.strictEqual(fy.metadata.financialYearLabel, "FY 2026-27");
@@ -351,6 +519,16 @@ async function main() {
 
         await assert.rejects(() => service.getManagementPnl({ fromDate: "2026-10-30", toDate: "2026-10-01" }), /must not be after/);
         await assert.rejects(() => service.getManagementPnl({ fromDate: "2026-10-01", toDate: "2026-10-31", businessSegment: "COMMON" }), /Select ALL/);
+
+        if (process.env.KLBS_E3_OWNER_RETEST_DIR) {
+            const outputDirectory = path.resolve(process.env.KLBS_E3_OWNER_RETEST_DIR);
+            fs.mkdirSync(outputDirectory, { recursive: true });
+            const filename = managementPnlFilename(goldenFy.metadata.store.storeCode, goldenFy.metadata.financialYearLabel, goldenFy.metadata.asOfDate);
+            const outputPath = path.join(outputDirectory, filename);
+            const exported = await exportManagementPnlFinancialYear(goldenFy, outputPath, { version: "2.0.0", schemaVersion: 9 });
+            assert.strictEqual(exported.success, true);
+            console.log(`OWNER RETEST WORKBOOK ${exported.filePath}`);
+        }
     } finally {
         await close(db);
     }

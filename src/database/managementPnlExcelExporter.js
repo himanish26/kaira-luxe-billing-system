@@ -31,6 +31,7 @@ function summaryAmount(summary, key) {
     const cogs = summary.cogs;
     const expenses = summary.expenses;
     const operating = summary.operatingResult;
+    const profit = summary.profitability || {};
     const values = {
         gross: revenue.available === false ? null : revenue.grossBillingsInclGstPaise,
         discounts: revenue.available === false ? null : revenue.discountsInclGstEffectPaise,
@@ -48,7 +49,17 @@ function summaryAmount(summary, key) {
         operatingProfit: operating.operatingProfitAvailable === true ? operating.operatingProfitPaise :
             operating.segmentDirectOperatingResultAvailable === true ? operating.segmentDirectOperatingResultPaise : null,
         operatingMargin: operating.operatingProfitAvailable === true ? operating.operatingMarginPercent :
-            operating.segmentDirectOperatingResultAvailable === true ? operating.segmentDirectOperatingMarginPercent : null
+            operating.segmentDirectOperatingResultAvailable === true ? operating.segmentDirectOperatingMarginPercent : null,
+        ebitda: profit.ebitdaPaise, ebitdaMargin: profit.ebitdaMarginPercent,
+        depreciation: profit.depreciationPaise, ebita: profit.ebitaPaise, ebitaMargin: profit.ebitaMarginPercent,
+        amortisation: profit.amortisationPaise, ebit: profit.ebitPaise, ebitMargin: profit.ebitMarginPercent,
+        interestIncome: profit.interestIncomePaise, otherNonOperatingIncome: profit.otherNonOperatingIncomePaise,
+        totalOtherIncome: profit.totalOtherIncomePaise, financeCosts: profit.financeCostsPaise,
+        totalFinanceCosts: profit.financeCostsPaise,
+        otherNonOperatingExpense: profit.otherNonOperatingExpensePaise,
+        exceptionalAdjustment: profit.exceptionalAdjustmentPaise, pbt: profit.pbtPaise,
+        pbtMargin: profit.pbtMarginPercent, taxProvision: profit.incomeTaxProvisionPaise,
+        pat: profit.patPaise, netProfitMargin: profit.netProfitMarginPercent
     };
     values.netSales = revenue.available === false ? null : revenue.netSalesExGstPaise;
     values.netCogs = cogs.netCapturedCogsPaise;
@@ -156,9 +167,33 @@ function buildStatementDescriptors(segment) {
     addLine("TOTAL OPERATING EXPENSES", "totalExpenses", "expenseTotal", "LOWER").total = true;
     // COMMON is shown separately for selected segment reports and included in ALL totals.
     if (segment !== "ALL") addLine("COMMON EXPENSES — NOT ALLOCATED", "commonExpenses", "money", "LOWER");
-    addSection("OPERATING RESULT");
-    addLine("OPERATING PROFIT", "operatingProfit", "operatingProfit", "HIGHER").total = true;
-    addLine("OPERATING MARGIN", "operatingMargin", "operatingMargin", "HIGHER").total = true;
+    addLine("EBITDA", "ebitda", "ebitda", "HIGHER").total = true;
+    addLine("EBITDA MARGIN %", "ebitdaMargin", "profitMargin", "HIGHER").total = true;
+    addSection("DEPRECIATION & AMORTISATION");
+    addLine("Depreciation", "depreciation", "money", "LOWER");
+    addLine("EBITA", "ebita", "ebita", "HIGHER").total = true;
+    addLine("EBITA MARGIN %", "ebitaMargin", "profitMargin", "HIGHER").total = true;
+    addLine("Amortisation", "amortisation", "money", "LOWER");
+    addLine("EBIT / OPERATING PROFIT", "ebit", "ebit", "HIGHER").total = true;
+    addLine("EBIT / OPERATING PROFIT MARGIN %", "ebitMargin", "profitMargin", "HIGHER").total = true;
+    addSection("OTHER INCOME");
+    addLine("Interest Income", "interestIncome", "money", "HIGHER");
+    addLine("Other Non-Operating Income", "otherNonOperatingIncome", "money", "HIGHER");
+    addLine("TOTAL OTHER INCOME", "totalOtherIncome", "totalOtherIncome", "HIGHER").total = true;
+    addSection("FINANCE COSTS");
+    addLine("Interest / Finance Charges", "financeCosts", "money", "LOWER");
+    addLine("TOTAL FINANCE COSTS", "totalFinanceCosts", "totalFinanceCosts", "LOWER").total = true;
+    addSection("OTHER NON-OPERATING ITEMS");
+    addLine("Other Non-Operating Expense", "otherNonOperatingExpense", "money", "LOWER");
+    addLine("Exceptional / Adjustment Items", "exceptionalAdjustment", "money", "HIGHER");
+    addSection("PROFIT BEFORE TAX");
+    addLine("PBT", "pbt", "pbt", "HIGHER").total = true;
+    addLine("PBT MARGIN %", "pbtMargin", "profitMargin", "HIGHER").total = true;
+    addSection("TAX");
+    addLine("Income Tax / Tax Provision", "taxProvision", "money", "LOWER");
+    addSection("PROFIT AFTER TAX");
+    addLine("PAT / NET PROFIT", "pat", "pat", "HIGHER").total = true;
+    addLine("NET PROFIT MARGIN %", "netProfitMargin", "profitMargin", "HIGHER").total = true;
     return rows;
 }
 
@@ -169,7 +204,7 @@ function ref(column, row, sheetName) {
 }
 
 function styleAmountCell(cell, kind) {
-    if (kind === "coverage" || kind === "margin" || kind === "operatingMargin") cell.numFmt = PERCENT_FORMAT;
+    if (kind === "coverage" || kind === "margin" || kind === "operatingMargin" || kind === "profitMargin") cell.numFmt = PERCENT_FORMAT;
     else if (kind === "variancePercent") cell.numFmt = VARIANCE_PERCENT_FORMAT;
     else if (kind !== "profit" && kind !== "operatingProfit" && kind !== "expenseTotal") cell.numFmt = MONEY_FORMAT;
     else cell.numFmt = MONEY_FORMAT;
@@ -180,7 +215,7 @@ function varianceFormula(sheet, rowNumber, descriptor) {
     const percentCell = sheet.getCell(rowNumber, 17);
     addFormula(amountCell, `IF(AND(ISNUMBER(N${rowNumber}),ISNUMBER(O${rowNumber})),N${rowNumber}-O${rowNumber},"—")`);
     addFormula(percentCell, `IF(OR(NOT(ISNUMBER(N${rowNumber})),NOT(ISNUMBER(O${rowNumber})),O${rowNumber}=0),"—",IFERROR(P${rowNumber}/O${rowNumber},"—"))`);
-    amountCell.numFmt = ["coverage", "margin", "operatingMargin"].includes(descriptor.kind) ? '0.00" pp";[Red](0.00" pp");-' : MONEY_FORMAT;
+    amountCell.numFmt = ["coverage", "margin", "operatingMargin", "profitMargin"].includes(descriptor.kind) ? '0.00" pp";[Red](0.00" pp");-' : MONEY_FORMAT;
     percentCell.numFmt = VARIANCE_PERCENT_FORMAT;
     const colorRule = descriptor.favorable === "NEUTRAL" ? [] : descriptor.favorable === "LOWER"
         ? [{ type: "cellIs", operator: "lessThan", formulae: ["0"], style: { font: { color: { argb: GREEN }, bold: true } } },
@@ -196,6 +231,21 @@ function varianceFormula(sheet, rowNumber, descriptor) {
     }
 }
 
+function profitFormula(kind, column, rows) {
+    const ref = key => `${column}${rows.get(key)}`;
+    const available = `'COGS Coverage'!${column}${COGS_ROWS.operatingAvailable}="AVAILABLE"`;
+    if (kind === "ebitda") return `IF(AND(${available},ISNUMBER(${ref("grossProfit")}),ISNUMBER(${ref("totalExpenses")})),${ref("grossProfit")}-${ref("totalExpenses")},"N/A")`;
+    if (kind === "ebita") return `IF(AND(${available},ISNUMBER(${ref("ebitda")}),ISNUMBER(${ref("depreciation")})),${ref("ebitda")}-${ref("depreciation")},"N/A")`;
+    if (kind === "ebit") return `IF(AND(${available},ISNUMBER(${ref("ebita")}),ISNUMBER(${ref("amortisation")})),${ref("ebita")}-${ref("amortisation")},"N/A")`;
+    if (kind === "totalOtherIncome") return `SUM(${ref("interestIncome")},${ref("otherNonOperatingIncome")})`;
+    if (kind === "totalFinanceCosts") return `=${ref("financeCosts")}`.slice(1);
+    if (kind === "pbt") return `IF(AND(${available},ISNUMBER(${ref("ebit")})),${ref("ebit")}+${ref("totalOtherIncome")}-${ref("totalFinanceCosts")}-${ref("otherNonOperatingExpense")}+${ref("exceptionalAdjustment")},"N/A")`;
+    if (kind === "pat") return `IF(AND(${available},ISNUMBER(${ref("pbt")}),ISNUMBER(${ref("taxProvision")})),${ref("pbt")}-${ref("taxProvision")},"N/A")`;
+    const numerator = ({ ebitdaMargin: "ebitda", ebitaMargin: "ebita", ebitMargin: "ebit", pbtMargin: "pbt", netProfitMargin: "pat" })[kind];
+    if (numerator) return `IF(AND(${available},ISNUMBER(${ref(numerator)}),ISNUMBER(${ref("netSales")})),IFERROR(${ref(numerator)}/${ref("netSales")}*100,"N/A"),"N/A")`;
+    return null;
+}
+
 function buildManagementSheet(workbook, result, version, schemaVersion) {
     const sheet = workbook.addWorksheet("Management P&L");
     const headerRow = setMetadata(sheet, result, version, schemaVersion, `MANAGEMENT P&L · ${result.metadata.financialYearLabel}`);
@@ -209,7 +259,11 @@ function buildManagementSheet(workbook, result, version, schemaVersion) {
     let rowCursor = headerRow + 1;
     for (const descriptor of descriptors) {
         if (descriptor.type === "section") rowCursor += 1;
-        else { rows.set(descriptor.key, rowCursor); rowCursor += 1; }
+        else {
+            if (rows.has(descriptor.key)) throw new Error(`Duplicate Management P&L workbook row key: ${descriptor.key}`);
+            rows.set(descriptor.key, rowCursor);
+            rowCursor += 1;
+        }
     }
     const availability = result.months.map(month => month.future ? "FUTURE" : month.result.cogs.fullGrossProfitAvailable ? "AVAILABLE" : "UNAVAILABLE");
     const reachedMonths = result.months.filter(month => !month.future).length;
@@ -257,6 +311,9 @@ function buildManagementSheet(workbook, result, version, schemaVersion) {
             } else if (descriptor.kind === "expenseTotal") {
                 const groupKeys = CATEGORY_GROUPS.map(([name]) => `group:${name}`);
                 addFormula(cell, `IF('COGS Coverage'!${letter}${COGS_ROWS.expensesAvailable}="AVAILABLE",SUM(${groupKeys.map(key => `${letter}${rows.get(key)}`).join(",")}),"N/A")`);
+            } else if (["ebitda", "ebita", "ebit", "totalOtherIncome", "totalFinanceCosts", "pbt", "pat", "profitMargin"].includes(descriptor.kind)) {
+                const kind = descriptor.kind === "profitMargin" ? descriptor.key : descriptor.kind;
+                addFormula(cell, profitFormula(kind, letter, rows));
             } else if (descriptor.kind === "operatingProfit") {
                 addFormula(cell, `IF('COGS Coverage'!${letter}${COGS_ROWS.operatingAvailable}="AVAILABLE",${letter}${rows.get("grossProfit")}-${letter}${rows.get("totalExpenses")},"N/A")`);
             } else if (descriptor.kind === "operatingMargin") {
@@ -291,6 +348,9 @@ function buildManagementSheet(workbook, result, version, schemaVersion) {
             addFormula(currentCell, `IF('COGS Coverage'!N${COGS_ROWS.grossProfitAvailable}="AVAILABLE",N${rows.get("netSales")}-N${rows.get("netCogs")},"N/A")`);
         } else if (descriptor.kind === "margin") {
             addFormula(currentCell, `IF(ISNUMBER(N${rows.get("grossProfit")}),IFERROR(N${rows.get("grossProfit")}/N${rows.get("netSales")}*100,"N/A"),"N/A")`);
+        } else if (["ebitda", "ebita", "ebit", "totalOtherIncome", "totalFinanceCosts", "pbt", "pat", "profitMargin"].includes(descriptor.kind)) {
+            const kind = descriptor.kind === "profitMargin" ? descriptor.key : descriptor.kind;
+            addFormula(currentCell, profitFormula(kind, "N", rows));
         } else if (descriptor.kind === "operatingProfit") {
             addFormula(currentCell, `IF('COGS Coverage'!N${COGS_ROWS.operatingAvailable}="AVAILABLE",N${rows.get("grossProfit")}-N${rows.get("totalExpenses")},"N/A")`);
         } else if (descriptor.kind === "operatingMargin") {
@@ -310,6 +370,12 @@ function buildManagementSheet(workbook, result, version, schemaVersion) {
             priorCell.value = prior;
         }
         styleAmountCell(priorCell, descriptor.kind);
+        if (descriptor.kind === "coverage" || descriptor.kind === "profitMargin") {
+            if (descriptor.kind === "profitMargin") {
+                const priorPercentage = summaryAmount(result.comparisonSummary, descriptor.key);
+                priorCell.value = priorPercentage === null || priorPercentage === undefined ? "N/A" : priorPercentage;
+            }
+        }
         if (descriptor.kind === "coverage") {
             const captured = amount(result.comparisonSummary.cogs.capturedNetSalesPaise);
             const unknown = amount(result.comparisonSummary.cogs.unknownNetSalesPaise);
@@ -340,9 +406,9 @@ function buildManagementSheet(workbook, result, version, schemaVersion) {
 
 const COGS_ROWS = { grossProfitAvailable: 0, operatingAvailable: 0, expensesAvailable: 0 };
 
-function buildBridgeSheet(workbook, result) {
+function buildBridgeSheet(workbook, result, version, schemaVersion) {
     const sheet = workbook.addWorksheet("Sales & GST Bridge");
-    setMetadata(sheet, result, "", "", "SALES & GST BRIDGE");
+    setMetadata(sheet, result, version, schemaVersion, "SALES & GST BRIDGE");
     const headers = ["Particular", ...MONTH_NAMES, result.metadata.activeFinancialYear ? "FYTD" : "FY TOTAL", result.metadata.activeFinancialYear ? "Last FYTD" : "Last FY"];
     sheet.getRow(8).values = headers;
     setHeader(sheet.getRow(8));
@@ -378,9 +444,9 @@ function buildBridgeSheet(workbook, result) {
     return sheet;
 }
 
-function buildCogsSheet(workbook, result) {
+function buildCogsSheet(workbook, result, version, schemaVersion) {
     const sheet = workbook.addWorksheet("COGS Coverage");
-    setMetadata(sheet, result, "", "", "COGS COVERAGE");
+    setMetadata(sheet, result, version, schemaVersion, "COGS COVERAGE");
     sheet.getRow(8).values = ["Particular", ...MONTH_NAMES, result.metadata.activeFinancialYear ? "FYTD" : "FY TOTAL", result.metadata.activeFinancialYear ? "Last FYTD" : "Last FY"];
     setHeader(sheet.getRow(8));
     const rows = [
@@ -393,7 +459,7 @@ function buildCogsSheet(workbook, result) {
         ["Eligible Net Sales", summary => summary.cogs.eligibleNetSalesPaise, "money"],
         ["Cost Coverage", summary => summary.cogs.costCoveragePercent, "percent"],
         ["Gross Profit Availability", summary => summary.cogs.fullGrossProfitAvailable ? "AVAILABLE" : "UNAVAILABLE", "status"],
-        ["Operating Profit Availability", summary => (summary.operatingResult.operatingProfitAvailable === true || summary.operatingResult.segmentDirectOperatingResultAvailable === true) ? "AVAILABLE" : "UNAVAILABLE", "status"],
+        ["Core Profitability Availability", summary => (summary.operatingResult.operatingProfitAvailable === true || summary.operatingResult.segmentDirectOperatingResultAvailable === true) ? "AVAILABLE" : "UNAVAILABLE", "status"],
         ["Posted Expense Availability", summary => summary.expenses.available !== false && summary.reconciliation.expense.reconciles === true ? "AVAILABLE" : "UNAVAILABLE", "status"]
     ];
     const rowIndex = new Map();
@@ -420,7 +486,7 @@ function buildCogsSheet(workbook, result) {
     return rowIndex;
 }
 
-function buildExpenseSheet(workbook, result) {
+function buildExpenseSheet(workbook, result, version, schemaVersion) {
     const sheet = workbook.addWorksheet("Posted Expenses");
     sheet.mergeCells("A1:K1");
     sheet.getCell("A1").value = "POSTED EXPENSES SUPPORTING MANAGEMENT P&L";
@@ -432,6 +498,7 @@ function buildExpenseSheet(workbook, result) {
         ["Period Through", result.metadata.asOfDate], ["Matching Expense Count", result.postedExpenseDetails.totalCount],
         ["Matching Amount", Number(result.postedExpenseDetails.totalAmountPaise || 0) / 100]
     ];
+    writeSupplementalMetadata(sheet, result, version, schemaVersion);
     info.forEach(([label, value], index) => { sheet.getCell(index + 2, 1).value = label; sheet.getCell(index + 2, 1).font = { bold: true, color: { argb: BURGUNDY } }; sheet.getCell(index + 2, 2).value = value; });
     sheet.getCell("B8").numFmt = MONEY_FORMAT;
     sheet.getRow(10).values = ["Expense ID", "Batch ID", "Expense Date", "Expense Header", "Management Group", "Business Segment", "Transaction Type", "Receipt / Reference No.", "Amount", "Remarks", "Posted At"];
@@ -454,7 +521,7 @@ function buildExpenseSheet(workbook, result) {
     return sheet;
 }
 
-function buildQualitySheet(workbook, result) {
+function buildQualitySheet(workbook, result, version, schemaVersion) {
     const sheet = workbook.addWorksheet("Data Quality");
     sheet.getCell("A1").value = "DATA QUALITY & ACCOUNTING COMPLETENESS";
     sheet.getCell("A1").font = { size: 15, bold: true, color: { argb: "FFFFFFFF" } };
@@ -466,6 +533,9 @@ function buildQualitySheet(workbook, result) {
     sheet.getCell("B3").value = result.selectedSummary.cogs.fullGrossProfitAvailable ? "YES" : "NO";
     sheet.getCell("A4").value = "Cost Coverage";
     sheet.getCell("B4").value = result.selectedSummary.cogs.costCoveragePercent === null ? "N/A" : `${result.selectedSummary.cogs.costCoveragePercent.toFixed(2)}%`;
+    sheet.getCell("A5").value = "Management entries";
+    sheet.getCell("B5").value = "Management-entered accounting values; entries may be incomplete.";
+    writeSupplementalMetadata(sheet, result, version, schemaVersion);
     sheet.getRow(6).values = ["Severity", "Code", "Message", "Affected Count", "Affected Value"];
     setHeader(sheet.getRow(6));
     const warnings = result.selectedSummary.dataQuality.warnings || [];
@@ -481,6 +551,55 @@ function buildQualitySheet(workbook, result) {
     sheet.getColumn(4).width = 18;
     sheet.getColumn(5).width = 20;
     sheet.views = [{ state: "frozen", ySplit: 6 }];
+    return sheet;
+}
+
+function writeSupplementalMetadata(sheet, result, version, schemaVersion) {
+    const metadata = [
+        ["Store Code", result.metadata.store?.storeCode || "Unavailable", "Store Name", result.metadata.store?.storeName || "Unavailable"],
+        ["Financial Year", result.metadata.financialYearLabel, "Business Segment", result.metadata.businessSegment],
+        ["As-of Date", result.metadata.asOfDate, "KLBS Version", version],
+        ["Schema Version", schemaVersion, "Generated At", result.metadata.generatedAt]
+    ];
+    metadata.forEach((values, index) => values.forEach((value, offset) => {
+        const column = 13 + offset;
+        const cell = sheet.getCell(index + 2, column);
+        cell.value = value;
+        if (offset % 2 === 0) cell.font = { bold: true, color: { argb: BURGUNDY } };
+    }));
+    sheet.getColumn(13).width = 19;
+    sheet.getColumn(14).width = 20;
+    sheet.getColumn(15).width = 20;
+    sheet.getColumn(16).width = 28;
+}
+
+function buildAccountingEntriesSheet(workbook, result, version, schemaVersion) {
+    const sheet = workbook.addWorksheet("Other Accounting Entries");
+    setMetadata(sheet, result, version, schemaVersion, "OTHER ACCOUNTING ENTRIES SUPPORTING MANAGEMENT P&L");
+    sheet.getRow(8).values = ["Accounting Entry ID", "Accounting Date", "Accounting Head", "Business Segment", "Effect", "Amount", "P&L Effect", "Reference No.", "Remarks", "Entry Type", "Original Entry ID", "Reversed By ID", "Store Code", "Posted At"];
+    setHeader(sheet.getRow(8));
+    const selected = result.metadata.businessSegment;
+    const entries = (result.selectedSummary.otherAccounting?.rows || [])
+        .filter(entry => selected === "ALL" || entry.business_segment === selected || entry.business_segment === "COMMON")
+        .sort((left, right) => left.accounting_date.localeCompare(right.accounting_date) || left.entry_code.localeCompare(right.entry_code));
+    entries.forEach((entry, index) => {
+        const row = sheet.getRow(index + 9);
+        const commonNotAllocated = selected !== "ALL" && entry.business_segment === "COMMON";
+        row.values = [entry.entry_code, entry.accounting_date, entry.accounting_head, entry.business_segment,
+            entry.adjustment_effect || "", Number(entry.amount_paise) / 100, commonNotAllocated ? "NOT ALLOCATED" : Number(entry.pnl_effect_paise) / 100,
+            entry.reference_no || "", entry.remarks || "", entry.reverses_entry_code ? "REVERSAL" : entry.reversed_by_entry_code ? "POSTED — REVERSED" : "POSTED",
+            entry.reverses_entry_code || "", entry.reversed_by_entry_code || "", entry.store_code || result.metadata.store.storeCode, entry.posted_at || ""];
+        row.getCell(6).numFmt = MONEY_FORMAT;
+        row.getCell(7).numFmt = MONEY_FORMAT;
+    });
+    const totalRow = entries.length + 9;
+    sheet.getCell(totalRow, 6).value = "TOTAL IN-SCOPE P&L EFFECT";
+    if (entries.length) addFormula(sheet.getCell(totalRow, 7), `SUM(G9:G${totalRow - 1})`);
+    else sheet.getCell(totalRow, 7).value = 0;
+    sheet.getCell(totalRow, 7).numFmt = MONEY_FORMAT;
+    sheet.getRow(totalRow).font = { bold: true };
+    [22, 15, 34, 18, 18, 17, 17, 24, 44, 19, 22, 22, 16, 28].forEach((width, index) => { sheet.getColumn(index + 1).width = width; });
+    sheet.views = [{ state: "frozen", xSplit: 4, ySplit: 8, topLeftCell: "E9" }];
     return sheet;
 }
 
@@ -507,10 +626,11 @@ async function createManagementPnlWorkbook(result, { version = "", schemaVersion
     workbook.subject = "Management P&L Financial Year Export";
     workbook.created = new Date(result.metadata.generatedAt);
     buildManagementSheet(workbook, result, version, schemaVersion);
-    buildBridgeSheet(workbook, result);
-    buildCogsSheet(workbook, result);
-    buildExpenseSheet(workbook, result);
-    buildQualitySheet(workbook, result);
+    buildBridgeSheet(workbook, result, version, schemaVersion);
+    buildCogsSheet(workbook, result, version, schemaVersion);
+    buildExpenseSheet(workbook, result, version, schemaVersion);
+    buildQualitySheet(workbook, result, version, schemaVersion);
+    buildAccountingEntriesSheet(workbook, result, version, schemaVersion);
     styleWorkbook(workbook);
     return workbook;
 }

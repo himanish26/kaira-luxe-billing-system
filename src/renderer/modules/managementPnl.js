@@ -54,6 +54,7 @@
         const cogs = result.cogs;
         const expenses = result.expenses;
         const operating = result.operatingResult;
+        const profit = result.profitability || {};
         if (["gross", "discounts", "returns", "netGst", "netSales"].includes(key) && revenue.available === false) return null;
         const map = {
             gross: revenue.grossBillingsInclGstPaise,
@@ -75,7 +76,16 @@
             operatingResult: operating.operatingProfitAvailable === true ? operating.operatingProfitPaise :
                 operating.segmentDirectOperatingResultAvailable === true ? operating.segmentDirectOperatingResultPaise : null,
             operatingMargin: operating.operatingProfitAvailable === true ? operating.operatingMarginPercent :
-                operating.segmentDirectOperatingResultAvailable === true ? operating.segmentDirectOperatingMarginPercent : null
+                operating.segmentDirectOperatingResultAvailable === true ? operating.segmentDirectOperatingMarginPercent : null,
+            ebitda: profit.ebitdaPaise, ebitdaMargin: profit.ebitdaMarginPercent,
+            depreciation: profit.depreciationPaise, ebita: profit.ebitaPaise, ebitaMargin: profit.ebitaMarginPercent,
+            amortisation: profit.amortisationPaise, ebit: profit.ebitPaise, ebitMargin: profit.ebitMarginPercent,
+            interestIncome: profit.interestIncomePaise, otherNonOperatingIncome: profit.otherNonOperatingIncomePaise,
+            totalOtherIncome: profit.totalOtherIncomePaise, financeCosts: profit.financeCostsPaise,
+            otherNonOperatingExpense: profit.otherNonOperatingExpensePaise,
+            exceptionalAdjustment: profit.exceptionalAdjustmentPaise, pbt: profit.pbtPaise,
+            pbtMargin: profit.pbtMarginPercent, taxProvision: profit.incomeTaxProvisionPaise,
+            pat: profit.patPaise, netProfitMargin: profit.netProfitMarginPercent
         };
         if (key.startsWith("group:")) return expenses.managementGroups.find(row => row.name === key.slice(6))?.amountPaise ?? null;
         if (key.startsWith("category:")) return expenses.categories.find(row => row.category === key.slice(9))?.amountPaise ?? null;
@@ -105,12 +115,36 @@
             { section: "OPERATING EXPENSES" },
             ...groups.map(name => ({ group: name, key: `group:${name}`, varianceKey: `group:${name}`, favorableWhen: "LOWER" })),
             line("TOTAL OPERATING EXPENSES", "totalExpenses", { total: true, varianceKey: "totalExpenses", favorableWhen: "LOWER" }),
-            { section: "OPERATING RESULT" },
-            line("OPERATING PROFIT", "operatingResult", { total: true, varianceKey: "operatingResult", favorableWhen: "HIGHER" }),
-            line("OPERATING MARGIN", "operatingMargin", { total: true, percentValue: true, varianceKey: "operatingMargin", favorableWhen: "HIGHER" })
+            line("EBITDA", "ebitda", { total: true, varianceKey: "ebitda", favorableWhen: "HIGHER" }),
+            line("EBITDA MARGIN %", "ebitdaMargin", { total: true, percentValue: true, varianceKey: "ebitdaMargin", favorableWhen: "HIGHER" }),
+            { section: "DEPRECIATION & AMORTISATION" },
+            line("Depreciation", "depreciation", { varianceKey: "depreciation", favorableWhen: "LOWER" }),
+            line("EBITA", "ebita", { total: true, varianceKey: "ebita", favorableWhen: "HIGHER" }),
+            line("EBITA MARGIN %", "ebitaMargin", { total: true, percentValue: true, varianceKey: "ebitaMargin", favorableWhen: "HIGHER" }),
+            line("Amortisation", "amortisation", { varianceKey: "amortisation", favorableWhen: "LOWER" }),
+            line("EBIT / OPERATING PROFIT", "ebit", { total: true, varianceKey: "ebit", favorableWhen: "HIGHER" }),
+            line("EBIT / OPERATING PROFIT MARGIN %", "ebitMargin", { total: true, percentValue: true, varianceKey: "ebitMargin", favorableWhen: "HIGHER" }),
+            { section: "OTHER INCOME" },
+            line("Interest Income", "interestIncome", { varianceKey: "interestIncome", favorableWhen: "HIGHER" }),
+            line("Other Non-Operating Income", "otherNonOperatingIncome", { varianceKey: "otherNonOperatingIncome", favorableWhen: "HIGHER" }),
+            line("TOTAL OTHER INCOME", "totalOtherIncome", { total: true, varianceKey: "totalOtherIncome", favorableWhen: "HIGHER" }),
+            { section: "FINANCE COSTS" },
+            line("Interest / Finance Charges", "financeCosts", { varianceKey: "financeCosts", favorableWhen: "LOWER" }),
+            line("TOTAL FINANCE COSTS", "financeCosts", { total: true, varianceKey: "totalFinanceCosts", favorableWhen: "LOWER" }),
+            { section: "OTHER NON-OPERATING ITEMS" },
+            line("Other Non-Operating Expense", "otherNonOperatingExpense", { varianceKey: "otherNonOperatingExpense", favorableWhen: "LOWER" }),
+            line("Exceptional / Adjustment Items", "exceptionalAdjustment", { varianceKey: "exceptionalAdjustment", favorableWhen: "HIGHER" }),
+            { section: "PROFIT BEFORE TAX" },
+            line("PBT", "pbt", { total: true, varianceKey: "pbt", favorableWhen: "HIGHER" }),
+            line("PBT MARGIN %", "pbtMargin", { total: true, percentValue: true, varianceKey: "pbtMargin", favorableWhen: "HIGHER" }),
+            { section: "TAX" },
+            line("Income Tax / Tax Provision", "taxProvision", { varianceKey: "taxProvision", favorableWhen: "LOWER" }),
+            { section: "PROFIT AFTER TAX" },
+            line("PAT / NET PROFIT", "pat", { total: true, varianceKey: "pat", favorableWhen: "HIGHER" }),
+            line("NET PROFIT MARGIN %", "netProfitMargin", { total: true, percentValue: true, varianceKey: "netProfitMargin", favorableWhen: "HIGHER" })
         ];
         if ($("managementPnlSegment").value !== "ALL") {
-            rows.splice(rows.findIndex(row => row.section === "OPERATING RESULT"), 0,
+            rows.splice(rows.findIndex(row => row.key === "ebitda"), 0,
                 line("COMMON EXPENSES — NOT ALLOCATED", "commonExpenses", { varianceKey: "commonExpenses", favorableWhen: "LOWER" }));
         }
         return rows;

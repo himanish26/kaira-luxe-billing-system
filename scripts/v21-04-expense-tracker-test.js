@@ -56,6 +56,9 @@ const BASE = `
     CREATE TABLE settings (id INTEGER PRIMARY KEY, store_name TEXT, gstin TEXT);
     CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, quantity INTEGER);
     CREATE TABLE day_closing (id INTEGER PRIMARY KEY, business_date TEXT);
+    CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT);
+    CREATE TABLE stock_movements (id INTEGER PRIMARY KEY, movement_no TEXT);
+    CREATE TABLE stock_movement_lines (id INTEGER PRIMARY KEY, movement_id INTEGER);
     CREATE TABLE klbs_schema_metadata (id INTEGER PRIMARY KEY CHECK(id=1), schema_version INTEGER NOT NULL);
     CREATE TABLE expenses (
         id INTEGER PRIMARY KEY AUTOINCREMENT, expense_date TEXT NOT NULL, category TEXT NOT NULL,
@@ -82,8 +85,14 @@ async function makeDb() {
     const legacy = await run(db, `INSERT INTO expenses
         (expense_date,category,particulars,amount_paise,payment_mode,business_segment,entered_by,created_at,updated_at)
         VALUES ('2026-09-30','Rent','Legacy Rent',10000,'Cash','COMMON','OPERATOR','old','old')`);
-    await prepareDatabaseSchema({ database: db, currentVersion: CURRENT_DB_SCHEMA_VERSION, runCurrentMigrations: async () => {} });
+    await prepareDatabaseSchema({ database: db, runCurrentMigrations: async () => {} });
     assert.strictEqual(legacy.lastID, 1);
+    assert.strictEqual(await readSchemaVersion(db), CURRENT_DB_SCHEMA_VERSION,
+        "the isolated V6 fixture completes the registered V7→V9 migrations");
+    assert.deepStrictEqual(await all(db, `SELECT name FROM sqlite_master WHERE type='table'
+        AND name IN ('management_accounting_entries','management_accounting_entry_sequences') ORDER BY name`), [
+        { name: "management_accounting_entries" }, { name: "management_accounting_entry_sequences" }
+    ], "V9 foundation tables exist in the isolated current-schema fixture");
     return db;
 }
 

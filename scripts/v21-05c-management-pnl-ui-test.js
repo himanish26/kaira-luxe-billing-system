@@ -73,6 +73,22 @@ assert.match(renderer, /fullGrossProfitAvailable \? cogs\.fullGrossMarginPercent
     "renderer preserves unavailable Gross Margin as null");
 assert.match(renderer, /managementPnlTableBody[\s\S]*management-pnl-group-toggle/,
     "management groups support expand/collapse category details");
+for (const line of ["EBITDA", "EBITDA MARGIN %", "Depreciation", "EBITA", "Amortisation", "EBIT / OPERATING PROFIT",
+    "Interest Income", "Other Non-Operating Income", "TOTAL OTHER INCOME", "Interest / Finance Charges", "TOTAL FINANCE COSTS",
+    "Other Non-Operating Expense", "Exceptional / Adjustment Items", "PBT", "PBT MARGIN %", "Income Tax / Tax Provision",
+    "PAT / NET PROFIT", "NET PROFIT MARGIN %"]) {
+    assert(renderer.includes(`line("${line}"`), `full P&L matrix row exists: ${line}`);
+}
+assert.match(renderer, /ebitda: profit\.ebitdaPaise[\s\S]*pat: profit\.patPaise/,
+    "renderer displays central service result fields without accounting arithmetic");
+assert.match(renderer, /rows\.splice\(rows\.findIndex\(row => row\.key === "ebitda"\), 0,[\s\S]*COMMON EXPENSES — NOT ALLOCATED/,
+    "segment view keeps COMMON OPEX disclosure before profitability rows");
+assert.match(service, /createManagementAccountingEntryService\(database, \{ getCurrentStore, now \}\)/,
+    "P&L reads V9 entries through the authoritative accounting-entry service");
+assert.match(service, /accounting_sign/,
+    "entry reversal sign is sourced from the authoritative posted-entry query");
+assert.match(service, /MANAGEMENT_ACCOUNTING_ENTRIES_MANUAL[\s\S]*may be incomplete/,
+    "manual below-operating entry provenance is disclosed without treating absence as an error");
 assert.match(renderer, /expandedGroups: new Set\(\)/,
     "a new Management P&L renderer session starts with every group collapsed");
 assert.match(renderer, /if \(state\.expandedGroups\.has\(group\)\) state\.expandedGroups\.delete\(group\); else state\.expandedGroups\.add\(group\)/,

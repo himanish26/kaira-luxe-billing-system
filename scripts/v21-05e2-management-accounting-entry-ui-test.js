@@ -113,8 +113,9 @@ includes(preload, /managementAccountingEntries: \{[\s\S]*getOptions[\s\S]*valida
 includes(main, /management-accounting-entries:post[\s\S]*postEntry\(input, grant\)/, "main process delegates posting to E1 service");
 includes(main, /management-accounting-entries:reverse[\s\S]*reverseEntry\(entryCode, details \|\| \{\}, grant\)/, "main process delegates reversal to E1 service");
 assert(!/management_accounting_period_status/.test(migration), "no period-certification table was introduced");
-assert(!/\bPBT\b|\bPAT\b|Profit Before Tax|Profit After Tax/.test(pnlService), "P&L accounting formulas remain out of scope");
-assert(!/PBT|PAT|Other Accounting Entries/.test(excel), "Management P&L Excel remains unchanged in scope");
+assert(!/\bPBT\b|\bPAT\b|Profit Before Tax|Profit After Tax/.test(renderer), "entry workflow renderer does not calculate PBT/PAT");
+includes(pnlService, /profitability[\s\S]*pbtPaise[\s\S]*patPaise/, "PBT/PAT remain in the central P&L authority");
+includes(excel, /Other Accounting Entries[\s\S]*buildAccountingEntriesSheet/, "P&L Excel extends the same accounting-entry authority");
 assert(!/business-workspace-card/.test(css), "no fourth Accounting & Data card was added by workflow CSS");
 includes(css, /\.management-accounting-table-wrap[\s\S]*overflow: auto/, "history table is contained and scrollable");
 includes(pnlCss, /\.management-pnl-actions/, "P&L action is laid out in the existing topbar");
