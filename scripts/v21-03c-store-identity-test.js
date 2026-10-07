@@ -21,6 +21,13 @@ const BASE = `
     PRAGMA foreign_keys = ON;
     CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT);
     CREATE TABLE bills (id INTEGER PRIMARY KEY, bill_no TEXT UNIQUE);
+    CREATE TABLE bill_items (id INTEGER PRIMARY KEY, bill_no TEXT, business_segment TEXT,
+        unit_cost_paise INTEGER, cost_basis_status TEXT DEFAULT 'UNKNOWN', cost_source TEXT, cost_method TEXT);
+    CREATE TABLE returns (id INTEGER PRIMARY KEY, original_bill_no TEXT,
+        accounting_status TEXT DEFAULT 'LEGACY_UNASSESSED', business_date TEXT,
+        accounting_snapshot_version INTEGER);
+    CREATE TABLE return_items (id INTEGER PRIMARY KEY, return_id INTEGER,
+        original_bill_item_id INTEGER, quantity INTEGER);
     CREATE TABLE settings (id INTEGER PRIMARY KEY, store_name TEXT, gstin TEXT);
     CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, quantity INTEGER);
     CREATE TABLE day_closing (id INTEGER PRIMARY KEY, business_date TEXT);
@@ -47,12 +54,12 @@ async function migrate(db) {
 }
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 7);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 8);
 
     const db = await openV5();
     try {
         await migrate(db);
-        assert.strictEqual(await readSchemaVersion(db), 7);
+        assert.strictEqual(await readSchemaVersion(db), 8);
         assert.deepStrictEqual(await get(db, "SELECT id, store_code, store_name, status FROM stores"),
             { id: 1, store_code: "KL001", store_name: "Kaira Luxe", status: "ACTIVE" });
         assert.deepStrictEqual(await get(db, "SELECT id, current_store_id FROM store_context"), { id: 1, current_store_id: 1 });
@@ -99,8 +106,8 @@ async function main() {
     try {
         await exec(legacyDb, BASE.replace("    CREATE TABLE klbs_schema_metadata (id INTEGER PRIMARY KEY CHECK(id=1), schema_version INTEGER NOT NULL);\n", ""));
         await migrate(legacyDb);
-        assert.strictEqual(await readSchemaVersion(legacyDb), 7,
-            "metadata-free startup runs the numbered migrations before adopting V7");
+        assert.strictEqual(await readSchemaVersion(legacyDb), 8,
+            "metadata-free startup runs the numbered migrations before adopting V8");
         assert.strictEqual((await createStoreIdentityService(legacyDb).getCurrentStore()).storeCode, "KL001");
     } finally {
         await close(legacyDb);
@@ -126,7 +133,7 @@ async function main() {
     assert(!app.includes("accountingStoreManagementBtn") && !app.includes("accountingStoreManagementView"));
     assert(preload.includes('ipcRenderer.invoke("store-identity:get-current")'));
 
-    console.log("PASS V21-03C V5→V7 Store Identity/Expense migrations, seed, constraints, resolution, rollback, legacy adoption, and Accounting/Settings UI contract");
+    console.log("PASS V21-03C V5→V8 Store Identity/Expense/Return COGS migrations, seed, constraints, resolution, rollback, legacy adoption, and Accounting/Settings UI contract");
 }
 
 main().catch(error => {

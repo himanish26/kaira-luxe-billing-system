@@ -26,8 +26,15 @@ const open = filePath => new sqlite3.Database(filePath);
 
 const BASE_SCHEMA = `
     CREATE TABLE products (id INTEGER PRIMARY KEY, product_name TEXT);
-    CREATE TABLE bill_items (id INTEGER PRIMARY KEY, bill_no TEXT);
+    CREATE TABLE bill_items (id INTEGER PRIMARY KEY, bill_no TEXT, unit_cost_paise INTEGER,
+        cost_basis_status TEXT DEFAULT 'UNKNOWN', cost_source TEXT, cost_method TEXT,
+        business_segment TEXT);
     CREATE TABLE bills (id INTEGER PRIMARY KEY, bill_no TEXT);
+    CREATE TABLE returns (id INTEGER PRIMARY KEY, original_bill_no TEXT,
+        accounting_status TEXT DEFAULT 'LEGACY_UNASSESSED', business_date TEXT,
+        accounting_snapshot_version INTEGER);
+    CREATE TABLE return_items (id INTEGER PRIMARY KEY, return_id INTEGER,
+        original_bill_item_id INTEGER, quantity INTEGER);
     CREATE TABLE settings (id INTEGER PRIMARY KEY);
     CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, quantity INTEGER);
     CREATE TABLE day_closing (id INTEGER PRIMARY KEY, business_date TEXT);
@@ -57,14 +64,14 @@ const prepare = (database, options = {}) => prepareDatabaseSchema({
 });
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 7);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 8);
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-schema-version-"));
     try {
         // 1, 2, 7: fresh initialization, legacy adoption, and data preservation.
         const legacyPath = path.join(temporary, "legacy.db");
         let database = await createDatabase(legacyPath);
         await run(database, "INSERT INTO products VALUES (7, 'Test Product')");
-        await run(database, "INSERT INTO bill_items VALUES (11, 'OLD-BILL')");
+        await run(database, "INSERT INTO bill_items (id, bill_no) VALUES (11, 'OLD-BILL')");
         await run(database, "INSERT INTO bills VALUES (8, 'TEST-BILL')");
         await run(database, "INSERT INTO inventory_transactions VALUES (9, 3)");
         await run(database, "INSERT INTO day_closing VALUES (10, '2026-09-06')");
@@ -88,8 +95,15 @@ async function main() {
         database = open(path.join(temporary, "fresh.db"));
         await exec(database, `
             CREATE TABLE products (id INTEGER PRIMARY KEY, product_name TEXT, variable_value INTEGER NOT NULL DEFAULT 0);
-            CREATE TABLE bill_items (id INTEGER PRIMARY KEY, bill_no TEXT, gross_amount REAL);
+            CREATE TABLE bill_items (id INTEGER PRIMARY KEY, bill_no TEXT, gross_amount REAL,
+                unit_cost_paise INTEGER, cost_basis_status TEXT DEFAULT 'UNKNOWN',
+                cost_source TEXT, cost_method TEXT, business_segment TEXT);
             CREATE TABLE bills (id INTEGER PRIMARY KEY, bill_no TEXT);
+            CREATE TABLE returns (id INTEGER PRIMARY KEY, original_bill_no TEXT,
+                accounting_status TEXT DEFAULT 'LEGACY_UNASSESSED', business_date TEXT,
+                accounting_snapshot_version INTEGER);
+            CREATE TABLE return_items (id INTEGER PRIMARY KEY, return_id INTEGER,
+                original_bill_item_id INTEGER, quantity INTEGER);
             CREATE TABLE settings (id INTEGER PRIMARY KEY);
             CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, quantity INTEGER);
             CREATE TABLE day_closing (id INTEGER PRIMARY KEY, business_date TEXT);
@@ -111,7 +125,7 @@ async function main() {
         await run(database, `CREATE TABLE ${SCHEMA_METADATA_TABLE} (id INTEGER PRIMARY KEY CHECK (id = 1), schema_version INTEGER NOT NULL)`);
         await run(database, `INSERT INTO ${SCHEMA_METADATA_TABLE} VALUES (1, 3)`);
         await run(database, "INSERT INTO products VALUES (12, 'Versioned Product')");
-        await run(database, "INSERT INTO bill_items VALUES (13, 'VERSIONED-BILL')");
+        await run(database, "INSERT INTO bill_items (id, bill_no) VALUES (13, 'VERSIONED-BILL')");
         await prepare(database);
         assert.strictEqual(await readSchemaVersion(database), CURRENT_DB_SCHEMA_VERSION);
         assert.strictEqual((await get(database, "SELECT variable_value FROM products WHERE id = 12")).variable_value, 0);

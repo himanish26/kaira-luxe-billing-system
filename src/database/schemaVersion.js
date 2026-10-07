@@ -1,8 +1,9 @@
-const CURRENT_DB_SCHEMA_VERSION = 7;
+const CURRENT_DB_SCHEMA_VERSION = 8;
 const SCHEMA_METADATA_TABLE = "klbs_schema_metadata";
 const { migrateV5Foundation } = require("./v5FoundationMigration");
 const { migrateStoreIdentity } = require("./storeIdentityMigration");
 const { migrateExpenseTracker } = require("./expenseTrackerMigration");
+const { migrateReturnCogsReversal } = require("./returnCogsReversalMigration");
 
 function run(database, sql, params = []) {
     return new Promise((resolve, reject) => {
@@ -207,7 +208,8 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
         { from: 3, to: 4, name: "variable_value_billing_foundation", up: migrateVariableValueBillingFoundation },
         { from: 4, to: 5, name: "v2_1_database_foundation", up: migrateV5Foundation },
         { from: 5, to: 6, name: "v2_1_store_identity", up: migrateStoreIdentity },
-        { from: 6, to: 7, name: "v2_1_expense_tracker", up: migrateExpenseTracker }
+        { from: 6, to: 7, name: "v2_1_expense_tracker", up: migrateExpenseTracker },
+        { from: 7, to: 8, name: "v2_1_return_cogs_reversal", up: migrateReturnCogsReversal }
     ];
     if (detectedVersion === null) {
         logger?.info("DATABASE", "Legacy KLBS database detected; schema metadata is absent");

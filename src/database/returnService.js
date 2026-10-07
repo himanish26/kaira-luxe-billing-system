@@ -11,6 +11,7 @@ const {
     logStoreCreditIssued,
     logStoreCreditUpdated
 } = require("./logService");
+const { deriveReturnCostSnapshot } = require("./returnCostSnapshot");
 
 const ALLOWED_RETURN_REASONS = new Set([
     "Size / Fit Issue",
@@ -181,7 +182,10 @@ function resolveAuthoritativeReturnItems(
                         bi.discount_percent,
                         bi.taxable_amount,
                         bi.gst_rate,
-                        bi.net_amount
+                        bi.net_amount,
+                        bi.unit_cost_paise,
+                        bi.cost_basis_status,
+                        bi.cost_source
                     FROM bill_items bi
                     INNER JOIN products p
                         ON p.barcode = bi.barcode
@@ -284,6 +288,10 @@ function resolveAuthoritativeReturnItems(
                                 roundHalfUp(gstPaise, 2);
                             const sgstPaise =
                                 gstPaise - cgstPaise;
+                            const returnCost = deriveReturnCostSnapshot(
+                                product,
+                                returnQuantity
+                            );
 
                             resolve({
                                 original_bill_item_id:
@@ -312,6 +320,7 @@ function resolveAuthoritativeReturnItems(
                                     fromPaise(gstPaise),
                                 net_reversal:
                                     fromPaise(netPaise),
+                                ...returnCost,
                                 paise: {
                                     gross: grossPaise,
                                     discount: discountPaise,
@@ -370,11 +379,16 @@ function insertReturnItemWithInventory(
                 sgst_reversal,
                 gst_reversal,
                 net_reversal,
+                return_unit_cost_paise,
+                return_cost_paise,
+                return_cost_basis_status,
+                return_cost_source,
+                return_cost_method,
                 remarks,
                 created_at
             )
             VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `,
             [
                 returnId,
@@ -395,6 +409,11 @@ function insertReturnItemWithInventory(
                 item.sgst_reversal,
                 item.gst_reversal,
                 item.net_reversal,
+                item.return_unit_cost_paise,
+                item.return_cost_paise,
+                item.return_cost_basis_status,
+                item.return_cost_source,
+                item.return_cost_method,
                 "",
                 createdAt
             ],

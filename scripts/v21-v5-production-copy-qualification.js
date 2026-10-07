@@ -61,7 +61,7 @@ async function main() {
     const expected = path.join(WORKSPACE, "working-billing.db");
     assert.strictEqual(dbPath, expected, "Qualification is restricted to the designated working copy.");
     assert(fs.existsSync(dbPath), "Working qualification DB is missing.");
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 7);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 8);
 
     const db = new sqlite3.Database(dbPath);
     await run(db, "PRAGMA foreign_keys = ON");
@@ -109,7 +109,7 @@ async function main() {
         databasePath: dbPath,
         databaseSizeBytes: fs.statSync(dbPath).size,
         schemaVersionBefore: beforeVersion,
-        schemaVersionAfter: 7,
+        schemaVersionAfter: 8,
         before,
         afterFirst,
         afterSecond,

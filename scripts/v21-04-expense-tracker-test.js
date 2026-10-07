@@ -46,6 +46,13 @@ const BASE = `
     PRAGMA foreign_keys = ON;
     CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT);
     CREATE TABLE bills (id INTEGER PRIMARY KEY, bill_no TEXT UNIQUE);
+    CREATE TABLE bill_items (id INTEGER PRIMARY KEY, bill_no TEXT, business_segment TEXT,
+        unit_cost_paise INTEGER, cost_basis_status TEXT DEFAULT 'UNKNOWN', cost_source TEXT, cost_method TEXT);
+    CREATE TABLE returns (id INTEGER PRIMARY KEY, original_bill_no TEXT,
+        accounting_status TEXT DEFAULT 'LEGACY_UNASSESSED', business_date TEXT,
+        accounting_snapshot_version INTEGER);
+    CREATE TABLE return_items (id INTEGER PRIMARY KEY, return_id INTEGER,
+        original_bill_item_id INTEGER, quantity INTEGER);
     CREATE TABLE settings (id INTEGER PRIMARY KEY, store_name TEXT, gstin TEXT);
     CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, quantity INTEGER);
     CREATE TABLE day_closing (id INTEGER PRIMARY KEY, business_date TEXT);
@@ -89,7 +96,7 @@ function validEntry(overrides = {}) {
 }
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 7);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 8);
     assert.deepStrictEqual(EXPENSE_HEADERS, EXPECTED_HEADERS);
     assert.deepStrictEqual(getExpenseTrackerOptions(), {
         expenseHeaders: EXPECTED_HEADERS,
@@ -180,11 +187,11 @@ async function main() {
     });
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-v21-04-expense-test-"));
     try {
-        assert.strictEqual(await readSchemaVersion(db), 7);
+        assert.strictEqual(await readSchemaVersion(db), 8);
         assert.deepStrictEqual(await all(db, "PRAGMA foreign_key_check"), []);
         const legacy = await get(db, "SELECT category, expense_code, batch_id, store_id FROM expenses WHERE id=1");
         assert.deepStrictEqual(legacy, { category: "Rent", expense_code: null, batch_id: null, store_id: null },
-            "V7 preserves existing V5 expense rows without classifying them as posted V2.1 records");
+            "V8 preserves existing expense rows without classifying them as posted V2.1 records");
         const legacyHistory = await service.listPostedExpenses({ month: "2026-09", page: 1 });
         assert.strictEqual(legacyHistory.totalCount, 0, "legacy expense rows are excluded from posted V2.1 history");
         await assert.rejects(() => service.listPostedExpenses({ month: "2026-11", page: 1 }),
