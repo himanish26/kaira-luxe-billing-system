@@ -13,7 +13,8 @@
     font-weight: 800;
     text-align: center;
 }
-.management-pnl-topbar > button:last-child { justify-self: end; }
+.management-pnl-topbar > .back-btn { justify-self: start; }
+.management-pnl-actions { justify-self: end; display: flex; align-items: center; gap: 10px; }
 .management-pnl-page {
     width: min(1500px, calc(100% - 40px));
     min-width: 0;
@@ -257,7 +258,7 @@
     .management-pnl-topbar { grid-template-columns: 1fr auto; }
     .management-pnl-topbar h1 { grid-column: 1 / -1; grid-row: 1; }
     .management-pnl-topbar > button:first-child { grid-column: 1; grid-row: 2; }
-    .management-pnl-topbar > button:last-child { grid-column: 2; grid-row: 2; }
+    .management-pnl-actions { grid-column: 2; grid-row: 2; flex-wrap: wrap; justify-content: flex-end; }
     .management-pnl-controls { grid-template-columns: 1fr; padding: 13px; }
     .management-pnl-fy-navigation { justify-content: center; }
     .management-pnl-metadata { grid-column: auto; justify-content: space-between; }

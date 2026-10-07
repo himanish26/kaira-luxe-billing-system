@@ -509,6 +509,10 @@ function handleEscape() {
             return;
         }
     }
+    if (window.isManagementAccountingEntryDetailOpen?.()) {
+        window.closeManagementAccountingEntryDetail?.();
+        return;
+    }
     for (const [modalId, cancelId] of [
         ["storeCreditModal", "cancelStoreCreditBtn"],
         ["giftVoucherDialog", "giftVoucherCancelBtn"],
@@ -721,6 +725,10 @@ function handleEscape() {
     // Customers and Accounting & Data return to Business.
     if (document.getElementById("customerManagementProfile")?.hidden === false) {
         document.getElementById("customerProfileBackToDirectory")?.click();
+        return;
+    }
+    if (document.getElementById("managementAccountingEntriesScreen")?.style.display === "block") {
+        document.getElementById("managementAccountingEntriesBackBtn")?.click();
         return;
     }
     for (const [screenId, backId] of [

@@ -205,6 +205,10 @@ const { createAdministratorSecurityService } = require("../services/administrato
 const administratorSecurity = createAdministratorSecurityService(database, {
     masterVerifier: masterRecoveryVerifier
 });
+const { createManagementAccountingEntryService } = require("../database/managementAccountingEntryService");
+const managementAccountingEntryService = createManagementAccountingEntryService(database, {
+    security: administratorSecurity
+});
 const integrationConfig = createIntegrationConfigService({
     safeStorage,
     storagePath: path.join(app.getPath("userData"), "integration-config.json")
@@ -2318,6 +2322,47 @@ ipcMain.handle("management-pnl:export-financial-year", async (event, options) =>
     catch (error) {
         return { success: false, error: error.message || "Management P&L export failed." };
     }
+});
+
+ipcMain.handle("management-accounting-entries:validate", async (event, input) => {
+    requireManagementPnlRenderer(event);
+    try { return { success: true, entry: await managementAccountingEntryService.validateEntry(input) }; }
+    catch (error) { return { success: false, error: error.message, code: error.code || null }; }
+});
+
+ipcMain.handle("management-accounting-entries:options", event => {
+    requireManagementPnlRenderer(event);
+    return { success: true, ...managementAccountingEntryService.getOptions() };
+});
+
+ipcMain.handle("management-accounting-entries:post", async (event, input, grant) => {
+    requireManagementPnlRenderer(event);
+    try { return { success: true, entry: await managementAccountingEntryService.postEntry(input, grant) }; }
+    catch (error) { return { success: false, error: error.message, code: error.code || null }; }
+});
+
+ipcMain.handle("management-accounting-entries:get", async (event, entryCode) => {
+    requireManagementPnlRenderer(event);
+    try { return { success: true, entry: await managementAccountingEntryService.getEntryByCode(entryCode) }; }
+    catch (error) { return { success: false, error: error.message, code: error.code || null }; }
+});
+
+ipcMain.handle("management-accounting-entries:list", async (event, filters) => {
+    requireManagementPnlRenderer(event);
+    try { return { success: true, entries: await managementAccountingEntryService.listEntries(filters || {}) }; }
+    catch (error) { return { success: false, error: error.message, code: error.code || null }; }
+});
+
+ipcMain.handle("management-accounting-entries:reverse", async (event, entryCode, details, grant) => {
+    requireManagementPnlRenderer(event);
+    try { return { success: true, entry: await managementAccountingEntryService.reverseEntry(entryCode, details || {}, grant) }; }
+    catch (error) { return { success: false, error: error.message, code: error.code || null }; }
+});
+
+ipcMain.handle("management-accounting-entries:data-quality", async (event, filters) => {
+    requireManagementPnlRenderer(event);
+    try { return { success: true, ...await managementAccountingEntryService.getEntryDataQuality(filters || {}) }; }
+    catch (error) { return { success: false, error: error.message, code: error.code || null }; }
 });
 
 ipcMain.handle(

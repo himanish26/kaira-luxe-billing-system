@@ -96,7 +96,7 @@ function validEntry(overrides = {}) {
 }
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 8);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 9);
     assert.deepStrictEqual(EXPENSE_HEADERS, EXPECTED_HEADERS);
     assert.deepStrictEqual(getExpenseTrackerOptions(), {
         expenseHeaders: EXPECTED_HEADERS,
@@ -187,7 +187,7 @@ async function main() {
     });
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-v21-04-expense-test-"));
     try {
-        assert.strictEqual(await readSchemaVersion(db), 8);
+        assert.strictEqual(await readSchemaVersion(db), 9);
         assert.deepStrictEqual(await all(db, "PRAGMA foreign_key_check"), []);
         const legacy = await get(db, "SELECT category, expense_code, batch_id, store_id FROM expenses WHERE id=1");
         assert.deepStrictEqual(legacy, { category: "Rent", expense_code: null, batch_id: null, store_id: null },

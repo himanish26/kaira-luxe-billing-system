@@ -43,8 +43,21 @@ async function seed(db) {
 async function child(tempRoot) {
     const { app } = require("electron");
     app.setPath("userData", path.join(tempRoot, "user data"));
+    const expectedDatabasePath = path.join(tempRoot, "billing.db");
+    assert.strictEqual(process.env.KLBS_DEV_DATABASE_PATH, expectedDatabasePath,
+        "test DB override must reach Electron before the database module loads");
+    assert(expectedDatabasePath.startsWith(`${tempRoot}${path.sep}`), "database path is confined to the disposable test directory");
     const db = require("../src/database/database");
     await db.databaseReady;
+    const pathAuthority = require("../src/database/databasePath");
+    assert.strictEqual(pathAuthority.normalizeForComparison(db.databasePath),
+        pathAuthority.normalizeForComparison(expectedDatabasePath), "database module resolved the expected disposable path");
+    assert.strictEqual(await pathAuthority.assertAuthoritativeDatabaseConnection(db), true,
+        "active SQLite connection matches the authoritative disposable path");
+    const activeDatabasePath = await pathAuthority.readSqliteMainPath(db);
+    assert.strictEqual(pathAuthority.normalizeForComparison(activeDatabasePath),
+        pathAuthority.normalizeForComparison(expectedDatabasePath), "SQLite main path matches before test seed");
+    assert(fs.existsSync(activeDatabasePath), "disposable test SQLite file exists before seed");
     await seed(db);
     const { getActivityPage } = require("../src/database/activityService");
 
@@ -110,15 +123,20 @@ if (process.argv.includes("--child")) {
 }
 else {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-log01-"));
-    const result = spawnSync(require("electron"), [
-        "--disable-gpu", "--in-process-gpu", __filename, "--child", tempRoot
-    ], {
-        cwd: path.resolve(__dirname, ".."),
-        env: { ...process.env, KLBS_DEV_DATABASE_PATH: path.join(tempRoot, "billing.db") },
-        encoding: "utf8", timeout: 120000, windowsHide: true
-    });
-    process.stdout.write(result.stdout || "");
-    process.stderr.write(result.stderr || "");
-    if (result.error) throw result.error;
-    process.exit(result.status || 0);
+    try {
+        const result = spawnSync(require("electron"), [
+            "--disable-gpu", "--in-process-gpu", __filename, "--child", tempRoot
+        ], {
+            cwd: path.resolve(__dirname, ".."),
+            env: { ...process.env, KLBS_DEV_DATABASE_PATH: path.join(tempRoot, "billing.db") },
+            encoding: "utf8", timeout: 120000, windowsHide: true
+        });
+        process.stdout.write(result.stdout || "");
+        process.stderr.write(result.stderr || "");
+        if (result.error) throw result.error;
+        if (result.status !== 0) process.exitCode = result.status || 1;
+    }
+    finally {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
 }

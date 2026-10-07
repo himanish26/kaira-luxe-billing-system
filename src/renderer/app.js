@@ -1358,7 +1358,9 @@ function requireAdminAuthorization(purpose, callback){
         "INVENTORY_INWARD",
         "INVENTORY_OUTWARD",
         "DAY_REOPEN",
-        "EXPENSE_POST"
+        "EXPENSE_POST",
+        "P_AND_L_ENTRY_POST",
+        "P_AND_L_ENTRY_REVERSE"
     ].includes(purpose);
     const title = document.getElementById("authorizationDialogTitle");
     if (title) title.textContent = managerPurpose ? "Manager Access" : "Administrator Access";
@@ -8248,6 +8250,7 @@ function hideAllScreens() {
     customersScreen.style.display = "none";
     accountingDataScreen.style.display = "none";
     document.getElementById("managementPnlScreen").style.display = "none";
+    document.getElementById("managementAccountingEntriesScreen").style.display = "none";
     document.getElementById("expenseTrackerScreen").style.display = "none";
     document.getElementById("expenseHistoryScreen").style.display = "none";
 

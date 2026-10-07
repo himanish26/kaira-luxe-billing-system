@@ -31,6 +31,9 @@ const BASE = `
     CREATE TABLE settings (id INTEGER PRIMARY KEY, store_name TEXT, gstin TEXT);
     CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, quantity INTEGER);
     CREATE TABLE day_closing (id INTEGER PRIMARY KEY, business_date TEXT);
+    CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT);
+    CREATE TABLE stock_movements (id INTEGER PRIMARY KEY, movement_no TEXT);
+    CREATE TABLE stock_movement_lines (id INTEGER PRIMARY KEY, movement_id INTEGER);
     CREATE TABLE expenses (id INTEGER PRIMARY KEY, expense_date TEXT NOT NULL, category TEXT NOT NULL,
         particulars TEXT NOT NULL, expense_class TEXT NOT NULL DEFAULT 'OPERATING', amount_paise INTEGER NOT NULL,
         payment_mode TEXT NOT NULL, paid_to TEXT, reference TEXT, business_segment TEXT NOT NULL,
@@ -54,12 +57,13 @@ async function migrate(db) {
 }
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 8);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 9);
 
     const db = await openV5();
     try {
+        assert.strictEqual(await readSchemaVersion(db), 5, "fixture begins at truthful V5 metadata");
         await migrate(db);
-        assert.strictEqual(await readSchemaVersion(db), 8);
+        assert.strictEqual(await readSchemaVersion(db), 9);
         assert.deepStrictEqual(await get(db, "SELECT id, store_code, store_name, status FROM stores"),
             { id: 1, store_code: "KL001", store_name: "Kaira Luxe", status: "ACTIVE" });
         assert.deepStrictEqual(await get(db, "SELECT id, current_store_id FROM store_context"), { id: 1, current_store_id: 1 });
@@ -106,8 +110,14 @@ async function main() {
     try {
         await exec(legacyDb, BASE.replace("    CREATE TABLE klbs_schema_metadata (id INTEGER PRIMARY KEY CHECK(id=1), schema_version INTEGER NOT NULL);\n", ""));
         await migrate(legacyDb);
-        assert.strictEqual(await readSchemaVersion(legacyDb), 8,
-            "metadata-free startup runs the numbered migrations before adopting V8");
+        assert.strictEqual(await readSchemaVersion(legacyDb), 9,
+            "metadata-free startup runs the numbered migrations through V9");
+        assert.strictEqual(Number((await get(legacyDb, "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('management_accounting_entries','management_accounting_entry_sequences')")).count), 2,
+            "metadata-free startup physically completes V9 structures");
+        assert.strictEqual(Number((await get(legacyDb, "SELECT COUNT(*) AS count FROM management_accounting_entries")).count), 0,
+            "metadata-free migration creates no historical accounting entries");
+        assert.strictEqual(await get(legacyDb, "SELECT name FROM sqlite_master WHERE type='table' AND name='management_accounting_period_status'"), null,
+            "metadata-free startup creates no period certification table");
         assert.strictEqual((await createStoreIdentityService(legacyDb).getCurrentStore()).storeCode, "KL001");
     } finally {
         await close(legacyDb);
@@ -134,7 +144,7 @@ async function main() {
     assert(!app.includes("accountingStoreManagementBtn") && !app.includes("accountingStoreManagementView"));
     assert(preload.includes('ipcRenderer.invoke("store-identity:get-current")'));
 
-    console.log("PASS V21-03C V5→V8 Store Identity/Expense/Return COGS migrations, seed, constraints, resolution, rollback, legacy adoption, and Accounting/Settings UI contract");
+    console.log("PASS V21-03C/V21-04/V21-05E1 V5→V9 migrations, Store Identity, Expense, Return COGS, and Accounting/Settings UI contracts");
 }
 
 main().catch(error => {

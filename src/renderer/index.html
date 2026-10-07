@@ -2116,7 +2116,10 @@ returned after purchase.
     <div class="bill-top-bar management-pnl-topbar">
         <button id="managementPnlBackBtn" class="back-btn" type="button">← Accounting &amp; Data</button>
         <h1>MANAGEMENT P&amp;L</h1>
-        <button id="managementPnlExportBtn" class="klbs-primary-btn" type="button" title="Export the selected Financial Year and Business Segment to Excel." aria-label="Export the selected Financial Year and Business Segment to Excel.">EXPORT EXCEL</button>
+        <div class="management-pnl-actions">
+            <button id="managementPnlAccountingEntriesBtn" class="klbs-cancel-btn" type="button">ACCOUNTING ENTRIES</button>
+            <button id="managementPnlExportBtn" class="klbs-primary-btn" type="button" title="Export the selected Financial Year and Business Segment to Excel." aria-label="Export the selected Financial Year and Business Segment to Excel.">EXPORT EXCEL</button>
+        </div>
     </div>
     <main class="management-pnl-page" aria-labelledby="managementPnlPageTitle">
         <h2 id="managementPnlPageTitle" class="management-pnl-visually-hidden">Management Profit and Loss</h2>
@@ -2164,6 +2167,66 @@ returned after purchase.
             </div>
         </section>
     </main>
+</div>
+
+<div id="managementAccountingEntriesScreen" class="screen" style="display:none;">
+    <div class="bill-top-bar management-accounting-topbar">
+        <button id="managementAccountingEntriesBackBtn" class="back-btn" type="button">← Management P&amp;L</button>
+        <h1 id="managementAccountingTitle">P&amp;L ACCOUNTING ENTRIES</h1>
+        <span id="managementAccountingStore" class="management-accounting-store">Store identity loading…</span>
+    </div>
+    <main class="management-accounting-page" aria-labelledby="managementAccountingTitle">
+        <header class="business-page-header management-accounting-page-header">
+            <p>Controlled non-operating and management accounting entries</p>
+        </header>
+        <section id="managementAccountingEntryView">
+            <form id="managementAccountingEntryForm" class="management-accounting-panel" novalidate>
+                <h3>NEW ENTRY</h3>
+                <div class="management-accounting-form-grid">
+                    <label>Accounting Date<input id="managementAccountingDate" type="date" required></label>
+                    <label>Accounting Head<select id="managementAccountingHead" required><option value="">Select accounting head</option></select></label>
+                    <label>Business Segment<select id="managementAccountingSegment" required><option value="">Select Business Segment</option></select></label>
+                    <label id="managementAccountingEffectField" hidden>Effect on Profit<select id="managementAccountingEffect"><option value="">Select effect</option><option value="INCOME">Increases Profit</option><option value="EXPENSE">Reduces Profit</option></select></label>
+                    <label>Reference No. (optional)<input id="managementAccountingReference" type="text" maxlength="128" autocomplete="off"></label>
+                    <label>Amount (₹)<input id="managementAccountingAmount" type="text" inputmode="decimal" placeholder="0.00" required autocomplete="off"></label>
+                    <label class="management-accounting-remarks">Remarks<textarea id="managementAccountingRemarks" rows="3" maxlength="2000"></textarea><span id="managementAccountingRemarksHint" class="management-accounting-hint" hidden>Required for Exceptional / Adjustment Item.</span></label>
+                </div>
+                <p id="managementAccountingFormMessage" class="management-accounting-message" role="status" aria-live="polite"></p>
+                <div class="management-accounting-actions">
+                    <button id="managementAccountingPostBtn" class="klbs-primary-btn" type="submit">POST ENTRY</button>
+                    <button id="managementAccountingHistoryOpenBtn" class="klbs-cancel-btn" type="button">HISTORY</button>
+                </div>
+                <div id="managementAccountingSuccess" class="management-accounting-success" role="status" hidden></div>
+            </form>
+        </section>
+        <section id="managementAccountingHistoryView" class="management-accounting-panel" hidden aria-label="P&amp;L accounting entry history">
+            <div class="management-accounting-history-heading">
+                <h3>P&amp;L ACCOUNTING ENTRY HISTORY</h3>
+            </div>
+            <div class="management-accounting-filters">
+                <label>From<input id="managementAccountingHistoryFrom" type="date"></label>
+                <label>To<input id="managementAccountingHistoryTo" type="date"></label>
+                <label>Accounting Head<select id="managementAccountingHistoryHead"><option value="">All Heads</option></select></label>
+                <label>Business Segment<select id="managementAccountingHistorySegment"><option value="">All Segments</option></select></label>
+                <label>Search ID / Reference<input id="managementAccountingHistorySearch" type="search" maxlength="128"></label>
+            </div>
+            <p id="managementAccountingHistoryMessage" class="management-accounting-message" role="status" aria-live="polite"></p>
+            <div class="management-accounting-table-wrap"><table class="management-accounting-table">
+                <thead><tr><th>ENTRY ID</th><th>ACCOUNTING DATE</th><th>HEAD</th><th>SEGMENT</th><th>EFFECT</th><th>AMOUNT</th><th>REFERENCE</th><th>TYPE</th></tr></thead>
+                <tbody id="managementAccountingHistoryRows"></tbody>
+            </table></div>
+            <p id="managementAccountingHistoryEmpty" class="management-accounting-empty" hidden>No P&amp;L accounting entries recorded for this period.</p>
+        </section>
+    </main>
+    <div id="managementAccountingDetailOverlay" class="management-accounting-overlay" hidden>
+        <section class="management-accounting-detail" role="dialog" aria-modal="true" aria-labelledby="managementAccountingDetailTitle">
+            <div class="management-accounting-history-heading"><h3 id="managementAccountingDetailTitle">ENTRY DETAIL</h3><button id="managementAccountingDetailCloseBtn" class="klbs-cancel-btn" type="button">CLOSE</button></div>
+            <dl id="managementAccountingDetailFields" class="management-accounting-detail-fields"></dl>
+            <label id="managementAccountingReversalReasonField" class="management-accounting-reversal-reason" hidden>Reversal Reason<textarea id="managementAccountingReversalReason" maxlength="1000" rows="3"></textarea></label>
+            <p id="managementAccountingDetailMessage" class="management-accounting-message" role="status" aria-live="polite"></p>
+            <button id="managementAccountingReverseBtn" class="klbs-primary-btn" type="button" hidden>REVERSE / CORRECT</button>
+        </section>
+    </div>
 </div>
 
 <div id="expenseTrackerScreen" class="screen" style="display:none;">
@@ -3049,6 +3112,7 @@ style="display:none;">
 <script src="modules/expenseHistoryCalendar.js"></script>
 <script src="modules/expenseTracker.js"></script>
 <script src="modules/managementPnl.js"></script>
+<script src="modules/managementAccountingEntries.js"></script>
 
 </body>
 </html>

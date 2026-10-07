@@ -1,9 +1,10 @@
-const CURRENT_DB_SCHEMA_VERSION = 8;
+const CURRENT_DB_SCHEMA_VERSION = 9;
 const SCHEMA_METADATA_TABLE = "klbs_schema_metadata";
 const { migrateV5Foundation } = require("./v5FoundationMigration");
 const { migrateStoreIdentity } = require("./storeIdentityMigration");
 const { migrateExpenseTracker } = require("./expenseTrackerMigration");
 const { migrateReturnCogsReversal } = require("./returnCogsReversalMigration");
+const { migrateManagementAccountingEntries } = require("./managementAccountingEntryMigration");
 
 function run(database, sql, params = []) {
     return new Promise((resolve, reject) => {
@@ -184,17 +185,21 @@ async function runForwardMigrations(database, sourceVersion, targetVersion, step
     return version;
 }
 
-async function validateCurrentSchema(database) {
+async function validateCurrentSchema(database, currentVersion = CURRENT_DB_SCHEMA_VERSION) {
     const requiredTables = [
         "products", "bills", "settings", "inventory_transactions", "day_closing",
         SCHEMA_METADATA_TABLE
     ];
+    if (currentVersion >= 5) requiredTables.push("customers", "stock_movements", "stock_movement_lines", "expenses");
+    if (currentVersion >= 6) requiredTables.push("stores", "store_context");
+    if (currentVersion >= 8) requiredTables.push("returns", "return_items");
+    if (currentVersion >= 9) requiredTables.push("management_accounting_entries", "management_accounting_entry_sequences");
     const rows = await all(database, `
         SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${requiredTables.map(() => "?").join(",")})
     `, requiredTables);
     const present = new Set(rows.map(row => row.name));
     const missing = requiredTables.filter(name => !present.has(name));
-    if (missing.length) throw new Error(`KLBS database readiness validation failed: required schema missing.`);
+    if (missing.length) throw new Error(`KLBS database readiness validation failed: required schema missing (${missing.join(", ")}).`);
     return true;
 }
 
@@ -209,7 +214,8 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
         { from: 4, to: 5, name: "v2_1_database_foundation", up: migrateV5Foundation },
         { from: 5, to: 6, name: "v2_1_store_identity", up: migrateStoreIdentity },
         { from: 6, to: 7, name: "v2_1_expense_tracker", up: migrateExpenseTracker },
-        { from: 7, to: 8, name: "v2_1_return_cogs_reversal", up: migrateReturnCogsReversal }
+        { from: 7, to: 8, name: "v2_1_return_cogs_reversal", up: migrateReturnCogsReversal },
+        { from: 8, to: 9, name: "v2_1_management_accounting_entries", up: migrateManagementAccountingEntries }
     ];
     if (detectedVersion === null) {
         logger?.info("DATABASE", "Legacy KLBS database detected; schema metadata is absent");
@@ -243,11 +249,16 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
     // without changing the numbered compatibility version.
     if (detectedVersion === null) {
         await runCurrentMigrations();
-        await validateCurrentSchema(database);
         // Current migrations reconcile a metadata-free database through the
-        // V5 foundation. Apply every subsequent numbered migration in order;
-        // this is required when more than one numbered migration follows V5.
+        // V5 foundation. Verify that baseline physically exists before
+        // recording V5 or beginning its numbered forward migrations.
         const reconciledVersion = Math.min(5, currentVersion);
+        await validateCurrentSchema(database, reconciledVersion);
+        if (currentVersion > reconciledVersion) {
+            await writeSchemaVersion(database, reconciledVersion);
+        }
+        // Apply every subsequent numbered migration in order. Metadata only
+        // advances inside each migration transaction after its schema exists.
         const numberedMigrations = [...defaultMigrations, ...migrations]
             .filter(step => step.from >= reconciledVersion);
         if (currentVersion > reconciledVersion) {
@@ -259,12 +270,12 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
             // completed version instead of leaving metadata absent.
             await writeSchemaVersion(database, currentVersion);
         }
-        await validateCurrentSchema(database);
+        await validateCurrentSchema(database, currentVersion);
         return { detectedVersion: null, schemaVersion: currentVersion };
     }
 
     await runCurrentMigrations();
-    await validateCurrentSchema(database);
+    await validateCurrentSchema(database, currentVersion);
     return { detectedVersion, schemaVersion: currentVersion };
 }
 

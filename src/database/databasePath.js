@@ -1,4 +1,5 @@
 const path = require("path");
+const fs = require("fs");
 
 const DATABASE_FILE_NAME = "billing.db";
 const DEVELOPMENT_OVERRIDE_NAME = "KLBS_DEV_DATABASE_PATH";
@@ -6,8 +7,23 @@ const PROTECTED_DATABASE_FILE_NAME = "billing_dev_copy.db";
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
 
 function normalizeForComparison(value) {
-    const normalized = path.resolve(String(value || ""));
-    return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+    let candidate = path.resolve(String(value || ""));
+    const suffix = [];
+    let canonical = candidate;
+    while (true) {
+        try {
+            canonical = fs.realpathSync.native(candidate);
+            if (suffix.length) canonical = path.join(canonical, ...suffix);
+            break;
+        }
+        catch (_error) {
+            const parent = path.dirname(candidate);
+            if (parent === candidate) break;
+            suffix.unshift(path.basename(candidate));
+            candidate = parent;
+        }
+    }
+    return process.platform === "win32" ? canonical.toLowerCase() : canonical;
 }
 
 function isProvided(value) {

@@ -64,7 +64,7 @@ const prepare = (database, options = {}) => prepareDatabaseSchema({
 });
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 8);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 9);
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-schema-version-"));
     try {
         // 1, 2, 7: fresh initialization, legacy adoption, and data preservation.
@@ -152,6 +152,25 @@ async function main() {
         }), error => error instanceof UnsupportedDatabaseSchemaError && error.code === "KLBS_DB_SCHEMA_NEWER");
         assert.strictEqual(normalMigrations, 0);
         assert.strictEqual((await metadata(database)).schema_version, CURRENT_DB_SCHEMA_VERSION + 1);
+        await close(database);
+
+        // 10: a database claiming V9 but missing its required physical tables fails closed.
+        database = await createDatabase(path.join(temporary, "incomplete-v9.db"));
+        await exec(database, `
+            CREATE TABLE stock_movements (id INTEGER PRIMARY KEY);
+            CREATE TABLE stock_movement_lines (id INTEGER PRIMARY KEY);
+            CREATE TABLE expenses (id INTEGER PRIMARY KEY);
+            CREATE TABLE stores (id INTEGER PRIMARY KEY);
+            CREATE TABLE store_context (id INTEGER PRIMARY KEY);
+        `);
+        await run(database, `CREATE TABLE ${SCHEMA_METADATA_TABLE} (id INTEGER PRIMARY KEY CHECK (id = 1), schema_version INTEGER NOT NULL)`);
+        await run(database, `INSERT INTO ${SCHEMA_METADATA_TABLE} VALUES (1, 9)`);
+        await assert.rejects(() => prepare(database, { runCurrentMigrations: async () => {} }),
+            /KLBS database readiness validation failed/);
+        assert.strictEqual((await metadata(database)).schema_version, 9,
+            "startup does not rewrite metadata to hide an incomplete claimed-V9 schema");
+        assert.strictEqual(await get(database,
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='management_accounting_entries'"), undefined);
         await close(database);
 
         // 5: a failed forward migration rolls back and leaves the source version.

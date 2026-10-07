@@ -337,6 +337,16 @@ getManagementPnlFinancialYear: options => ipcRenderer.invoke("management-pnl:get
 
 exportManagementPnlFinancialYear: options => ipcRenderer.invoke("management-pnl:export-financial-year", options),
 
+managementAccountingEntries: {
+    getOptions: () => ipcRenderer.invoke("management-accounting-entries:options"),
+    validate: input => ipcRenderer.invoke("management-accounting-entries:validate", input),
+    post: (input, grant) => ipcRenderer.invoke("management-accounting-entries:post", input, grant),
+    get: entryCode => ipcRenderer.invoke("management-accounting-entries:get", entryCode),
+    list: filters => ipcRenderer.invoke("management-accounting-entries:list", filters),
+    reverse: (entryCode, details, grant) => ipcRenderer.invoke("management-accounting-entries:reverse", entryCode, details, grant),
+    getDataQuality: filters => ipcRenderer.invoke("management-accounting-entries:data-quality", filters)
+},
+
 saveSettings: (settings, grant) =>
     ipcRenderer.invoke(
         "save-settings",

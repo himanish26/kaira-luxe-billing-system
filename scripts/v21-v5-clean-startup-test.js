@@ -3,13 +3,23 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const RESULT_PREFIX = "V21_V8_STARTUP=";
+const RESULT_PREFIX = "V21_V9_STARTUP=";
 
 async function child(tempRoot, phase) {
     const { app } = require("electron");
     app.setPath("userData", path.join(tempRoot, "user-data"));
+    const expectedDatabasePath = path.join(tempRoot, "fresh.db");
+    assert.strictEqual(process.env.KLBS_DEV_DATABASE_PATH, expectedDatabasePath,
+        "clean-startup DB override must reach Electron before database initialization");
+    assert(expectedDatabasePath.startsWith(`${tempRoot}${path.sep}`), "startup DB path is disposable and scoped to the test directory");
     const database = require("../src/database/database");
     await database.databaseReady;
+    const pathAuthority = require("../src/database/databasePath");
+    assert.strictEqual(pathAuthority.normalizeForComparison(database.databasePath),
+        pathAuthority.normalizeForComparison(expectedDatabasePath));
+    assert.strictEqual(await pathAuthority.assertAuthoritativeDatabaseConnection(database), true);
+    assert.strictEqual(pathAuthority.normalizeForComparison(await pathAuthority.readSqliteMainPath(database)),
+        pathAuthority.normalizeForComparison(expectedDatabasePath));
     const get = (sql, params = []) => new Promise((resolve, reject) =>
         database.get(sql, params, (error, row) => error ? reject(error) : resolve(row || null)));
     const all = sql => new Promise((resolve, reject) =>
@@ -19,40 +29,51 @@ async function child(tempRoot, phase) {
     const foreignKeys = await all("PRAGMA foreign_key_check");
     const stockTables = await get("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('stock_movements','stock_movement_lines','expenses')");
     const identity = await get("SELECT s.store_code, s.store_name, s.status FROM store_context c JOIN stores s ON s.id=c.current_store_id WHERE c.id=1");
-    assert.strictEqual(Number(version.schema_version), 8);
+    assert.strictEqual(Number(version.schema_version), 9);
     assert.strictEqual(integrity.integrity_check, "ok");
     assert.strictEqual(foreignKeys.length, 0);
     assert.strictEqual(Number(stockTables.count), 3);
     assert.deepStrictEqual(identity, { store_code: "KL001", store_name: "Kaira Luxe", status: "ACTIVE" });
-    assert.strictEqual(database.CURRENT_DB_SCHEMA_VERSION, 8);
+    assert.strictEqual(database.CURRENT_DB_SCHEMA_VERSION, 9);
+    const accountingTables = await get("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('management_accounting_entries','management_accounting_entry_sequences')");
+    assert.strictEqual(Number(accountingTables.count), 2);
+    const periodTable = await get("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='management_accounting_period_status'");
+    assert.strictEqual(Number(periodTable.count), 0);
+    const accountingRows = await get("SELECT COUNT(*) AS count FROM management_accounting_entries");
+    assert.strictEqual(Number(accountingRows.count), 0, "fresh/repeated startup creates no synthetic management accounting rows");
     await database.closeDatabase();
-    process.stdout.write(`${RESULT_PREFIX}${JSON.stringify({ phase, version: version.schema_version, integrity: integrity.integrity_check, foreignKeyViolations: foreignKeys.length, foundationTables: stockTables.count })}\n`);
+    process.stdout.write(`${RESULT_PREFIX}${JSON.stringify({ phase, version: version.schema_version, integrity: integrity.integrity_check, foreignKeyViolations: foreignKeys.length, foundationTables: stockTables.count, accountingTables: accountingTables.count, accountingRows: accountingRows.count })}\n`);
     app.exit(0);
 }
 
 function parent() {
     const tempRoot = fs.mkdtempSync("/private/tmp/klbs-v21-v5-clean-startup-");
     const electronBinary = require("electron");
-    const results = [];
-    for (const phase of ["fresh", "repeat"]) {
-        const result = spawnSync(electronBinary, ["--disable-gpu", "--in-process-gpu", __filename,
-            "--integration-child", tempRoot, phase], {
-            cwd: path.resolve(__dirname, ".."),
-            env: { ...process.env, KLBS_DEV_DATABASE_PATH: path.join(tempRoot, "fresh.db") },
-            encoding: "utf8",
-            timeout: 30000,
-            windowsHide: true
-        });
-        if (result.error) throw result.error;
-        assert.strictEqual(result.status, 0, `signal=${result.signal} error=${result.error || ""}\n${result.stdout}\n${result.stderr}`);
-        const line = result.stdout.split(/\r?\n/).find(value => value.startsWith(RESULT_PREFIX));
-        assert(line, `Startup result missing.\n${result.stdout}\n${result.stderr}`);
-        results.push(JSON.parse(line.slice(RESULT_PREFIX.length)));
+    try {
+        const results = [];
+        for (const phase of ["fresh", "repeat"]) {
+            const result = spawnSync(electronBinary, ["--disable-gpu", "--in-process-gpu", __filename,
+                "--integration-child", tempRoot, phase], {
+                cwd: path.resolve(__dirname, ".."),
+                env: { ...process.env, KLBS_DEV_DATABASE_PATH: path.join(tempRoot, "fresh.db") },
+                encoding: "utf8",
+                timeout: 30000,
+                windowsHide: true
+            });
+            if (result.error) throw result.error;
+            assert.strictEqual(result.status, 0, `signal=${result.signal} error=${result.error || ""}\n${result.stdout}\n${result.stderr}`);
+            const line = result.stdout.split(/\r?\n/).find(value => value.startsWith(RESULT_PREFIX));
+            assert(line, `Startup result missing.\n${result.stdout}\n${result.stderr}`);
+            results.push(JSON.parse(line.slice(RESULT_PREFIX.length)));
+        }
+        assert.deepStrictEqual(results[0], { phase: "fresh", version: 9, integrity: "ok", foreignKeyViolations: 0, foundationTables: 3, accountingTables: 2, accountingRows: 0 });
+        assert.deepStrictEqual(results[1], { phase: "repeat", version: 9, integrity: "ok", foreignKeyViolations: 0, foundationTables: 3, accountingTables: 2, accountingRows: 0 });
+        console.log("PASS actual Electron clean database startup and repeated startup at schema V9");
+        console.log(`Disposable database: ${path.join(tempRoot, "fresh.db")}`);
     }
-    assert.deepStrictEqual(results[0], { phase: "fresh", version: 8, integrity: "ok", foreignKeyViolations: 0, foundationTables: 3 });
-    assert.deepStrictEqual(results[1], { phase: "repeat", version: 8, integrity: "ok", foreignKeyViolations: 0, foundationTables: 3 });
-    console.log("PASS actual Electron clean database startup and repeated startup at schema V8");
-    console.log(`Disposable database: ${path.join(tempRoot, "fresh.db")}`);
+    finally {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
 }
 
 if (process.argv.includes("--integration-child")) {

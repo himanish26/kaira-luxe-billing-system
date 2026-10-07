@@ -303,6 +303,7 @@
         window.hideAllScreens();
         document.getElementById("accountingDataScreen").style.display = "block";
     });
+    $("managementPnlAccountingEntriesBtn").addEventListener("click", () => window.openManagementAccountingEntries?.());
     $("managementPnlRetryBtn").addEventListener("click", () => state.initialized ? load() : open());
     $("managementPnlPreviousFy").addEventListener("click", () => { if (state.financialYearStart > 1900) { state.financialYearStart -= 1; load(); } });
     $("managementPnlNextFy").addEventListener("click", () => { if (state.financialYearStart < state.currentFinancialYearStart) { state.financialYearStart += 1; load(); } });
