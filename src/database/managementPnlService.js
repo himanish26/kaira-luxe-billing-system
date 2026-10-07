@@ -1,0 +1,583 @@
+"use strict";
+
+const { BUSINESS_SEGMENT_CODES, normalizeBusinessSegment } = require("../shared/businessSegment");
+const { EXPENSE_HEADERS } = require("./expenseTrackerService");
+const { createReturnCogsService } = require("./returnCogsService");
+const { getBusinessDate } = require("./businessDate");
+const { parseDate, comparisonPeriod } = require("./managementPnlPeriods");
+
+const CATEGORY_GROUPS = Object.freeze([
+    { name: "Employee Costs", categories: ["Salary & Wages", "Staff Welfare"] },
+    { name: "Occupancy", categories: ["Rent", "Security & Surveillance", "Insurance"] },
+    { name: "Utilities & Communications", categories: ["Electricity", "Internet & Communication"] },
+    { name: "Marketing", categories: ["Marketing & Advertising"] },
+    { name: "Operating / Store Support", categories: ["Maintenance & Repairs", "Cleaning & Housekeeping", "Packaging", "Transport & Local Conveyance", "Freight & Courier"] },
+    { name: "Administrative & Professional", categories: ["Stationery & Printing", "Software & Subscriptions", "Professional Fees", "Licences & Statutory Fees", "Petty Cash / General Expense", "Miscellaneous"] },
+    { name: "Payment Charges", categories: ["Bank & Payment Charges"] }
+]);
+const VALID_SEGMENTS = new Set(["ALL", ...BUSINESS_SEGMENT_CODES]);
+
+function dbAll(database, sql, params = []) {
+    return new Promise((resolve, reject) => database.all(sql, params, (error, rows) => error ? reject(error) : resolve(rows || [])));
+}
+
+function safeAdd(left, right, label) {
+    const result = left + right;
+    if (!Number.isSafeInteger(result)) throw new Error(`Management P&L ${label} exceeds safe integer-paise limits.`);
+    return result;
+}
+
+function moneyPaise(value, label, warnings, context = {}) {
+    if (value === null || value === undefined || value === "") {
+        warnings.push({ code: "ACCOUNTING_AMOUNT_MISSING", severity: "ERROR", message: `A persisted ${label} is missing.`, affectedCount: 1, affectedValuePaise: null, ...context });
+        return null;
+    }
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+        warnings.push({ code: "ACCOUNTING_AMOUNT_INVALID", severity: "ERROR", message: `A persisted ${label} is invalid.`, affectedCount: 1, affectedValuePaise: null, ...context });
+        return null;
+    }
+    const paise = Math.round((number + Number.EPSILON) * 100);
+    if (!Number.isSafeInteger(paise)) throw new Error(`Management P&L ${label} exceeds safe integer-paise limits.`);
+    return paise;
+}
+
+function addField(total, row, field, label, warnings, context) {
+    const value = moneyPaise(row[field], label, warnings, context);
+    if (value === null) return { total, missing: true, invalid: false };
+    const invalid = value < 0;
+    if (invalid) warnings.push({ code: "ACCOUNTING_AMOUNT_NEGATIVE", severity: "ERROR",
+        message: `A persisted ${label} is negative.`, affectedCount: 1, affectedValuePaise: value, ...context });
+    return { total: safeAdd(total, value, label), missing: false, invalid };
+}
+
+function addWarning(warnings, code, severity, message, count, value = null) {
+    if (count > 0) warnings.push({ code, severity, message, affectedCount: count, affectedValuePaise: value });
+}
+
+function percent(numerator, denominator) {
+    if (!Number.isSafeInteger(numerator) || !Number.isSafeInteger(denominator) || denominator === 0) return null;
+    return numerator * 100 / denominator;
+}
+
+function statusOfCost(row, warnings, type) {
+    const status = row.cost_basis_status;
+    if (status === "CAPTURED") {
+        const unitCost = Number(row.unit_cost_paise);
+        const valid = row.unit_cost_paise != null && Number.isSafeInteger(unitCost) && unitCost >= 0 && Boolean(String(row.cost_source || "").trim()) &&
+            String(row.cost_method || "").trim() === "SALE_TIME_COST_PRICE_PAISE";
+        if (valid) return "CAPTURED";
+        addWarning(warnings, "COST_SNAPSHOT_INCONSISTENT", "ERROR", `A ${type} line marked CAPTURED has an incomplete or invalid immutable cost snapshot.`, 1);
+        return "CONTRADICTORY";
+    }
+    if (status === "UNKNOWN" || status === "NOT_APPLICABLE") {
+        if (row.unit_cost_paise == null && row.cost_source == null && row.cost_method == null) return status;
+        addWarning(warnings, "COST_SNAPSHOT_INCONSISTENT", "ERROR", `A ${type} line marked ${status} contains cost values that should be absent.`, 1);
+        return "CONTRADICTORY";
+    }
+    addWarning(warnings, "COST_STATUS_INVALID", "ERROR", `A ${type} line has an unsupported cost status.`, 1);
+    return "CONTRADICTORY";
+}
+
+function makeExpenseGroups(rows, segment) {
+    const byKey = new Map();
+    const unclassified = [];
+    for (const category of EXPENSE_HEADERS) {
+        for (const businessSegment of ["KL", "MENS", "KIDS", "COMMON"]) {
+            if (segment !== "ALL" && businessSegment !== segment && businessSegment !== "COMMON") continue;
+            byKey.set(`${category}\u0000${businessSegment}`, { category, businessSegment, amountPaise: 0, expenseCount: 0 });
+        }
+    }
+    for (const row of rows) {
+        const key = `${row.category}\u0000${row.business_segment}`;
+        if (!byKey.has(key)) {
+            unclassified.push({ category: row.category, businessSegment: row.business_segment,
+                amountPaise: Number(row.total_amount_paise || 0), expenseCount: Number(row.expense_count || 0) });
+            continue;
+        }
+        const item = byKey.get(key);
+        item.amountPaise = safeAdd(item.amountPaise, Number(row.total_amount_paise || 0), "expense category total");
+        item.expenseCount = safeAdd(item.expenseCount, Number(row.expense_count || 0), "expense count");
+    }
+    const values = [...byKey.values()];
+    const directValues = values.filter(row => row.businessSegment !== "COMMON");
+    const commonValues = values.filter(row => row.businessSegment === "COMMON");
+    const reportValues = segment === "ALL" ? values : directValues;
+    const categories = EXPENSE_HEADERS.map(category => {
+        const matching = reportValues.filter(row => row.category === category);
+        return { category, amountPaise: matching.reduce((sum, row) => safeAdd(sum, row.amountPaise, "expense category total"), 0), expenseCount: matching.reduce((sum, row) => safeAdd(sum, row.expenseCount, "expense count"), 0) };
+    });
+    const groups = CATEGORY_GROUPS.map(group => {
+        const matching = categories.filter(row => group.categories.includes(row.category));
+        return { name: group.name, categories: [...group.categories], amountPaise: matching.reduce((sum, row) => safeAdd(sum, row.amountPaise, "expense group total"), 0), expenseCount: matching.reduce((sum, row) => safeAdd(sum, row.expenseCount, "expense count"), 0) };
+    });
+    const directCategories = EXPENSE_HEADERS.map(category => {
+        const matching = directValues.filter(row => row.category === category);
+        return { category, amountPaise: matching.reduce((sum, row) => safeAdd(sum, row.amountPaise, "direct expense category total"), 0), expenseCount: matching.reduce((sum, row) => safeAdd(sum, row.expenseCount, "expense count"), 0) };
+    });
+    const commonCategories = EXPENSE_HEADERS.map(category => {
+        const matching = commonValues.filter(row => row.category === category);
+        return { category, amountPaise: matching.reduce((sum, row) => safeAdd(sum, row.amountPaise, "COMMON expense category total"), 0), expenseCount: matching.reduce((sum, row) => safeAdd(sum, row.expenseCount, "expense count"), 0) };
+    });
+    const unclassifiedOperatingExpensesPaise = unclassified.reduce((sum, row) => safeAdd(sum, row.amountPaise, "unclassified expenses"), 0);
+    const unclassifiedExpenseCount = unclassified.reduce((sum, row) => safeAdd(sum, row.expenseCount, "unclassified expense count"), 0);
+    const total = safeAdd(categories.reduce((sum, row) => safeAdd(sum, row.amountPaise, "total operating expenses"), 0),
+        unclassifiedOperatingExpensesPaise, "total operating expenses");
+    const directTotal = directCategories.reduce((sum, row) => safeAdd(sum, row.amountPaise, "direct operating expenses"), 0);
+    const commonTotal = commonCategories.reduce((sum, row) => safeAdd(sum, row.amountPaise, "COMMON expenses"), 0);
+    return { available: true, categories, managementGroups: groups, totalOperatingExpensesPaise: total,
+        commonCategories,
+        commonOperatingExpensesPaise: commonTotal,
+        directCategories,
+        directOperatingExpensesPaise: directTotal,
+        unclassified, unclassifiedExpenseCount, unclassifiedOperatingExpensesPaise,
+        byCategoryAndSegment: values };
+}
+
+function createManagementPnlService(database, options = {}) {
+    if (!database || typeof database.all !== "function") throw new TypeError("A SQLite database connection is required.");
+    const getCurrentStore = options.getCurrentStore || (() => require("./storeIdentityService").getCurrentStore());
+    const returnCogs = options.returnCogsService || createReturnCogsService(database);
+    const now = options.now || (() => new Date());
+
+    async function querySales(period, segment) {
+        const params = [period.fromDate, period.toDate];
+        return dbAll(database, `
+            SELECT b.id AS bill_id, b.bill_no, b.bill_date, b.payment_status,
+                   bi.id AS bill_item_id, bi.qty, bi.business_segment,
+                   bi.gross_amount, bi.discount_amount, bi.taxable_amount, bi.gst_amount, bi.net_amount,
+                   bi.unit_cost_paise, bi.cost_basis_status, bi.cost_source, bi.cost_method
+            FROM bills b
+            JOIN bill_items bi ON bi.bill_no = b.bill_no
+            WHERE b.bill_date >= ? AND b.bill_date <= ?
+            ORDER BY b.bill_date, b.id, bi.id
+        `, params);
+    }
+
+    async function queryExpenses(period, store, segment) {
+        if (!store) return [];
+        const params = [period.fromDate, period.toDate, store.id];
+        const segmentFilter = segment === "ALL" ? "" : " AND e.business_segment IN (?, 'COMMON')";
+        if (segment !== "ALL") params.push(segment);
+        return dbAll(database, `
+            SELECT e.category, e.business_segment, COUNT(*) AS expense_count,
+                   SUM(e.amount_paise) AS total_amount_paise
+            FROM expenses e
+            JOIN expense_batches b ON b.id = e.batch_id
+            JOIN stores s ON s.id = e.store_id AND s.id = b.store_id
+            WHERE e.expense_date >= ? AND e.expense_date <= ?
+              AND e.store_id = ? AND b.status = 'POSTED'
+              AND e.lifecycle_status = 'ACTIVE'
+              AND e.expense_code IS NOT NULL AND e.batch_id IS NOT NULL AND e.posted_at IS NOT NULL
+              AND b.expense_count = (SELECT COUNT(*) FROM expenses bx WHERE bx.batch_id = b.id)
+              AND b.total_amount_paise = (SELECT COALESCE(SUM(bx.amount_paise),0) FROM expenses bx WHERE bx.batch_id = b.id)
+              AND NOT EXISTS (SELECT 1 FROM expenses bx WHERE bx.batch_id = b.id AND
+                  (bx.lifecycle_status <> 'ACTIVE' OR bx.expense_code IS NULL OR bx.posted_at IS NULL OR bx.store_id <> b.store_id))
+              ${segmentFilter}
+            GROUP BY e.category, e.business_segment
+            ORDER BY e.category, e.business_segment
+        `, params);
+    }
+
+    async function queryExpenseBatchIssues(period, store, segment) {
+        if (!store) return { count: 0, amountPaise: 0 };
+        const params = [period.fromDate, period.toDate, store.id];
+        const segmentFilter = segment === "ALL" ? "" : " AND scoped.business_segment IN (?, 'COMMON')";
+        if (segment !== "ALL") params.push(segment);
+        const rows = await dbAll(database, `
+            SELECT COUNT(*) AS issue_count,
+                   COALESCE(SUM(b.total_amount_paise),0) AS issue_amount_paise
+            FROM expense_batches b
+            WHERE EXISTS (SELECT 1 FROM expenses scoped WHERE scoped.batch_id=b.id
+                AND scoped.expense_date >= ? AND scoped.expense_date <= ? AND scoped.store_id = ?${segmentFilter})
+              AND (b.status <> 'POSTED'
+                OR b.expense_count <> (SELECT COUNT(*) FROM expenses bx WHERE bx.batch_id = b.id)
+                OR b.total_amount_paise <> (SELECT COALESCE(SUM(bx.amount_paise),0) FROM expenses bx WHERE bx.batch_id = b.id)
+                OR EXISTS (SELECT 1 FROM expenses bx WHERE bx.batch_id = b.id AND
+                    (bx.lifecycle_status <> 'ACTIVE' OR bx.expense_code IS NULL OR bx.posted_at IS NULL OR bx.store_id <> b.store_id)))
+        `, params);
+        return { count: Number(rows[0]?.issue_count || 0), amountPaise: Number(rows[0]?.issue_amount_paise || 0) };
+    }
+
+    async function calculatePeriod(period, segment, store) {
+        const warnings = [];
+        const saleRowsPromise = querySales(period, segment);
+        const returnRowsPromise = returnCogs.listCompletedReturnCogsReversals({
+            fromDate: period.fromDate, toDate: period.toDate, businessSegment: null
+        });
+        const expenseRowsPromise = queryExpenses(period, store, segment);
+        const expenseBatchIssuesPromise = queryExpenseBatchIssues(period, store, segment);
+        const unassessedParams = [period.fromDate, period.toDate];
+        const unassessedPromise = dbAll(database, `SELECT COUNT(*) AS row_count, COALESCE(SUM(net_reversal),0) AS net_value FROM returns r
+            WHERE r.business_date >= ? AND r.business_date <= ?
+              AND (r.accounting_status <> 'COMPLETED' OR r.accounting_snapshot_version IS NOT 1
+                   OR r.credit_note_no IS NULL OR TRIM(r.credit_note_no) NOT GLOB 'CN[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]')`, unassessedParams);
+        const [sales, returns, expenseRows, expenseBatchIssues, unassessedRows] = await Promise.all([saleRowsPromise, returnRowsPromise, expenseRowsPromise, expenseBatchIssuesPromise, unassessedPromise]);
+        const allSales = sales;
+        const allReturns = returns;
+        const scopedSales = segment === "ALL" ? allSales : allSales.filter(row => row.business_segment === segment);
+        const scopedReturns = segment === "ALL" ? allReturns : allReturns.filter(row => row.business_segment === segment);
+
+        const revenue = { grossBillingsInclGstPaise: 0, discountsInclGstEffectPaise: 0,
+            salesTaxableBeforeReturnsPaise: 0, salesGstPaise: 0, salesNetInclGstPaise: 0,
+            completedReturnGrossReversalPaise: 0, completedReturnDiscountReversalPaise: 0,
+            completedReturnTaxableReversalPaise: 0, completedReturnGstReversalPaise: 0,
+            completedReturnNetReversalPaise: 0, netGstOnSalesPaise: 0,
+            netBillingsInclGstAfterReturnsPaise: 0, netSalesExGstPaise: 0,
+            saleLineCount: scopedSales.length, saleBillCount: new Set(scopedSales.map(row => String(row.bill_id))).size,
+            returnLineCount: scopedReturns.length, returnCount: new Set(scopedReturns.map(row => String(row.return_id))).size,
+            available: true };
+        const revenueFields = [
+            ["gross_amount", "grossBillingsInclGstPaise", "gross billing"],
+            ["discount_amount", "discountsInclGstEffectPaise", "discount"],
+            ["taxable_amount", "salesTaxableBeforeReturnsPaise", "taxable sales"],
+            ["gst_amount", "salesGstPaise", "sales GST"],
+            ["net_amount", "salesNetInclGstPaise", "GST-inclusive sales"]
+        ];
+        for (const row of scopedSales) {
+            for (const [field, target, label] of revenueFields) {
+                const result = addField(revenue[target], row, field, label, warnings, { billNo: row.bill_no, billItemId: row.bill_item_id });
+                revenue[target] = result.total;
+                if (result.missing || result.invalid) revenue.available = false;
+            }
+        }
+
+        const returnsByStatus = { CAPTURED: { taxable: 0, cogs: 0, count: 0 }, UNKNOWN: { taxable: 0, cogs: 0, count: 0 }, NOT_APPLICABLE: { taxable: 0, cogs: 0, count: 0 } };
+        let returnRevenueAvailable = true;
+        let returnCostContradictions = 0;
+        for (const row of scopedReturns) {
+            for (const [field, target, label] of [
+                ["gross_reversal", "completedReturnGrossReversalPaise", "return gross reversal"],
+                ["discount_reversal", "completedReturnDiscountReversalPaise", "return discount reversal"],
+                ["taxable_reversal", "completedReturnTaxableReversalPaise", "return taxable reversal"],
+                ["gst_reversal", "completedReturnGstReversalPaise", "return GST reversal"],
+                ["net_reversal", "completedReturnNetReversalPaise", "return net reversal"]
+            ]) {
+                const result = addField(revenue[target], row, field, label, warnings, { returnNo: row.return_no, returnItemId: row.return_item_id });
+                revenue[target] = result.total;
+                if (result.missing || result.invalid) returnRevenueAvailable = false;
+            }
+            const status = row.return_cost_basis_status;
+            let validStatus = status === row.original_cost_basis_status && ["CAPTURED", "UNKNOWN", "NOT_APPLICABLE"].includes(status);
+            if (validStatus && status === "CAPTURED") {
+                validStatus = row.original_unit_cost_paise != null && Number.isSafeInteger(Number(row.original_unit_cost_paise)) && Number(row.original_unit_cost_paise) >= 0 &&
+                    row.return_unit_cost_paise != null && row.return_cost_paise != null &&
+                    Number.isSafeInteger(Number(row.return_unit_cost_paise)) &&
+                    Number(row.return_unit_cost_paise) >= 0 &&
+                    Number(row.return_unit_cost_paise) === Number(row.original_unit_cost_paise) &&
+                    Number.isSafeInteger(Number(row.return_cost_paise)) &&
+                    Number(row.return_cost_paise) >= 0 &&
+                    Number(row.return_cost_paise) === Number(row.return_unit_cost_paise) * Number(row.returned_quantity) &&
+                    Number(row.returned_quantity) > 0 && Number.isInteger(Number(row.returned_quantity)) &&
+                    Number(row.returned_quantity) <= Number(row.original_sold_quantity) &&
+                    Number(row.return_cost_paise) <= Number(row.original_unit_cost_paise) * Number(row.original_sold_quantity) &&
+                    row.return_cost_method === "ORIGINAL_SALE_TIME_COST_REVERSAL" &&
+                    row.return_cost_source === row.original_cost_source &&
+                    row.original_cost_method === "SALE_TIME_COST_PRICE_PAISE";
+            }
+            if (validStatus && status !== "CAPTURED") {
+                validStatus = row.return_unit_cost_paise == null && row.return_cost_paise == null &&
+                    row.return_cost_source == null && row.return_cost_method == null &&
+                    row.original_unit_cost_paise == null && row.original_cost_source == null && row.original_cost_method == null;
+            }
+            if (!validStatus) {
+                returnCostContradictions += 1;
+                addWarning(warnings, "RETURN_COGS_STATUS_INCONSISTENT", "ERROR", "A completed return cost snapshot does not agree with its original sale cost basis.", 1, null);
+                continue;
+            }
+            const taxable = moneyPaise(row.taxable_reversal, "return taxable reversal", warnings, { returnItemId: row.return_item_id });
+            if (taxable === null) { returnRevenueAvailable = false; continue; }
+            const bucket = returnsByStatus[status];
+            bucket.taxable = safeAdd(bucket.taxable, taxable, "return cost coverage value");
+            bucket.count += 1;
+            if (status === "CAPTURED") {
+                const cost = Number(row.return_cost_paise);
+                bucket.cogs = safeAdd(bucket.cogs, cost, "captured return COGS reversal");
+            }
+        }
+        revenue.available = revenue.available && returnRevenueAvailable;
+        revenue.netGstOnSalesPaise = revenue.salesGstPaise - revenue.completedReturnGstReversalPaise;
+        revenue.netBillingsInclGstAfterReturnsPaise = revenue.salesNetInclGstPaise - revenue.completedReturnNetReversalPaise;
+        revenue.netSalesExGstPaise = revenue.salesTaxableBeforeReturnsPaise - revenue.completedReturnTaxableReversalPaise;
+        const grossBridgePaise = revenue.grossBillingsInclGstPaise - revenue.discountsInclGstEffectPaise;
+        const salesBridgeDifferencePaise = grossBridgePaise - revenue.salesNetInclGstPaise;
+        const taxBridgeDifferencePaise = revenue.salesNetInclGstPaise - revenue.salesTaxableBeforeReturnsPaise - revenue.salesGstPaise;
+        const returnBridgeDifferencePaise = revenue.completedReturnNetReversalPaise - revenue.completedReturnTaxableReversalPaise - revenue.completedReturnGstReversalPaise;
+        const netSalesBridgeDifferencePaise = revenue.netBillingsInclGstAfterReturnsPaise - revenue.netGstOnSalesPaise - revenue.netSalesExGstPaise;
+        let revenueBridgeValid = true;
+        for (const [name, difference] of [["sales gross/discount/net", salesBridgeDifferencePaise], ["sales taxable/GST", taxBridgeDifferencePaise], ["return taxable/GST", returnBridgeDifferencePaise], ["net sales/GST", netSalesBridgeDifferencePaise]]) {
+            if (Math.abs(difference) > 1) {
+                revenueBridgeValid = false;
+                addWarning(warnings, "REVENUE_GST_RECONCILIATION_MISMATCH", "ERROR", `Persisted revenue snapshots do not reconcile for ${name}.`, 1, difference);
+            }
+        }
+        revenue.available = revenue.available && revenueBridgeValid;
+
+        let capturedSaleCogsPaise = 0;
+        let capturedSaleTaxableValuePaise = 0;
+        let unknownSaleTaxableValuePaise = 0;
+        let notApplicableSaleTaxableValuePaise = 0;
+        let capturedSaleLineCount = 0;
+        let unknownSaleLineCount = 0;
+        let notApplicableSaleLineCount = 0;
+        let costContradictions = 0;
+        for (const row of scopedSales) {
+            const status = statusOfCost(row, warnings, "sale");
+            let taxable = moneyPaise(row.taxable_amount, "taxable sale value", warnings, { billNo: row.bill_no, billItemId: row.bill_item_id });
+            if (taxable === null) { revenue.available = false; continue; }
+            if (status === "CAPTURED") {
+                const quantity = Number(row.qty);
+                const cost = Number(row.unit_cost_paise) * quantity;
+                if (!Number.isInteger(quantity) || quantity <= 0 || !Number.isSafeInteger(cost)) {
+                    costContradictions += 1;
+                    addWarning(warnings, "SALE_COGS_INCONSISTENT", "ERROR", "A captured sale line has invalid quantity or exceeds safe integer-paise cost limits.", 1);
+                    unknownSaleTaxableValuePaise = safeAdd(unknownSaleTaxableValuePaise, taxable, "unknown-cost sales value");
+                    unknownSaleLineCount += 1;
+                    continue;
+                }
+                capturedSaleCogsPaise = safeAdd(capturedSaleCogsPaise, cost, "captured sale COGS");
+                capturedSaleTaxableValuePaise = safeAdd(capturedSaleTaxableValuePaise, taxable, "captured sale taxable value");
+                capturedSaleLineCount += 1;
+            } else if (status === "NOT_APPLICABLE") {
+                notApplicableSaleTaxableValuePaise = safeAdd(notApplicableSaleTaxableValuePaise, taxable, "not-applicable sales value");
+                notApplicableSaleLineCount += 1;
+            } else {
+                unknownSaleTaxableValuePaise = safeAdd(unknownSaleTaxableValuePaise, taxable, "unknown-cost sales value");
+                unknownSaleLineCount += 1;
+                if (status === "CONTRADICTORY") costContradictions += 1;
+            }
+        }
+
+        const saleCostByStatus = {
+            CAPTURED: { taxable: capturedSaleTaxableValuePaise, cogs: capturedSaleCogsPaise, count: capturedSaleLineCount },
+            UNKNOWN: { taxable: unknownSaleTaxableValuePaise, cogs: 0, count: unknownSaleLineCount },
+            NOT_APPLICABLE: { taxable: notApplicableSaleTaxableValuePaise, cogs: 0, count: notApplicableSaleLineCount }
+        };
+        const returnBucketFor = status => returnsByStatus[status];
+        const capturedNetSalesPaise = saleCostByStatus.CAPTURED.taxable - returnBucketFor("CAPTURED").taxable;
+        const unknownNetSalesPaise = saleCostByStatus.UNKNOWN.taxable - returnBucketFor("UNKNOWN").taxable;
+        const notApplicableNetSalesPaise = saleCostByStatus.NOT_APPLICABLE.taxable - returnBucketFor("NOT_APPLICABLE").taxable;
+        const eligibleNetSalesPaise = capturedNetSalesPaise + unknownNetSalesPaise;
+        const capturedReturnCogsReversalPaise = returnBucketFor("CAPTURED").cogs;
+        const netCapturedCogsPaise = capturedSaleCogsPaise - capturedReturnCogsReversalPaise;
+        if ([capturedNetSalesPaise, unknownNetSalesPaise, notApplicableNetSalesPaise, netCapturedCogsPaise].some(value => !Number.isSafeInteger(value))) {
+            throw new Error("Management P&L cost coverage or net COGS exceeded safe integer-paise limits.");
+        }
+        const coverageStatus = eligibleNetSalesPaise !== 0
+            ? (unknownNetSalesPaise === 0 ? "COMPLETE" : "INCOMPLETE")
+            : "NO_ELIGIBLE_SALES";
+        const costCoveragePercent = eligibleNetSalesPaise !== 0
+            ? percent(capturedNetSalesPaise, eligibleNetSalesPaise) : null;
+        const returnCostStatusBad = returnCostContradictions > 0;
+        const saleStatusBad = costContradictions > 0;
+        const coveredGrossProfitPaise = capturedNetSalesPaise - netCapturedCogsPaise;
+        const coveredGrossProfitAvailable = !saleStatusBad && !returnCostStatusBad && revenue.available;
+        const hasNotApplicableActivity = notApplicableSaleTaxableValuePaise !== 0 || returnsByStatus.NOT_APPLICABLE.taxable !== 0;
+        const fullGrossProfitAvailable = revenue.available && !saleStatusBad && !returnCostStatusBad &&
+            unknownNetSalesPaise === 0 && unknownSaleLineCount === 0 && returnsByStatus.UNKNOWN.count === 0 &&
+            notApplicableNetSalesPaise === 0 && !hasNotApplicableActivity;
+
+        addWarning(warnings, "UNKNOWN_COST_SALES", "WARNING", "Some eligible sale value has no reliable immutable cost snapshot.", unknownSaleLineCount + returnsByStatus.UNKNOWN.count, unknownNetSalesPaise);
+        addWarning(warnings, "NOT_APPLICABLE_VVP_SALES", "WARNING", "Variable Value / not-applicable sales are disclosed separately and are not treated as zero-cost profit.", notApplicableSaleLineCount + returnsByStatus.NOT_APPLICABLE.count, notApplicableNetSalesPaise);
+
+        const unclassifiedSales = allSales.filter(row => !normalizeBusinessSegment(row.business_segment, { allowLabels: false }));
+        const unclassifiedReturns = allReturns.filter(row => !normalizeBusinessSegment(row.business_segment, { allowLabels: false }));
+        addWarning(warnings, "UNCLASSIFIED_BUSINESS_SEGMENT_SALES", "WARNING", "Some sale lines have no recognized Business Segment attribution.", unclassifiedSales.length,
+            unclassifiedSales.reduce((sum, row) => sum + (moneyPaise(row.taxable_amount, "unclassified taxable sale", [], {}) || 0), 0));
+        addWarning(warnings, "UNCLASSIFIED_RETURN_ATTRIBUTION", "WARNING", "Some completed return lines have no original Business Segment attribution.", unclassifiedReturns.length,
+            unclassifiedReturns.reduce((sum, row) => sum + (moneyPaise(row.taxable_reversal, "unclassified return taxable reversal", [], {}) || 0), 0));
+        const unassessedCount = Number(unassessedRows[0]?.row_count || 0);
+        addWarning(warnings, "LEGACY_RETURNS_EXCLUDED", "WARNING", "Legacy, unassessed, or invalid completed returns are excluded from accounting totals.", unassessedCount,
+            unassessedCount ? Math.round(Number(unassessedRows[0].net_value || 0) * 100) : null);
+
+        const reconciliation = {
+            revenue: { grossLessDiscountPaise: grossBridgePaise, salesNetInclGstPaise: revenue.salesNetInclGstPaise,
+                netSalesBridgeDifferencePaise, withinOnePaise: Math.abs(netSalesBridgeDifferencePaise) <= 1 },
+            cogs: { capturedSaleCogsPaise, capturedReturnCogsReversalPaise, netCapturedCogsPaise,
+                reconciles: capturedSaleCogsPaise - capturedReturnCogsReversalPaise === netCapturedCogsPaise },
+            costCoverage: { capturedNetSalesPaise, unknownNetSalesPaise, notApplicableNetSalesPaise,
+                netSalesExGstPaise: revenue.netSalesExGstPaise,
+                differencePaise: capturedNetSalesPaise + unknownNetSalesPaise + notApplicableNetSalesPaise - revenue.netSalesExGstPaise },
+            expense: null
+        };
+        if (Math.abs(reconciliation.costCoverage.differencePaise) > 1) addWarning(warnings, "COST_COVERAGE_POPULATION_MISMATCH", "ERROR", "Cost-status populations do not reconcile to GST-exclusive Net Sales.", 1, reconciliation.costCoverage.differencePaise);
+
+        const expenses = makeExpenseGroups(expenseRows, segment);
+        addWarning(warnings, "EXPENSE_POSTED_BATCH_INVALID", "ERROR", "One or more expense batches do not reconcile to their posted expense rows or Store attribution.", expenseBatchIssues.count, expenseBatchIssues.amountPaise);
+        const categoryTotal = expenses.categories.reduce((sum, row) => safeAdd(sum, row.amountPaise, "expense category reconciliation"), 0);
+        const groupTotal = expenses.managementGroups.reduce((sum, row) => safeAdd(sum, row.amountPaise, "expense group reconciliation"), 0);
+        const commonCategoryTotal = expenses.commonCategories.reduce((sum, row) => safeAdd(sum, row.amountPaise, "COMMON expense reconciliation"), 0);
+        const expectedExpenseTotal = segment === "ALL" ? expenses.totalOperatingExpensesPaise : expenses.directOperatingExpensesPaise;
+        reconciliation.expense = { categoryTotalPaise: categoryTotal, managementGroupTotalPaise: groupTotal,
+            totalOperatingExpensesPaise: expenses.totalOperatingExpensesPaise, directOperatingExpensesPaise: expenses.directOperatingExpensesPaise,
+            commonCategoryTotalPaise: commonCategoryTotal, commonOperatingExpensesPaise: expenses.commonOperatingExpensesPaise,
+            categoryDifferencePaise: categoryTotal - expectedExpenseTotal, groupDifferencePaise: groupTotal - expectedExpenseTotal,
+            commonDifferencePaise: commonCategoryTotal - expenses.commonOperatingExpensesPaise,
+            reconciles: categoryTotal === expectedExpenseTotal && groupTotal === expectedExpenseTotal && commonCategoryTotal === expenses.commonOperatingExpensesPaise };
+        if (!reconciliation.expense.reconciles || expenses.unclassifiedExpenseCount > 0) addWarning(warnings, "EXPENSE_AGGREGATION_MISMATCH", "ERROR", "Expense categories and management groups do not reconcile to the operating expense total.", expenses.unclassifiedExpenseCount || 1, expenses.unclassifiedOperatingExpensesPaise || null);
+        if (expenseBatchIssues.count > 0) {
+            expenses.available = false;
+            expenses.totalOperatingExpensesPaise = null;
+        }
+
+        const gpAvailable = fullGrossProfitAvailable;
+        const expenseSummaryAvailable = expenses.unclassifiedExpenseCount === 0 && expenseBatchIssues.count === 0 && reconciliation.expense.reconciles;
+        const segmentResultAvailable = segment !== "ALL" && fullGrossProfitAvailable && expenseSummaryAvailable;
+        const directOperatingResultPaise = segmentResultAvailable
+            ? coveredGrossProfitPaise - expenses.directOperatingExpensesPaise : null;
+        const allOperatingProfitPaise = segment === "ALL" && gpAvailable && expenseSummaryAvailable
+            ? coveredGrossProfitPaise - expenses.totalOperatingExpensesPaise : null;
+        return {
+            revenue,
+            cogs: {
+                capturedSaleCogsPaise, capturedSaleTaxableValuePaise, capturedSaleLineCount,
+                capturedReturnCogsReversalPaise, capturedReturnTaxableReversalPaise: returnsByStatus.CAPTURED.taxable,
+                capturedReturnLineCount: returnsByStatus.CAPTURED.count,
+                unknownSaleTaxableValuePaise, unknownSaleLineCount,
+                unknownReturnTaxableReversalPaise: returnsByStatus.UNKNOWN.taxable,
+                unknownReturnLineCount: returnsByStatus.UNKNOWN.count,
+                notApplicableSaleTaxableValuePaise, notApplicableSaleLineCount,
+                notApplicableReturnTaxableReversalPaise: returnsByStatus.NOT_APPLICABLE.taxable,
+                notApplicableReturnLineCount: returnsByStatus.NOT_APPLICABLE.count,
+                capturedNetSalesPaise, unknownNetSalesPaise, notApplicableNetSalesPaise,
+                eligibleNetSalesPaise, costCoveragePercent, coverageStatus, netCapturedCogsPaise,
+                coveredGrossProfitPaise: coveredGrossProfitAvailable ? coveredGrossProfitPaise : null,
+                coveredGrossProfitAvailable,
+                coveredGrossMarginPercent: coveredGrossProfitAvailable ? percent(coveredGrossProfitPaise, capturedNetSalesPaise) : null,
+                fullGrossProfitAvailable: gpAvailable,
+                fullGrossProfitPaise: gpAvailable ? coveredGrossProfitPaise : null,
+                fullGrossMarginPercent: gpAvailable ? percent(coveredGrossProfitPaise, revenue.netSalesExGstPaise) : null,
+                fullGrossProfitUnavailableReason: gpAvailable ? null :
+                    (returnCostStatusBad || saleStatusBad ? "ACCOUNTING_DATA_QUALITY" :
+                        hasNotApplicableActivity ? "NOT_APPLICABLE_COST_BASIS" :
+                            unknownNetSalesPaise !== 0 || unknownSaleLineCount > 0 || returnsByStatus.UNKNOWN.count > 0 ? "INCOMPLETE_COST_COVERAGE" : !revenue.available ? "REVENUE_SNAPSHOT_INCOMPLETE" : "NO_ELIGIBLE_COST_BASIS")
+            },
+            expenses,
+            operatingResult: segment === "ALL" ? {
+                operatingProfitAvailable: allOperatingProfitPaise !== null,
+                operatingProfitPaise: allOperatingProfitPaise,
+                operatingMarginPercent: allOperatingProfitPaise === null ? null : percent(allOperatingProfitPaise, revenue.netSalesExGstPaise),
+                unavailableReason: allOperatingProfitPaise !== null ? null : "FULL_GROSS_PROFIT_UNAVAILABLE"
+            } : {
+                segmentDirectOperatingResultAvailable: segmentResultAvailable,
+                segmentDirectOperatingResultPaise: directOperatingResultPaise,
+                segmentDirectOperatingMarginPercent: directOperatingResultPaise === null ? null : percent(directOperatingResultPaise, capturedNetSalesPaise),
+                label: "Operating Result Before COMMON Expenses",
+                commonOperatingExpensesPaise: expenses.commonOperatingExpensesPaise,
+                unavailableReason: segmentResultAvailable ? null : "FULL_SEGMENT_GROSS_PROFIT_UNAVAILABLE"
+            },
+            unsupportedAccountingLines: {
+                otherOperatingIncome: { status: "NOT_TRACKED", amountPaise: null },
+                depreciation: { status: "NOT_TRACKED", amountPaise: null },
+                amortisation: { status: "NOT_TRACKED", amountPaise: null },
+                financeCosts: { status: "NOT_TRACKED", amountPaise: null },
+                otherNonOperatingIncomeExpense: { status: "NOT_TRACKED", amountPaise: null },
+                incomeTax: { status: "NOT_TRACKED", amountPaise: null },
+                deferredTax: { status: "NOT_TRACKED", amountPaise: null },
+                profitBeforeTax: { status: "NOT_AVAILABLE", amountPaise: null },
+                profitAfterTax: { status: "NOT_AVAILABLE", amountPaise: null }
+            },
+            dataQuality: { warnings, errorCount: warnings.filter(row => row.severity === "ERROR").length,
+                warningCount: warnings.filter(row => row.severity === "WARNING").length },
+            reconciliation
+        };
+    }
+
+    async function getManagementPnl({ fromDate, toDate, comparison = "NONE", businessSegment = "ALL" } = {}) {
+        parseDate(fromDate, "period start date");
+        parseDate(toDate, "period end date");
+        if (fromDate > toDate) throw new Error("P&L period start date must not be after its end date.");
+        if (fromDate > getBusinessDate(now())) throw new Error("Future P&L periods are not available.");
+        const segment = String(businessSegment || "ALL").toUpperCase();
+        if (!VALID_SEGMENTS.has(segment)) throw new Error("Select ALL, KL, MENS, or KIDS for the P&L Business Segment.");
+        const selectedPeriod = { fromDate, toDate, label: `${fromDate} to ${toDate}` };
+        const comparedPeriod = comparisonPeriod(selectedPeriod, comparison);
+        let store = null;
+        let storeWarning = null;
+        try { store = await getCurrentStore(); }
+        catch (error) {
+            storeWarning = { code: "STORE_IDENTITY_UNAVAILABLE", severity: "ERROR",
+                message: error.message || "Current Store identity is unavailable.", affectedCount: 1, affectedValuePaise: null };
+        }
+        if (store && (!Number.isSafeInteger(Number(store.id)) || store.status !== "ACTIVE")) {
+            store = null;
+            storeWarning = { code: "STORE_IDENTITY_UNAVAILABLE", severity: "ERROR",
+                message: "Current Store identity is invalid or inactive.", affectedCount: 1, affectedValuePaise: null };
+        }
+        const selected = await calculatePeriod(selectedPeriod, segment, store);
+        if (storeWarning) {
+            selected.dataQuality.warnings.unshift(storeWarning);
+            selected.dataQuality.errorCount += 1;
+            selected.expenses = { ...makeExpenseGroups([], segment), available: false,
+                totalOperatingExpensesPaise: null, directOperatingExpensesPaise: null, commonOperatingExpensesPaise: null };
+            selected.reconciliation.expense = { categoryTotalPaise: null, managementGroupTotalPaise: null,
+                totalOperatingExpensesPaise: null, directOperatingExpensesPaise: null, commonOperatingExpensesPaise: null,
+                commonCategoryTotalPaise: null, categoryDifferencePaise: null, groupDifferencePaise: null, commonDifferencePaise: null, reconciles: null };
+            if (segment !== "ALL") {
+                selected.operatingResult.segmentDirectOperatingResultAvailable = false;
+                selected.operatingResult.segmentDirectOperatingResultPaise = null;
+                selected.operatingResult.segmentDirectOperatingMarginPercent = null;
+                selected.operatingResult.unavailableReason = "STORE_IDENTITY_UNAVAILABLE";
+            } else {
+                selected.operatingResult.operatingProfitAvailable = false;
+                selected.operatingResult.operatingProfitPaise = null;
+                selected.operatingResult.operatingMarginPercent = null;
+                selected.operatingResult.unavailableReason = "STORE_IDENTITY_UNAVAILABLE";
+            }
+        }
+        const comparisonResult = comparedPeriod ? await calculatePeriod(comparedPeriod, segment, store) : null;
+        const variance = comparisonResult ? deriveVariance(selected, comparisonResult) : null;
+        return {
+            metadata: {
+                store: store ? { storeCode: store.storeCode, storeName: store.storeName } : null,
+                selectedPeriod,
+                comparisonPeriod: comparedPeriod,
+                comparison,
+                businessSegment: segment,
+                generatedAt: now().toISOString(),
+                accountingBasis: "Management view; persisted GST-exclusive sales snapshots; immutable sale-time Product Master cost snapshots; V21-05A return cost reversals; posted Expense Tracker OPEX. Not audited/statutory financial statements."
+            },
+            selected,
+            comparison: comparisonResult,
+            variance
+        };
+    }
+
+    return { getManagementPnl };
+}
+
+function deriveVariance(selected, comparison) {
+    const metrics = [
+        ["netSalesExGstPaise", value => value.revenue.netSalesExGstPaise],
+        ["capturedSaleCogsPaise", value => value.cogs.capturedSaleCogsPaise],
+        ["netCapturedCogsPaise", value => value.cogs.netCapturedCogsPaise],
+        ["coveredGrossProfitPaise", value => value.cogs.coveredGrossProfitPaise],
+        ["fullGrossProfitPaise", value => value.cogs.fullGrossProfitPaise],
+        ["costCoveragePercentagePoints", value => value.cogs.costCoveragePercent],
+        ["coveredGrossMarginPercentagePoints", value => value.cogs.coveredGrossMarginPercent],
+        ["fullGrossMarginPercentagePoints", value => value.cogs.fullGrossMarginPercent],
+        ["totalOperatingExpensesPaise", value => value.expenses.totalOperatingExpensesPaise],
+        ["operatingProfitPaise", value => value.operatingResult.operatingProfitPaise ?? value.operatingResult.segmentDirectOperatingResultPaise],
+        ["operatingMarginPercentagePoints", value => value.operatingResult.operatingMarginPercent ?? value.operatingResult.segmentDirectOperatingMarginPercent]
+    ];
+    const result = {};
+    for (const [name, getValue] of metrics) {
+        const current = getValue(selected);
+        const previous = getValue(comparison);
+        const isPercentagePoint = name.endsWith("PercentagePoints");
+        const delta = current - previous;
+        result[name] = isPercentagePoint
+            ? (Number.isFinite(current) && Number.isFinite(previous) ? delta : null)
+            : (Number.isSafeInteger(current) && Number.isSafeInteger(previous) && Number.isSafeInteger(delta) ? delta : null);
+    }
+    return result;
+}
+
+let defaultService;
+function getDefaultService() {
+    if (!defaultService) defaultService = createManagementPnlService(require("./database"));
+    return defaultService;
+}
+
+module.exports = { CATEGORY_GROUPS, createManagementPnlService,
+    getManagementPnl: options => getDefaultService().getManagementPnl(options), deriveVariance };
