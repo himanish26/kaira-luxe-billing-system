@@ -7,13 +7,13 @@ const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 const ExcelJS = require("exceljs");
 const {
-    CURRENT_DB_SCHEMA_VERSION, prepareDatabaseSchema, readSchemaVersion
+    CURRENT_DB_SCHEMA_VERSION, prepareDatabaseSchema, readSchemaVersion,
+    migrateBusinessSegmentColumns, migrateVariableValueBillingFoundation, migrateV5Foundation
 } = require("../src/database/schemaVersion");
 const {
     EXPENSE_HEADERS, BUSINESS_SEGMENTS, PAYMENT_MODES, PAGE_SIZE,
     ExpenseTrackerError, normalizeExpenseEntry, createExpenseTrackerService, getExpenseTrackerOptions
 } = require("../src/database/expenseTrackerService");
-const { migrateStoreIdentity } = require("../src/database/storeIdentityMigration");
 const { exportPostedExpenseBatch, exportExpenseHistory } = require("../src/database/expenseExcelExporter");
 const { AUTHORIZATION_POLICY } = require("../src/services/administratorSecurityService");
 const { createExpenseDraftState } = require("../src/renderer/modules/expenseDraftState");
@@ -56,20 +56,11 @@ const BASE = `
     CREATE TABLE settings (id INTEGER PRIMARY KEY, store_name TEXT, gstin TEXT);
     CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, quantity INTEGER);
     CREATE TABLE day_closing (id INTEGER PRIMARY KEY, business_date TEXT);
-    CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT);
-    CREATE TABLE stock_movements (id INTEGER PRIMARY KEY, movement_no TEXT);
-    CREATE TABLE stock_movement_lines (id INTEGER PRIMARY KEY, movement_id INTEGER);
+    CREATE TABLE customers (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_code TEXT UNIQUE,
+        name TEXT NOT NULL, mobile TEXT UNIQUE, email TEXT, address TEXT, remarks TEXT,
+        active INTEGER DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
     CREATE TABLE klbs_schema_metadata (id INTEGER PRIMARY KEY CHECK(id=1), schema_version INTEGER NOT NULL);
-    CREATE TABLE expenses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, expense_date TEXT NOT NULL, category TEXT NOT NULL,
-        particulars TEXT NOT NULL, expense_class TEXT NOT NULL DEFAULT 'OPERATING' CHECK(expense_class='OPERATING'),
-        amount_paise INTEGER NOT NULL CHECK(amount_paise > 0), payment_mode TEXT NOT NULL, paid_to TEXT,
-        reference TEXT, business_segment TEXT NOT NULL CHECK(business_segment IN ('KL','MENS','KIDS','COMMON')),
-        remarks TEXT, lifecycle_status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(lifecycle_status IN ('ACTIVE','VOID')),
-        entered_by TEXT NOT NULL, last_modified_by TEXT, correction_reason TEXT,
-        corrects_expense_id INTEGER UNIQUE, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-        voided_by TEXT, voided_at TEXT, void_reason TEXT
-    );
+    INSERT INTO klbs_schema_metadata VALUES (1, 4);
     CREATE TABLE activities (
         id INTEGER PRIMARY KEY AUTOINCREMENT, activity_date TEXT NOT NULL, activity_time TEXT NOT NULL,
         category TEXT NOT NULL, action TEXT NOT NULL, details TEXT NOT NULL, user_name TEXT NOT NULL,
@@ -77,18 +68,70 @@ const BASE = `
     );
 `;
 
+async function runCurrentMigrations(db) {
+    await migrateBusinessSegmentColumns(db);
+    await migrateVariableValueBillingFoundation(db);
+    await migrateV5Foundation(db);
+}
+
+async function initializeV6Database(db) {
+    await exec(db, BASE);
+    await prepareDatabaseSchema({
+        database: db,
+        currentVersion: 6,
+        runCurrentMigrations: () => runCurrentMigrations(db)
+    });
+    assert.strictEqual(await readSchemaVersion(db), 6,
+        "the isolated V4 fixture reaches V6 through the registered V5 and V6 migrations");
+    const movementColumns = await all(db, "PRAGMA table_info(stock_movements)");
+    assert(movementColumns.some(column => column.name === "direction"),
+        "the V5 foundation creates the stock-movement direction required by later migrations");
+    assert(!movementColumns.some(column => column.name === "archived_at"),
+        "the V6 starting fixture does not claim the later V15 archive columns");
+}
+
+async function assertV15FixtureSchema(db) {
+    assert.strictEqual(await readSchemaVersion(db), CURRENT_DB_SCHEMA_VERSION);
+    const movementColumns = await all(db, "PRAGMA table_info(stock_movements)");
+    const movementColumnNames = movementColumns.map(column => column.name);
+    for (const name of ["direction", "store_id", "supplier_invoice_id", "archived_at", "archived_by"]) {
+        assert(movementColumnNames.includes(name), `V15 stock_movements.${name} exists`);
+    }
+    assert.strictEqual(movementColumnNames.filter(name => name === "direction").length, 1,
+        "V14 does not create a duplicate direction column");
+    const movementIndexes = new Set((await all(db, "PRAGMA index_list(stock_movements)")).map(index => index.name));
+    for (const name of ["idx_stock_movements_date_status", "idx_stock_movements_inward_archive"]) {
+        assert(movementIndexes.has(name), `V15 stock movement index ${name} exists`);
+    }
+    const lineColumns = new Set((await all(db, "PRAGMA table_info(stock_movement_lines)")).map(column => column.name));
+    for (const name of ["sku_snapshot", "product_name_snapshot", "resolution_note", "discard_reason", "discarded_at"]) {
+        assert(lineColumns.has(name), `V14 stock_movement_lines.${name} exists`);
+    }
+    const expenseColumns = new Set((await all(db, "PRAGMA table_info(expenses)")).map(column => column.name));
+    for (const name of ["expense_code", "batch_id", "store_id", "posted_at"]) {
+        assert(expenseColumns.has(name), `V7 expense migration column ${name} exists`);
+    }
+    const expenseIndexes = new Set((await all(db, "PRAGMA index_list(expenses)")).map(index => index.name));
+    for (const name of ["idx_expenses_expense_code", "idx_expenses_posted_date_code", "idx_expenses_batch"]) {
+        assert(expenseIndexes.has(name), `Expense migration index ${name} exists`);
+    }
+    const temporaryTables = await all(db, `SELECT name FROM sqlite_master WHERE type='table'
+        AND name IN ('stock_movements_v14','stock_movement_lines_v14')`);
+    assert.deepStrictEqual(temporaryTables, [], "V14 rebuild leaves no temporary tables behind");
+    assert.deepStrictEqual(await all(db, "PRAGMA foreign_key_check"), []);
+}
+
 async function makeDb() {
     const db = new sqlite3.Database(":memory:");
-    await exec(db, BASE);
-    await run(db, "INSERT INTO klbs_schema_metadata VALUES (1, 6)");
-    await migrateStoreIdentity(db);
+    await initializeV6Database(db);
     const legacy = await run(db, `INSERT INTO expenses
         (expense_date,category,particulars,amount_paise,payment_mode,business_segment,entered_by,created_at,updated_at)
         VALUES ('2026-09-30','Rent','Legacy Rent',10000,'Cash','COMMON','OPERATOR','old','old')`);
-    await prepareDatabaseSchema({ database: db, runCurrentMigrations: async () => {} });
+    await prepareDatabaseSchema({ database: db, runCurrentMigrations: () => runCurrentMigrations(db) });
     assert.strictEqual(legacy.lastID, 1);
     assert.strictEqual(await readSchemaVersion(db), CURRENT_DB_SCHEMA_VERSION,
-        "the isolated V6 fixture completes the registered V7→V10 migrations");
+        "the isolated V6 fixture completes the registered V7→V15 migrations");
+    await assertV15FixtureSchema(db);
     assert.deepStrictEqual(await all(db, `SELECT name FROM sqlite_master WHERE type='table'
         AND name IN ('management_accounting_entries','management_accounting_entry_sequences') ORDER BY name`), [
         { name: "management_accounting_entries" }, { name: "management_accounting_entry_sequences" }
@@ -105,7 +148,7 @@ function validEntry(overrides = {}) {
 }
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 13);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 15);
     assert.deepStrictEqual(EXPENSE_HEADERS, EXPECTED_HEADERS);
     assert.deepStrictEqual(getExpenseTrackerOptions(), {
         expenseHeaders: EXPECTED_HEADERS,
@@ -151,12 +194,11 @@ async function main() {
 
     const migrationRollbackDb = new sqlite3.Database(":memory:");
     try {
-        await exec(migrationRollbackDb, BASE);
-        await run(migrationRollbackDb, "INSERT INTO klbs_schema_metadata VALUES (1, 6)");
-        await migrateStoreIdentity(migrationRollbackDb);
+        await initializeV6Database(migrationRollbackDb);
         await run(migrationRollbackDb, "CREATE TABLE expense_batches (id INTEGER PRIMARY KEY)");
         await assert.rejects(() => prepareDatabaseSchema({
-            database: migrationRollbackDb, currentVersion: 7, runCurrentMigrations: async () => {}
+            database: migrationRollbackDb, currentVersion: 7,
+            runCurrentMigrations: () => runCurrentMigrations(migrationRollbackDb)
         }));
         assert.strictEqual(await readSchemaVersion(migrationRollbackDb), 6,
             "V7 schema version advances only after the entire migration succeeds");
@@ -392,7 +434,7 @@ async function main() {
 
         assert.strictEqual((await get(db, "PRAGMA integrity_check")).integrity_check, "ok");
         assert.deepStrictEqual(await all(db, "PRAGMA foreign_key_check"), []);
-        console.log("PASS V21-04 expense master/validation, draft-vs-posted contract, V6→V7 migration preservation, atomic posting/rollback, Manager purpose, immutable IDs, Store attribution, duplicate warning, DB pagination/totals/summary, full-result Excel exports, and UI/IPC wiring");
+        console.log("PASS V21-04 expense master/validation, draft-vs-posted contract, V6→V15 migration compatibility, atomic posting/rollback, Manager purpose, immutable IDs, Store attribution, duplicate warning, DB pagination/totals/summary, full-result Excel exports, and UI/IPC wiring");
     } finally {
         await close(db);
         fs.rmSync(tempDir, { recursive: true, force: true });

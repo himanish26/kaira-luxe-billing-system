@@ -324,16 +324,16 @@
             const row = document.createElement("tr");
             row.tabIndex = 0;
             row.setAttribute("role", "button");
-            makeCell(row, (page - 1) * 100 + index + 1);
-            makeCell(row, formatDate(expense.expense_date));
-            makeCell(row, expense.expense_code);
-            makeCell(row, expense.batch_code);
-            makeCell(row, expense.category);
-            makeCell(row, expense.business_segment);
-            makeCell(row, expense.payment_mode);
-            makeCell(row, expense.reference);
-            makeCell(row, formatMoney(expense.amount_paise));
-            makeCell(row, expense.remarks);
+            makeCell(row, (page - 1) * 100 + index + 1, "expense-history-row-number");
+            makeCell(row, formatDate(expense.expense_date), "expense-history-date");
+            makeCell(row, expense.expense_code, "expense-history-id");
+            makeCell(row, expense.batch_code, "expense-history-batch-id");
+            makeCell(row, expense.category, "expense-history-header");
+            makeCell(row, expense.business_segment, "expense-history-segment");
+            makeCell(row, expense.payment_mode, "expense-history-type");
+            makeCell(row, expense.reference, "expense-history-reference");
+            makeCell(row, formatMoney(expense.amount_paise), "expense-history-amount");
+            makeCell(row, expense.remarks, "expense-history-remarks");
             const open = () => openExpenseDetails(expense.expense_code, row);
             row.addEventListener("click", open);
             row.addEventListener("keydown", event => {
@@ -405,8 +405,12 @@
             for (const row of result.rows) {
                 const item = document.createElement("span");
                 const strong = document.createElement("strong");
+                const amount = document.createElement("span");
+                item.className = "expense-header-summary-item";
+                amount.className = "expense-header-summary-amount";
                 strong.textContent = `${row.category}: `;
-                item.append(strong, document.createTextNode(formatMoney(row.total_amount_paise)));
+                amount.textContent = formatMoney(row.total_amount_paise);
+                item.append(strong, amount);
                 summary.appendChild(item);
             }
         }

@@ -876,7 +876,7 @@ box-shadow:0 2px 8px rgba(0,0,0,.08);
     color: #30292a;
     text-align: center;
 }
-.inventory-style-size-tile.is-in-stock { border-top: 3px solid #0f7b0f; }
+.inventory-style-size-tile.is-in-stock { border-top: 3px solid var(--primary); }
 .inventory-style-size-tile.is-out-of-stock { background: #f4f2f2; color: #51494a; }
 .inventory-style-size-tile.is-scanned { border: 2px solid #7b1e2b; background: #fff3f4; box-shadow: 0 0 0 2px rgba(123,30,43,.12); }
 .inventory-style-tile-size { font-size: 20px; font-weight: 900; line-height: 1.1; overflow-wrap: anywhere; }

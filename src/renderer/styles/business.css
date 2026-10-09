@@ -237,6 +237,16 @@
     font-weight: 700;
 }
 
+#customerDirectoryTableWrap .customer-directory-table th,
+#customerDirectoryTableWrap .customer-directory-table td {
+    padding: 12px 14px;
+    font-size: 15px;
+    line-height: 1.35;
+}
+#customerDirectoryTableWrap .customer-directory-table th { font-size: 14px; line-height:1.25; }
+#customerDirectoryTableWrap tbody tr:hover { background: #e8f2ff; }
+#customerDirectoryTableWrap .customer-directory-name { font-weight: 700; }
+
 .customer-directory-table tbody tr:last-child td {
     border-bottom: 0;
 }
@@ -428,8 +438,8 @@
 .supplier-directory-table-wrap { overflow-x:auto; }
 .supplier-directory-table { width:100%; min-width:0; table-layout:fixed; }
 .supplier-directory-table:not(.supplier-accounts-table) { min-width:1120px; }
-.supplier-directory-table th,.supplier-directory-table td { box-sizing:border-box; padding:14px 10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; }
-.supplier-directory-table th { font-size:14px; line-height:1.25; }
+.supplier-directory-table th,.supplier-directory-table td { box-sizing:border-box; padding:11px 9px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; line-height:1.35; }
+.supplier-directory-table th { font-size:13px; line-height:1.25; font-weight:700; }
 .supplier-directory-table:not(.supplier-accounts-table) col:nth-child(1) { width:13%; }
 .supplier-directory-table:not(.supplier-accounts-table) col:nth-child(2) { width:15%; }
 .supplier-directory-table:not(.supplier-accounts-table) col:nth-child(3) { width:16%; }
@@ -440,9 +450,9 @@
 .supplier-directory-table:not(.supplier-accounts-table) col:nth-child(8) { width:15.5%; }
 .supplier-directory-table:not(.supplier-accounts-table) td:last-child { padding-right:18px; }
 .supplier-directory-row:not(.supplier-accounts-display-row) { cursor:default; }
-.supplier-directory-row:not(.supplier-accounts-display-row):hover,.supplier-directory-row:not(.supplier-accounts-display-row):focus-visible { background:transparent; outline:0; }
+.supplier-directory-row:not(.supplier-accounts-display-row):hover { background:#e8f2ff; }
 .supplier-accounts-display-row { cursor:default; }
-.supplier-accounts-display-row:hover { background:transparent; outline:0; }
+.supplier-accounts-display-row:hover { background:#e8f2ff; }
 .supplier-directory-row td:nth-child(1) { font-variant-numeric:tabular-nums; font-weight:700; }
 .supplier-directory-row td:last-child { text-align:right; font-variant-numeric:tabular-nums; }
 .supplier-directory-toolbar { margin-bottom:24px; }
@@ -533,8 +543,8 @@
 .supplier-profile-section { margin-top:19px; }
 .supplier-profile-section>h4 { margin:0 0 11px; color:var(--primary); font-size:17px; font-weight:800; line-height:1.25; }
 .supplier-relationship-table { width:100%; border-collapse:collapse; table-layout:fixed; }
-.supplier-relationship-table th,.supplier-relationship-table td { padding:10px 12px; border-bottom:1px solid #eadfe4; text-align:left; overflow-wrap:anywhere; }
-.supplier-relationship-table th { color:var(--primary); font-size:12px; }
+.supplier-relationship-table th,.supplier-relationship-table td { padding:8px 10px; border-bottom:1px solid #eadfe4; text-align:left; overflow-wrap:anywhere; }
+.supplier-relationship-table th { background:var(--primary); color:#fff; font-size:12px; font-weight:700; line-height:1.25; }
 .supplier-relationship-row { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,.9fr) minmax(88px,auto); align-items:center; gap:8px; margin:0; padding:7px 4px; border-bottom:1px solid #eadfe4; }
 .supplier-relationship-row>span { min-width:0; overflow-wrap:anywhere; }
 .supplier-relationship-row>div { display:flex; gap:6px; }
