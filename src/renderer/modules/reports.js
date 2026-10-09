@@ -154,6 +154,16 @@ const reports = {
         serviceFunction:
             "getBillSummaryReport"
 
+    },
+
+    supplierAccounts: {
+        title: "Supplier Accounts Report",
+        description: "Supplier Financial Activity & Outstanding",
+        features: ["Supplier-wise Overview", "Purchase Invoices", "Payments", "Credit Notes", "Outstanding Balances"],
+        baseFileName: "KL_Supplier_Accounts_Report",
+        adminOnly: false,
+        exportFunction: "exportSupplierAccountsReport",
+        serviceFunction: "getSupplierAccountsReportData"
     }
 
 };
@@ -232,7 +242,7 @@ function setupReportSelection(){
             "business";
         const report = reports[radio.value];
 
-        if (report && report.adminOnly) {
+        if (report && report.adminOnly && !report.authorizeOnExportOnly) {
             const grant = await requestAdminAuthorization(report.authorizationPurpose);
             if (!grant) {
                 const previousRadio = Array.from(reportTypeRadios)
@@ -420,7 +430,7 @@ async function startReportExport() {
     };
 
     if (report.adminOnly) {
-        let grant = activeProtectedReportAuthorization &&
+        let grant = !report.authorizeOnExportOnly && activeProtectedReportAuthorization &&
             activeProtectedReportAuthorization.reportType === request.reportType
             ? activeProtectedReportAuthorization.grant
             : null;

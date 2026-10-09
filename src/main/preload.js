@@ -86,6 +86,35 @@ contextBridge.exposeInMainWorld(
         getCustomerManagementProfile: (customerId) =>
             ipcRenderer.invoke("customers:get-management-profile", customerId),
 
+        getSupplierOptions: () => ipcRenderer.invoke("suppliers:options"),
+        createSupplierBrand: value => ipcRenderer.invoke("suppliers:brand-create", value),
+        createSupplierProductSegment: value => ipcRenderer.invoke("suppliers:product-segment-create", value),
+        listSuppliers: options => ipcRenderer.invoke("suppliers:list", options),
+        listSupplierAccounts: options => ipcRenderer.invoke("suppliers:accounts-list", options),
+        getSupplier: code => ipcRenderer.invoke("suppliers:get", code),
+        getSupplierPaymentContext: (code, amountPaise) => ipcRenderer.invoke("suppliers:payment-context", code, amountPaise),
+        createSupplier: input => ipcRenderer.invoke("suppliers:create", input),
+        updateSupplier: (code, input) => ipcRenderer.invoke("suppliers:update", code, input),
+        addSupplierRelationship: (code, input) => ipcRenderer.invoke("suppliers:relationship-add", code, input),
+        updateSupplierRelationship: (code, previous, input) => ipcRenderer.invoke("suppliers:relationship-update", code, previous, input),
+        removeSupplierRelationship: (code, input) => ipcRenderer.invoke("suppliers:relationship-remove", code, input),
+        endSupplierRelationship: (code, relationshipCode, effectiveTo) => ipcRenderer.invoke("suppliers:relationship-end", code, relationshipCode, effectiveTo),
+        searchSuppliersByBrand: value => ipcRenderer.invoke("suppliers:brand-search", value),
+        postSupplierInvoice: (input, grant) => ipcRenderer.invoke("suppliers:post-invoice", input, grant),
+        postSupplierPayment: (input, grant) => ipcRenderer.invoke("suppliers:post-payment", input, grant),
+        postSupplierOpeningBalance: (input, grant) => ipcRenderer.invoke("suppliers:post-opening", input, grant),
+        getSupplierOpeningBalances: supplierCode => ipcRenderer.invoke("suppliers:openings", supplierCode),
+        postSupplierCreditNote: (input, grant) => ipcRenderer.invoke("suppliers:post-credit-note", input, grant),
+        getSupplierCreditNotes: supplierCode => ipcRenderer.invoke("suppliers:credit-notes", supplierCode),
+        getSupplierOpenLiabilities: supplierCode => ipcRenderer.invoke("suppliers:liabilities", supplierCode),
+        getSupplierStatement: supplierCode => ipcRenderer.invoke("suppliers:statement", supplierCode),
+        getSupplierInvoices: supplierId => ipcRenderer.invoke("suppliers:invoices", supplierId),
+        getSupplierInvoice: code => ipcRenderer.invoke("suppliers:invoice", code),
+        getSupplierPayments: supplierId => ipcRenderer.invoke("suppliers:payments", supplierId),
+        getSupplierAccountHistory: supplierId => ipcRenderer.invoke("suppliers:history", supplierId),
+        getSupplierInvoiceLines: code => ipcRenderer.invoke("suppliers:invoice-lines", code),
+        exportSupplierAccount: supplierId => ipcRenderer.invoke("suppliers:export-account", supplierId),
+
         getNextBillNumber: () =>
             ipcRenderer.invoke(
                 "get-next-bill-number"
@@ -562,6 +591,7 @@ connectGoogleDrive: () =>
 
 administratorSecurity: {
     getStatus: () => ipcRenderer.invoke("security:get-status"),
+    getAuthorizationRole: purpose => ipcRenderer.invoke("security:get-authorization-role", purpose),
     authorizePin: (pin, purpose) => ipcRenderer.invoke("security:authorize-pin", pin, purpose),
     discardGrant: (grant, purpose) => ipcRenderer.invoke("security:discard-grant", grant, purpose),
     changePin: data => ipcRenderer.invoke("security:change-pin", data),

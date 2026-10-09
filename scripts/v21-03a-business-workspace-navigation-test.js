@@ -19,15 +19,16 @@ const dashboardButtonIds = [...dashboard.matchAll(/<button id="([^"]+)"/g)].map(
 assert.deepStrictEqual(dashboardButtonIds, ["newBillBtn", "billHistoryBtn", "reportsBtn", "settingsBtn"], "Dashboard retains exactly four primary actions in the original order");
 assert.match(dashboard, /<button id="reportsBtn">\s*BUSINESS\s*<\/button>/, "the existing Reports action is relabelled Business");
 
-for (const id of ["businessScreen", "customersScreen", "accountingDataScreen"]) {
+for (const id of ["businessScreen", "customersScreen", "accountingDataScreen", "supplierManagementScreen"]) {
     assert(html.includes(`id="${id}"`), `${id} full-page destination exists`);
 }
-for (const id of ["businessReportsBtn", "businessCustomersBtn", "businessAccountingBtn"]) {
+for (const id of ["businessReportsBtn", "businessCustomersBtn", "businessSuppliersBtn", "businessAccountingBtn"]) {
     assert(html.includes(`id="${id}"`), `${id} is an implemented Business section action`);
 }
 for (const [id, icon, title, description] of [
     ["businessReportsBtn", "📊", "REPORTS", "Sales, inventory, payments and<br>business reports"],
     ["businessCustomersBtn", "👥", "CUSTOMERS", "Customer directory, profiles and<br>purchase history"],
+    ["businessSuppliersBtn", "🏭", "SUPPLIERS", "Supplier directory, profiles and<br>purchase relationships"],
     ["businessAccountingBtn", "🧾", "ACCOUNTING &amp; DATA", "Expenses, profitability and supplier accounts"]
 ]) {
     const card = html.match(new RegExp(`<button id="${id}"[\\s\\S]*?<\\/button>`))?.[0] || "";
@@ -41,7 +42,7 @@ assert.deepStrictEqual(accountingCards.map(match => match[1]), [
     "accountingExpenseTrackerBtn", "accountingManagementPLBtn", "accountingSupplierAccountsBtn"
 ], "Accounting & Data contains exactly the three approved cards");
 for (const text of ["EXPENSE TRACKER", "Record and review operating expenses", "MANAGEMENT P&amp;L",
-    "Revenue, cost, expenses and profitability", "SUPPLIER / DISTRIBUTOR", "Invoices, payments and outstanding balances"]) {
+    "Revenue, cost, expenses and profitability", "SUPPLIER ACCOUNTS", "Invoices, payments and outstanding balances"]) {
     assert(accountingMarkup.includes(text), `approved Accounting & Data content includes ${text}`);
 }
 for (const forbidden of ["STORE MANAGEMENT", "STOCK MANAGEMENT", "MONTHLY GST", "EXPORT DATA", "ACCOUNTING LEDGER", "accountingStoreManagementView"]) {
@@ -53,13 +54,14 @@ assert(html.includes('id="expenseTrackerScreen"') && html.includes('id="expenseH
     "Expense Tracker and History screens are present");
 assert.match(app, /accountingManagementPLBtn[^\n]*window\.openManagementPnl/,
     "Management P&L opens its implemented screen");
-assert.match(app, /accountingSupplierAccountsBtn[^\n]*showComingSoon\("Supplier \/ Distributor Accounts"\)/,
-    "Supplier / Distributor Accounts retains the existing Coming Soon interaction");
+assert.match(app, /accountingSupplierAccountsBtn[^\n]*window\.openSupplierAccounts/,
+    "Supplier Accounts opens the implemented account workflow");
 
 for (const route of [
     /reportsBtn\.addEventListener\("click", async[\s\S]*?businessScreen\.style\.display = "block"/,
     /businessReportsBtn[\s\S]*?openExistingReportsFromBusiness/,
     /businessCustomersBtn[\s\S]*?customersScreen\.style\.display = "block"/,
+    /businessSuppliersBtn[\s\S]*?openSupplierDirectory/,
     /businessAccountingBtn[\s\S]*?accountingDataScreen\.style\.display = "block"/,
     /reportsDashboardBtn\.addEventListener\("click", returnFromReports/,
     /customersBusinessBtn[\s\S]*?showBusinessWorkspace/,

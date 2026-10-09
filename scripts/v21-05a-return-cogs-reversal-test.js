@@ -56,11 +56,11 @@ async function testMigrationAndConstraints() {
             INSERT INTO return_items VALUES (21,1,11,1);
         `);
         await prepareDatabaseSchema({ database: db, runCurrentMigrations: async () => {} });
-        assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 9);
-        assert.strictEqual(await readSchemaVersion(db), 9);
+        assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 13);
+        assert.strictEqual(await readSchemaVersion(db), 13);
         assert.strictEqual(Number((await get(db, `SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table'
             AND name IN ('management_accounting_entries','management_accounting_entry_sequences')`)).count), 2,
-        "the isolated V7 fixture completes the real V8 and V9 migration chain");
+        "the isolated V7 fixture completes the real numbered migration chain through V13");
         assert.strictEqual(Number((await get(db, "SELECT COUNT(*) AS count FROM management_accounting_entries")).count), 0,
             "schema migration creates no synthetic management accounting entries");
         assert.deepStrictEqual(await get(db, "SELECT return_cost_basis_status, return_unit_cost_paise, return_cost_paise FROM return_items WHERE id=21"), {
@@ -310,7 +310,7 @@ async function testReturnFlow() {
 async function main() {
     await testMigrationAndConstraints();
     await testReturnFlow();
-    console.log("PASS V21-05A V7→V9 migration path (including V8 Return COGS), captured/unknown/not-applicable cost states, integer partial reversal, multi-line returns, source cost immutability, return-date/segment query, atomic rollback, legacy UNKNOWN, row immutability, unchanged return values/Store Credit/inventory, and one-return-per-bill rule");
+    console.log("PASS V21-05A V7→V10 migration path (including V8 Return COGS), captured/unknown/not-applicable cost states, integer partial reversal, multi-line returns, source cost immutability, return-date/segment query, atomic rollback, legacy UNKNOWN, row immutability, unchanged return values/Store Credit/inventory, and one-return-per-bill rule");
 }
 
 main().catch(error => {

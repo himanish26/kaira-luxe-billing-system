@@ -1303,6 +1303,11 @@ const insufficientStockOkBtn =
     let adminCancelCallback = null;
     let receiptSettingsGrant = null;
     let adminAuthorizationPurpose = null;
+    let adminAuthorizationRequestId = 0;
+    let adminAuthorizationPreviousFocus = null;
+    let adminAuthorizationPendingLookup = false;
+    let adminAuthorizationCompleting = false;
+    window.isAuthorizationPresentationPending = () => adminAuthorizationPendingLookup;
 
 function showAuthorizationGranted({ button, modal, input, resetText, onComplete }) {
     button.innerText = "✔ Access Granted";
@@ -1342,37 +1347,55 @@ function showAuthorizationGranted({ button, modal, input, resetText, onComplete 
 
 }
 
-function requireAdminAuthorization(purpose, callback){
+async function requireAdminAuthorization(purpose, callback){
 
     if (typeof purpose === "function") {
         callback = purpose;
         purpose = "RECEIPT_SETTINGS";
     }
 
+    const requestId = ++adminAuthorizationRequestId;
     adminSuccessCallback = callback;
     adminAuthorizationPurpose = purpose;
+    adminAuthorizationPreviousFocus = document.activeElement;
+    adminAuthorizationPendingLookup = true;
+    adminAuthorizationCompleting = false;
+    adminCancelBtn.disabled = false;
 
-    const managerPurpose = [
-        "FF",
-        "GIFT_VOUCHER",
-        "INVENTORY_INWARD",
-        "INVENTORY_OUTWARD",
-        "DAY_REOPEN",
-        "EXPENSE_POST",
-        "P_AND_L_ENTRY_POST",
-        "P_AND_L_ENTRY_REVERSE"
-    ].includes(purpose);
+    let role;
+    try {
+        role = await window.electronAPI.administratorSecurity
+            .getAuthorizationRole(purpose);
+    } catch (error) {
+        role = null;
+    }
+    adminAuthorizationPendingLookup = false;
+    if (requestId !== adminAuthorizationRequestId) return;
+    if (role !== "ADMINISTRATOR" && role !== "MANAGER") {
+        adminSuccessCallback = null;
+        adminAuthorizationPurpose = null;
+        adminAuthorizationPreviousFocus = null;
+        adminPin.value = "";
+        adminCancelCallback?.(null);
+        adminCancelCallback = null;
+        showNativeAlert("This action cannot be authorized.");
+        return;
+    }
+
+    const managerPurpose = role === "MANAGER";
     const title = document.getElementById("authorizationDialogTitle");
-    if (title) title.textContent = managerPurpose ? "Manager Access" : "Administrator Access";
-    adminPin.placeholder = managerPurpose
-        ? " Enter 4-digit Manager PIN"
-        : " Enter 4-digit Administrator PIN";
+    const roleLabel = managerPurpose ? "Manager" : "Administrator";
+    if (title) title.textContent = `${roleLabel} Access`;
+    adminPin.placeholder = `Enter 4-digit ${roleLabel} PIN`;
+    adminPin.setAttribute("aria-label", `Enter 4-digit ${roleLabel} PIN`);
 
     adminPin.value = "";
 
     document.getElementById("adminError").innerText = "";
 
-    adminDialog.classList.toggle("manager-authorization", managerPurpose);
+    adminDialog.classList.toggle("authorization-role-manager", managerPurpose);
+    adminDialog.classList.toggle("authorization-role-administrator", !managerPurpose);
+    adminDialog.dataset.authorizationRole = role;
     adminDialog.style.display = "flex";
 
     requestAnimationFrame(() => {
@@ -1388,7 +1411,7 @@ function requireAdminAuthorization(purpose, callback){
 function requestAdminAuthorization(purpose) {
     return new Promise(resolve => {
         requireAdminAuthorization(purpose, resolve);
-        adminCancelCallback = () => resolve(null);
+        adminCancelCallback = value => resolve(value ?? null);
     });
 }
 
@@ -1590,15 +1613,27 @@ if (insufficientStockOkBtn) {
 
 }
 
-if (adminCancelBtn){
+    if (adminCancelBtn){
 
     adminCancelBtn.addEventListener("click", () => {
 
+        if (adminAuthorizationCompleting) return;
+
+        ++adminAuthorizationRequestId;
         adminDialog.style.display = "none";
+        adminUnlockBtn.disabled = false;
+        adminAuthorizationPendingLookup = false;
         adminSuccessCallback = null;
+        adminAuthorizationPurpose = null;
+        adminPin.value = "";
         if (adminCancelCallback) {
             adminCancelCallback();
             adminCancelCallback = null;
+        }
+        const previousFocus = adminAuthorizationPreviousFocus;
+        adminAuthorizationPreviousFocus = null;
+        if (previousFocus && typeof previousFocus.focus === "function") {
+            previousFocus.focus();
         }
 
     });
@@ -1609,11 +1644,31 @@ if (adminUnlockBtn){
 
     adminUnlockBtn.addEventListener("click", async () => {
 
-        const authorization = await window.electronAPI.administratorSecurity
-            .authorizePin(adminPin.value, adminAuthorizationPurpose);
+        if (adminUnlockBtn.disabled || !adminAuthorizationPurpose) return;
+        const requestId = adminAuthorizationRequestId;
+        const purpose = adminAuthorizationPurpose;
+        adminUnlockBtn.disabled = true;
+        let authorization;
+        try {
+            authorization = await window.electronAPI.administratorSecurity
+                .authorizePin(adminPin.value, purpose);
+        } catch (error) {
+            authorization = { success: false, error: "Unable to verify PIN." };
+        }
+        adminUnlockBtn.disabled = false;
+        if (requestId !== adminAuthorizationRequestId || adminDialog.style.display !== "flex") {
+            if (authorization?.success && authorization.grant) {
+                window.electronAPI.administratorSecurity.discardGrant(
+                    authorization.grant, purpose
+                );
+            }
+            return;
+        }
 
         if (authorization.success) {
 
+    adminAuthorizationCompleting = true;
+    adminCancelBtn.disabled = true;
     document.getElementById("adminError").innerText = "";
 
     showAuthorizationGranted({
@@ -1622,13 +1677,16 @@ if (adminUnlockBtn){
         input: adminPin,
         resetText: "Unlock",
         onComplete: () => {
-            adminDialog.classList.remove("manager-authorization");
+            adminAuthorizationCompleting = false;
+            adminCancelBtn.disabled = false;
             isEditMode = true;
             if (adminSuccessCallback) {
                 adminSuccessCallback(authorization.grant);
                 adminSuccessCallback = null;
                 adminCancelCallback = null;
             }
+            adminAuthorizationPurpose = null;
+            adminAuthorizationPreviousFocus = null;
         }
     });
 
@@ -1638,9 +1696,7 @@ if (adminUnlockBtn){
             document.getElementById("adminError").innerText =
                 "❌ " + (authorization.error || "Authorization failed.");
 
-            const dialog =
-
-    document.querySelector(".modal-content");
+            const dialog = adminDialog.querySelector(".modal-content");
 
 dialog.classList.add("shake");
 
@@ -1696,13 +1752,13 @@ document.addEventListener("keydown", (event) => {
 
     if(
         event.key === "Escape" &&
-        adminDialog.style.display === "flex"
+        (adminDialog.style.display === "flex" || adminAuthorizationPendingLookup)
     ){
 
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
-        adminCancelBtn?.click();
+        if (!adminAuthorizationCompleting) adminCancelBtn?.click();
 
     }
 
@@ -1901,6 +1957,10 @@ function showBusinessWorkspace() {
     hideAllScreens();
     businessScreen.style.display = "block";
 }
+window.returnToAccountingDataWorkspace = () => {
+    hideAllScreens();
+    accountingDataScreen.style.display = "block";
+};
 
 async function openExistingReportsFromBusiness() {
     if (!(await guardBusyOperation())) return;
@@ -1929,13 +1989,14 @@ document.getElementById("businessCustomersBtn")?.addEventListener("click", () =>
     customersScreen.style.display = "block";
     window.showCustomerDirectory?.();
 });
+document.getElementById("businessSuppliersBtn")?.addEventListener("click", () => window.openSupplierDirectory?.());
 document.getElementById("businessAccountingBtn")?.addEventListener("click", () => {
     hideAllScreens();
     accountingDataScreen.style.display = "block";
 });
 document.getElementById("accountingExpenseTrackerBtn")?.addEventListener("click", () => window.openExpenseTracker?.());
 document.getElementById("accountingManagementPLBtn")?.addEventListener("click", () => window.openManagementPnl?.());
-document.getElementById("accountingSupplierAccountsBtn")?.addEventListener("click", () => showComingSoon("Supplier / Distributor Accounts"));
+document.getElementById("accountingSupplierAccountsBtn")?.addEventListener("click", () => window.openSupplierAccounts?.());
 document.getElementById("customersBusinessBtn")?.addEventListener("click", showBusinessWorkspace);
 document.getElementById("accountingBusinessBtn")?.addEventListener("click", showBusinessWorkspace);
 
@@ -3663,7 +3724,6 @@ let ffPinVerified = false;
 
 let giftVoucherAppliedAmount = 0;
 
-let pinAuthorizationAction = null;
 let ffAuthorizationGrant = null;
 let managerAuthorizationPending = false;
 let giftVoucherAuthorizationGrant = null;
@@ -4184,22 +4244,6 @@ const giftVoucherApplyBtn =
         "giftVoucherApplyBtn"
     );
 
-const ffPinDialog =
-    document.getElementById("ffPinDialog");
-
-const ffPinInput =
-    document.getElementById("ffPinInput");
-
-const ffPinError =
-    document.getElementById("ffPinError");
-
-const ffPinCancelBtn =
-    document.getElementById("ffPinCancelBtn");
-
-const ffPinVerifyBtn =
-    document.getElementById("ffPinVerifyBtn");
-
-
 if (familyFriendsBtn) {
 
     familyFriendsBtn.addEventListener(
@@ -4239,23 +4283,17 @@ if (familyFriendsBtn) {
                 return;
 
             }
-            /*
-            * Open PIN authorization popup
-            * for Family & Friends.
-            */
-            pinAuthorizationAction = "FF";
-
-            ffPinInput.value = "";
-
-            ffPinError.innerText = "";
-
-            ffPinDialog.style.display = "flex";
-
-            setTimeout(() => {
-
-                ffPinInput.focus();
-
-            }, 50);
+            if (managerAuthorizationPending) return;
+            managerAuthorizationPending = true;
+            try {
+                const grant = await requestAdminAuthorization("FF");
+                if (!grant) return;
+                ffAuthorizationGrant = grant;
+                ffPinVerified = true;
+                openFamilyFriendsDiscountDialog();
+            } finally {
+                managerAuthorizationPending = false;
+            }
 
         }
     );
@@ -4271,12 +4309,11 @@ if (giftVoucherBtn) {
 
     giftVoucherBtn.addEventListener(
         "click",
-        () => {
+        async () => {
 
             if (giftVoucherAppliedAmount > 0) {
                 giftVoucherAppliedAmount = 0;
                 giftVoucherAuthorizationGrant = null;
-                pinAuthorizationAction = null;
 
                 const giftVoucherAppliedAmountDisplay =
                     document.getElementById("giftVoucherAppliedAmount");
@@ -4312,146 +4349,19 @@ if (giftVoucherBtn) {
             }
 
 
-            /*
-             * Open shared PIN authorization
-             * popup for Gift Voucher.
-             */
-            pinAuthorizationAction = "GV";
-
-            ffPinInput.value = "";
-
-            ffPinError.innerText = "";
-
-            ffPinDialog.style.display =
-                "flex";
-
-            setTimeout(() => {
-
-                ffPinInput.focus();
-
-            }, 50);
+            if (managerAuthorizationPending) return;
+            managerAuthorizationPending = true;
+            try {
+                const grant = await requestAdminAuthorization("GIFT_VOUCHER");
+                if (!grant) return;
+                giftVoucherAuthorizationGrant = grant;
+                openGiftVoucherDialog();
+            } finally {
+                managerAuthorizationPending = false;
+            }
 
         }
     );
-
-}
-
-/* CANCEL PIN ENTRY */
-
-if (ffPinCancelBtn) {
-
-    ffPinCancelBtn.addEventListener(
-        "click",
-        () => {
-
-            ffPinInput.value = "";
-
-            ffPinError.innerText = "";
-
-            ffPinDialog.style.display = "none";
-
-        }
-    );
-
-}
-
-
-/* VERIFY F&F PIN */
-
-async function verifyFamilyFriendsPin() {
-
-    const enteredPin =
-        ffPinInput.value.trim();
-
-
-    if (!/^\d{4}$/.test(enteredPin)) {
-
-        ffPinError.innerText =
-            "Please enter a valid 4-digit Manager PIN.";
-
-        return;
-
-    }
-
-    if (managerAuthorizationPending) return;
-    managerAuthorizationPending = true;
-
-
-    try {
-
-        const purpose = pinAuthorizationAction === "FF"
-            ? "FF"
-            : "GIFT_VOUCHER";
-        const authorization = await window.electronAPI.administratorSecurity
-            .authorizePin(enteredPin, purpose);
-
-        if (!authorization.success) {
-
-            ffPinError.innerText =
-                authorization.error || "Incorrect PIN.";
-
-            ffPinInput.value = "";
-
-            ffPinInput.focus();
-
-            managerAuthorizationPending = false;
-
-            return;
-
-        }
-
-
-/*
- * PIN verified.
- * Never log or store the entered PIN.
- */
-const authorizedAction =
-    pinAuthorizationAction;
-
-if (authorizedAction === "FF") {
-    ffAuthorizationGrant = authorization.grant;
-}
-else {
-    giftVoucherAuthorizationGrant = authorization.grant;
-}
-
-ffPinError.innerText = "";
-
-showAuthorizationGranted({
-    button: ffPinVerifyBtn,
-    modal: ffPinDialog,
-    input: ffPinInput,
-    resetText: "Unlock",
-    onComplete: () => {
-        managerAuthorizationPending = false;
-        if (authorizedAction === "FF") {
-            ffPinVerified = true;
-            pinAuthorizationAction = null;
-            openFamilyFriendsDiscountDialog();
-            return;
-        }
-        if (authorizedAction === "GV") {
-            pinAuthorizationAction = null;
-            openGiftVoucherDialog();
-        }
-    }
-});
-
-    }
-
-    catch (error) {
-
-        console.error(
-            "F&F PIN verification error:",
-            error
-        );
-
-        ffPinError.innerText =
-            "Unable to verify PIN.";
-
-        managerAuthorizationPending = false;
-
-    }
 
 }
 
@@ -4646,7 +4556,6 @@ if (giftVoucherCancelBtn) {
 
             giftVoucherAmountInput.value = "";
             giftVoucherAuthorizationGrant = null;
-            pinAuthorizationAction = null;
 
             if (giftVoucherError) {
 
@@ -4810,35 +4719,6 @@ if (giftVoucherApplyBtn) {
             loadPaymentSummary();
 
             calculatePayment();
-
-        }
-    );
-
-}
-
-if (ffPinVerifyBtn) {
-
-    ffPinVerifyBtn.addEventListener(
-        "click",
-        verifyFamilyFriendsPin
-    );
-
-}
-
-
-/* ALLOW ENTER KEY TO VERIFY */
-
-if (ffPinInput) {
-
-    ffPinInput.addEventListener(
-        "keydown",
-        (event) => {
-
-            if (event.key === "Enter") {
-
-                verifyFamilyFriendsPin();
-
-            }
 
         }
     );
@@ -5897,7 +5777,6 @@ function clearCurrentBill(){
 
 appliedStoreCredit = null;
 ffPinVerified = false;
-pinAuthorizationAction = null;
 ffAuthorizationGrant = null;
 managerAuthorizationPending = false;
 giftVoucherAuthorizationGrant = null;
@@ -5985,7 +5864,7 @@ if (familyFriendsBtn) {
 
 }
 
-for (const id of ["customerProfileModal", "variableValueDialog", "ffPinDialog", "ffDiscountDialog", "giftVoucherDialog", "storeCreditModal", "returnReasonDialog", "productNotFoundDialog", "insufficientStockDialog"]) {
+for (const id of ["customerProfileModal", "variableValueDialog", "ffDiscountDialog", "giftVoucherDialog", "storeCreditModal", "returnReasonDialog", "productNotFoundDialog", "insufficientStockDialog"]) {
     const dialog = document.getElementById(id);
     if (dialog) dialog.style.display = "none";
 }
@@ -5999,7 +5878,7 @@ const paymentBillNumber = document.getElementById("paymentBillNo");
 if (paymentBillNumber) paymentBillNumber.textContent = "";
 paymentScreen.style.display = "none";
 
-for (const id of ["customerProfileValidation", "variableValueError", "productNotFoundMessage", "insufficientStockMessage", "ffPinError", "ffDiscountError", "giftVoucherError", "storeCreditVerificationResult", "returnReasonError"]) {
+for (const id of ["customerProfileValidation", "variableValueError", "productNotFoundMessage", "insufficientStockMessage", "ffDiscountError", "giftVoucherError", "storeCreditVerificationResult", "returnReasonError"]) {
     const message = document.getElementById(id);
     if (message) message.textContent = "";
 }
@@ -8251,6 +8130,7 @@ function hideAllScreens() {
     accountingDataScreen.style.display = "none";
     document.getElementById("managementPnlScreen").style.display = "none";
     document.getElementById("managementAccountingEntriesScreen").style.display = "none";
+    document.getElementById("supplierManagementScreen").style.display = "none";
     document.getElementById("expenseTrackerScreen").style.display = "none";
     document.getElementById("expenseHistoryScreen").style.display = "none";
 

@@ -12,9 +12,13 @@ const {
 
     exportCustomerPurchaseReport,
 
-    exportBillSummaryReport
+    exportBillSummaryReport,
+
+    exportSupplierAccountsReport
 
 } = require("./excelExporter");
+const { createSupplierAccountsReportService } = require("./supplierAccountsReportService");
+const supplierAccountsReportService = createSupplierAccountsReportService(db, { storeIdentityService });
 
 function toPaise(value) {
     const amount = Number(value || 0);
@@ -775,6 +779,11 @@ async function exportReport(
                 storeIdentity
             );
 
+        }
+
+        case "supplierAccounts": {
+            const data = await supplierAccountsReportService.getSupplierAccountsReportData(request.fromDate, request.toDate);
+            return await exportSupplierAccountsReport(data, filePath);
         }
 
         default:

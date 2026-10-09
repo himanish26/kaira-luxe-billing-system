@@ -88,7 +88,7 @@ async function makeDb() {
     await prepareDatabaseSchema({ database: db, runCurrentMigrations: async () => {} });
     assert.strictEqual(legacy.lastID, 1);
     assert.strictEqual(await readSchemaVersion(db), CURRENT_DB_SCHEMA_VERSION,
-        "the isolated V6 fixture completes the registered V7→V9 migrations");
+        "the isolated V6 fixture completes the registered V7→V10 migrations");
     assert.deepStrictEqual(await all(db, `SELECT name FROM sqlite_master WHERE type='table'
         AND name IN ('management_accounting_entries','management_accounting_entry_sequences') ORDER BY name`), [
         { name: "management_accounting_entries" }, { name: "management_accounting_entry_sequences" }
@@ -105,7 +105,7 @@ function validEntry(overrides = {}) {
 }
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 9);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 13);
     assert.deepStrictEqual(EXPENSE_HEADERS, EXPECTED_HEADERS);
     assert.deepStrictEqual(getExpenseTrackerOptions(), {
         expenseHeaders: EXPECTED_HEADERS,
@@ -196,7 +196,7 @@ async function main() {
     });
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-v21-04-expense-test-"));
     try {
-        assert.strictEqual(await readSchemaVersion(db), 9);
+        assert.strictEqual(await readSchemaVersion(db), CURRENT_DB_SCHEMA_VERSION);
         assert.deepStrictEqual(await all(db, "PRAGMA foreign_key_check"), []);
         const legacy = await get(db, "SELECT category, expense_code, batch_id, store_id FROM expenses WHERE id=1");
         assert.deepStrictEqual(legacy, { category: "Rent", expense_code: null, batch_id: null, store_id: null },

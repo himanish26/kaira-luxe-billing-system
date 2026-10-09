@@ -64,7 +64,7 @@ const prepare = (database, options = {}) => prepareDatabaseSchema({
 });
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 9);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 13);
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-schema-version-"));
     try {
         // 1, 2, 7: fresh initialization, legacy adoption, and data preservation.
@@ -154,7 +154,7 @@ async function main() {
         assert.strictEqual((await metadata(database)).schema_version, CURRENT_DB_SCHEMA_VERSION + 1);
         await close(database);
 
-        // 10: a database claiming V9 but missing its required physical tables fails closed.
+        // A database claiming V9 but missing its required physical tables fails before V10 migration.
         database = await createDatabase(path.join(temporary, "incomplete-v9.db"));
         await exec(database, `
             CREATE TABLE stock_movements (id INTEGER PRIMARY KEY);

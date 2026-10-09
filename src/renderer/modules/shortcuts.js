@@ -482,6 +482,11 @@ function abandonNewBillDraftBeforeNavigation() {
 
 function handleEscape() {
 
+    if (window.isAuthorizationPresentationPending?.()) {
+        document.getElementById("adminCancelBtn")?.click();
+        return;
+    }
+
     if (window.isNewBillCustomerDrawerOpen?.()) {
         window.closeNewBillCustomerDrawer?.();
         return;
@@ -548,20 +553,6 @@ function handleEscape() {
 
         document.getElementById(
             "comingSoonOkBtn"
-        )?.click();
-
-        return;
-
-    }
-
-    // Family & Friends PIN Dialog
-    if (
-        document.getElementById("ffPinDialog")
-            ?.style.display === "flex"
-    ) {
-
-        document.getElementById(
-            "ffPinCancelBtn"
         )?.click();
 
         return;
@@ -830,6 +821,8 @@ function saveAndPrintShortcut() {
 
 function isKLBSModalOpen() {
 
+    if (window.isAuthorizationPresentationPending?.()) return true;
+
     if (window.isNewBillCustomerDrawerOpen?.()) return true;
 
     const modalIds = [
@@ -838,7 +831,6 @@ function isKLBSModalOpen() {
         "insufficientStockDialog",
         "adminDialog",
         "paymentCorrectionModal",
-        "ffPinDialog",
         "ffDiscountDialog",
         "stockTransactionModal",
         "storeCreditModal",
@@ -902,7 +894,6 @@ function isKLBSModalOpen() {
 }
 
 function handleKeyboardShortcut(event) {
-
     /* =====================================
        BLOCK PAGE SHORTCUTS WHEN
        KLBS MODAL IS OPEN
@@ -949,6 +940,13 @@ function handleKeyboardShortcut(event) {
 
     }
 
+    // Let existing KLBS dialogs own Escape before Supplier page navigation.
+    if (event.code === "Escape" && window.handleSupplierEscape?.()) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+        return;
+    }
 
     /* =====================================
        NORMAL KEYBOARD SHORTCUTS

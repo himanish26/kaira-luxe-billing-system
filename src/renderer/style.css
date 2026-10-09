@@ -13,13 +13,6 @@
 @import "./styles/management-pnl.css";
 @import "./styles/management-accounting-entries.css";
 
-#ffPinDialog .admin-error:not(:empty)::before{
-    content:"❌ ";
-}
-
-
-
-
 /* =========================
    BILL SUMMARY
 ========================= */

@@ -57,13 +57,13 @@ async function migrate(db) {
 }
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 9);
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 13);
 
     const db = await openV5();
     try {
         assert.strictEqual(await readSchemaVersion(db), 5, "fixture begins at truthful V5 metadata");
         await migrate(db);
-        assert.strictEqual(await readSchemaVersion(db), 9);
+        assert.strictEqual(await readSchemaVersion(db), 13);
         assert.deepStrictEqual(await get(db, "SELECT id, store_code, store_name, status FROM stores"),
             { id: 1, store_code: "KL001", store_name: "Kaira Luxe", status: "ACTIVE" });
         assert.deepStrictEqual(await get(db, "SELECT id, current_store_id FROM store_context"), { id: 1, current_store_id: 1 });
@@ -110,8 +110,8 @@ async function main() {
     try {
         await exec(legacyDb, BASE.replace("    CREATE TABLE klbs_schema_metadata (id INTEGER PRIMARY KEY CHECK(id=1), schema_version INTEGER NOT NULL);\n", ""));
         await migrate(legacyDb);
-        assert.strictEqual(await readSchemaVersion(legacyDb), 9,
-            "metadata-free startup runs the numbered migrations through V9");
+        assert.strictEqual(await readSchemaVersion(legacyDb), 13,
+            "metadata-free startup runs the numbered migrations through V13");
         assert.strictEqual(Number((await get(legacyDb, "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('management_accounting_entries','management_accounting_entry_sequences')")).count), 2,
             "metadata-free startup physically completes V9 structures");
         assert.strictEqual(Number((await get(legacyDb, "SELECT COUNT(*) AS count FROM management_accounting_entries")).count), 0,
@@ -137,14 +137,14 @@ async function main() {
     assert(html.includes('id="expenseTrackerScreen"') && html.includes('modules/expenseTracker.js'));
     assert.match(app, /accountingManagementPLBtn[^\n]*window\.openManagementPnl/);
     assert(html.includes('id="managementPnlScreen"') && html.includes('modules/managementPnl.js'));
-    assert.match(app, /showComingSoon\("Supplier \/ Distributor Accounts"\)/);
+    assert.match(app, /accountingSupplierAccountsBtn[^\n]*window\.openSupplierAccounts/);
     const settingsStoreInfo = app.slice(app.indexOf("🏪 Store Information"), app.indexOf("function formatKLBSLastUpdated"));
     assert(settingsStoreInfo.includes("id=\"storeCodeValue\"") && settingsStoreInfo.includes("id=\"storeNameValue\"") && settingsStoreInfo.includes("id=\"storeStatusValue\""));
     assert.match(app, /getCurrentStoreIdentity\(\)[\s\S]*?storeNameValue[\s\S]*?storeCodeValue[\s\S]*?storeStatusValue/);
     assert(!app.includes("accountingStoreManagementBtn") && !app.includes("accountingStoreManagementView"));
     assert(preload.includes('ipcRenderer.invoke("store-identity:get-current")'));
 
-    console.log("PASS V21-03C/V21-04/V21-05E1 V5→V9 migrations, Store Identity, Expense, Return COGS, and Accounting/Settings UI contracts");
+    console.log("PASS V21-03C/V21-04/V21-05E1/V21-06 V5→V12 migrations, Store Identity, Expense, Return COGS, Supplier, and Accounting/Settings UI contracts");
 }
 
 main().catch(error => {

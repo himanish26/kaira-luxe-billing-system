@@ -209,6 +209,10 @@ const { createManagementAccountingEntryService } = require("../database/manageme
 const managementAccountingEntryService = createManagementAccountingEntryService(database, {
     security: administratorSecurity
 });
+const { createSupplierDistributorService } = require("../database/supplierDistributorService");
+const supplierDistributorService = createSupplierDistributorService(database, {
+    security: administratorSecurity
+});
 const integrationConfig = createIntegrationConfigService({
     safeStorage,
     storagePath: path.join(app.getPath("userData"), "integration-config.json")
@@ -1253,6 +1257,10 @@ mainWindow.focus();
 });
 
 ipcMain.handle("security:get-status", () => administratorSecurity.getStatus());
+ipcMain.handle("security:get-authorization-role", (event, purpose) =>
+    mainWindow && event.sender === mainWindow.webContents
+        ? administratorSecurity.getAuthorizationRole(purpose)
+        : null);
 ipcMain.handle("security:authorize-pin", (event, pin, purpose) =>
     administratorSecurity.authorizePin(pin, purpose));
 ipcMain.handle("security:discard-grant", (event, grant, purpose) =>
@@ -1365,6 +1373,57 @@ ipcMain.handle("customers:list-directory", async (event, search) => {
 ipcMain.handle("customers:get-management-profile", async (event, customerId) => {
     requireCustomerProfileRenderer(event);
     return customerProfileService.getCustomerManagementProfile(customerId);
+});
+
+function requireSupplierRenderer(event) {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Supplier request rejected.");
+}
+ipcMain.handle("suppliers:options", async event => { requireSupplierRenderer(event); return supplierDistributorService.getOptions(); });
+ipcMain.handle("suppliers:brand-create", async (event, value) => { requireSupplierRenderer(event); return supplierDistributorService.createSupplierBrand(value); });
+ipcMain.handle("suppliers:product-segment-create", async (event, value) => { requireSupplierRenderer(event); return supplierDistributorService.createSupplierProductSegment(value); });
+ipcMain.handle("suppliers:list", async (event, options) => { requireSupplierRenderer(event); return supplierDistributorService.listSuppliers(options || {}); });
+ipcMain.handle("suppliers:accounts-list", async (event, options) => { requireSupplierRenderer(event); return supplierDistributorService.listSupplierAccounts(options || {}); });
+ipcMain.handle("suppliers:get", async (event, code) => { requireSupplierRenderer(event); return supplierDistributorService.getSupplierByCode(code); });
+ipcMain.handle("suppliers:payment-context", async (event, code, amountPaise) => { requireSupplierRenderer(event); return supplierDistributorService.getSupplierPaymentContext(code, amountPaise); });
+ipcMain.handle("suppliers:create", async (event, input) => { requireSupplierRenderer(event); return supplierDistributorService.createSupplier(input || {}); });
+ipcMain.handle("suppliers:update", async (event, code, input) => { requireSupplierRenderer(event); return supplierDistributorService.updateSupplier(code, input || {}); });
+ipcMain.handle("suppliers:relationship-add", async (event, code, input) => { requireSupplierRenderer(event); return supplierDistributorService.addSupplierRelationship(code, input || {}); });
+ipcMain.handle("suppliers:relationship-update", async (event, code, previous, input) => { requireSupplierRenderer(event); return supplierDistributorService.updateSupplierRelationship(code, previous || {}, input || {}); });
+ipcMain.handle("suppliers:relationship-remove", async (event, code, input) => { requireSupplierRenderer(event); return supplierDistributorService.removeSupplierRelationship(code, input || {}); });
+ipcMain.handle("suppliers:relationship-end", async (event, code, relationshipCode, effectiveTo) => { requireSupplierRenderer(event); return supplierDistributorService.endSupplierRelationship(code, relationshipCode, effectiveTo); });
+ipcMain.handle("suppliers:brand-search", async (event, value) => { requireSupplierRenderer(event); return supplierDistributorService.searchSuppliersByBrand(value); });
+ipcMain.handle("suppliers:post-invoice", async (event, input, grant) => { requireSupplierRenderer(event); return supplierDistributorService.postInvoice(input || {}, grant); });
+ipcMain.handle("suppliers:post-payment", async (event, input, grant) => {
+    requireSupplierRenderer(event);
+    try { return await supplierDistributorService.postPayment(input || {}, grant); }
+    catch (error) {
+        if (error.code === "SUPPLIER_PAYMENT_EXCEEDS_OUTSTANDING") return { success: false, error: error.message, code: error.code };
+        throw error;
+    }
+});
+ipcMain.handle("suppliers:post-opening", async (event, input, grant) => { requireSupplierRenderer(event); return supplierDistributorService.postOpeningBalance(input || {}, grant); });
+ipcMain.handle("suppliers:openings", async (event, supplierCode) => { requireSupplierRenderer(event); return supplierDistributorService.listOpeningBalances(supplierCode); });
+ipcMain.handle("suppliers:post-credit-note", async (event, input, grant) => { requireSupplierRenderer(event); return supplierDistributorService.postCreditNote(input || {}, grant); });
+ipcMain.handle("suppliers:credit-notes", async (event, supplierCode) => { requireSupplierRenderer(event); return supplierDistributorService.listCreditNotes(supplierCode); });
+ipcMain.handle("suppliers:liabilities", async (event, supplierCode) => { requireSupplierRenderer(event); return supplierDistributorService.listOpenLiabilities(supplierCode); });
+ipcMain.handle("suppliers:statement", async (event, supplierCode) => { requireSupplierRenderer(event); return supplierDistributorService.listSupplierStatement(supplierCode); });
+ipcMain.handle("suppliers:invoices", async (event, supplierId) => { requireSupplierRenderer(event); return supplierDistributorService.listInvoices(supplierId); });
+ipcMain.handle("suppliers:invoice", async (event, code) => { requireSupplierRenderer(event); const invoice=await supplierDistributorService.getInvoice(code);return invoice?{...invoice,lines:await supplierDistributorService.listInvoiceLines(code)}:null; });
+ipcMain.handle("suppliers:payments", async (event, supplierId) => { requireSupplierRenderer(event); return supplierDistributorService.listPayments(supplierId); });
+ipcMain.handle("suppliers:history", async (event, supplierId) => { requireSupplierRenderer(event); return supplierDistributorService.listAccountHistory(supplierId); });
+ipcMain.handle("suppliers:invoice-lines", async (event, code) => { requireSupplierRenderer(event); return supplierDistributorService.listInvoiceLines(code); });
+ipcMain.handle("suppliers:export-account", async (event, supplierId) => {
+    requireSupplierRenderer(event);
+    try {
+        const data = await supplierDistributorService.getSupplierExportData(supplierId);
+        const { filePath, canceled } = await dialog.showSaveDialog(mainWindow, {
+            defaultPath: `${data.store.storeCode}_${data.supplier.supplier_code}_Supplier_Account.xlsx`,
+            filters: [{ name: "Excel Workbook", extensions: ["xlsx"] }]
+        });
+        if (canceled) return { success: false, cancelled: true };
+        const { exportSupplierAccount } = require("../database/supplierExcelExporter");
+        return await exportSupplierAccount(data, filePath);
+    } catch (error) { return { success: false, error: error.message }; }
 });
 
 /* ============================================================
@@ -2796,7 +2855,6 @@ ipcMain.handle(
             else if (request.reportType === "billSummary") {
                 requireSecurityGrant(grant, "BILL_SUMMARY_REPORT_EXPORT");
             }
-
             const today = new Date();
 
 const dd = String(today.getDate()).padStart(2, "0");
@@ -2842,6 +2900,10 @@ switch (request.reportType) {
         fileName =
             `KL_Bill_Summary_Report_${formattedDate}.xlsx`;
 
+        break;
+
+    case "supplierAccounts":
+        fileName = `KL_Supplier_Accounts_Report_${formattedDate}.xlsx`;
         break;
 
     default:
@@ -2895,7 +2957,8 @@ const auditByReportType = {
     gst: ["GST_REPORT_EXPORTED", "GST_REPORT", "GST Report exported", "OPERATOR"],
     product: ["PRODUCT_SALES_REPORT_EXPORTED", "PRODUCT_SALES_REPORT", "Product Sales Report exported", "OPERATOR"],
     customer: ["CUSTOMER_PURCHASE_REPORT_EXPORTED", "CUSTOMER_PURCHASE_REPORT", "Customer Purchase Report exported", "ADMINISTRATOR"],
-    billSummary: ["BILL_SUMMARY_REPORT_EXPORTED", "BILL_SUMMARY_REPORT", "Bill Summary Report exported", "ADMINISTRATOR"]
+    billSummary: ["BILL_SUMMARY_REPORT_EXPORTED", "BILL_SUMMARY_REPORT", "Bill Summary Report exported", "ADMINISTRATOR"],
+    supplierAccounts: ["SUPPLIER_ACCOUNTS_REPORT_EXPORTED", "SUPPLIER_ACCOUNTS_REPORT", "Supplier Accounts Report exported", "OPERATOR"]
 };
 let activityWarning = null;
 try {

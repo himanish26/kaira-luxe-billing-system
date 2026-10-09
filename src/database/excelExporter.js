@@ -1460,6 +1460,178 @@ async function exportBillSummaryReport(
     return { success: true, filePath };
 }
 
+/* ===========================================
+   SUPPLIER ACCOUNTS REPORT
+=========================================== */
+
+function excelDate(isoDate) {
+    if (!isoDate) return null;
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoDate));
+    return match ? new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))) : null;
+}
+
+function styleSupplierReportHeader(sheet, rowNumber, columnCount) {
+    const row = sheet.getRow(rowNumber);
+    row.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F3428" } };
+    row.alignment = { vertical: "middle", wrapText: true };
+    row.height = 32;
+    row.eachCell({ includeEmpty: true }, cell => {
+        cell.border = { bottom: { style: "medium", color: { argb: "FFB89B7C" } } };
+    });
+    sheet.autoFilter = { from: { row: rowNumber, column: 1 }, to: { row: Math.max(rowNumber, sheet.rowCount), column: columnCount } };
+}
+
+function styleSupplierReportTotal(row) {
+    row.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F3428" } };
+    row.eachCell({ includeEmpty: true }, cell => {
+        cell.border = { top: { style: "medium", color: { argb: "FFB89B7C" } } };
+    });
+}
+
+function setSupplierReportMetadata(sheet, title, data) {
+    sheet.getCell("A1").value = "Store Name";
+    sheet.getCell("B1").value = data.store.storeName;
+    sheet.getCell("A2").value = "Store Code";
+    sheet.getCell("B2").value = data.store.storeCode;
+    sheet.getCell("A3").value = "Report Name";
+    sheet.getCell("B3").value = title;
+    sheet.getCell("A4").value = "Generated On";
+    sheet.getCell("B4").value = new Date();
+    sheet.getCell("B4").numFmt = "dd/mm/yyyy hh:mm";
+    sheet.getCell("A5").value = "Report Period";
+    sheet.getCell("B5").value = `${formatDate(data.fromDate)} to ${formatDate(data.toDate)}`;
+    sheet.getColumn(1).width = 30;
+    sheet.getColumn(2).width = 42;
+}
+
+async function exportSupplierAccountsReport(data, filePath) {
+    if (!data || !data.store || !Array.isArray(data.suppliers)) throw new Error("Supplier Accounts report data is invalid.");
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Kaira Luxe Billing System";
+    workbook.subject = "Supplier financial activity and balances";
+    workbook.created = new Date();
+
+    const overview = workbook.addWorksheet("SUPPLIER OVERVIEW");
+    const summary = workbook.addWorksheet("SUMMARY");
+    const invoices = workbook.addWorksheet("INVOICES");
+    const payments = workbook.addWorksheet("PAYMENTS");
+    const creditNotes = workbook.addWorksheet("CREDIT NOTES");
+    const outstanding = workbook.addWorksheet("OUTSTANDING");
+    for (const sheet of [overview, summary, invoices, payments, creditNotes, outstanding]) {
+        setSupplierReportMetadata(sheet, "Supplier Accounts Report", data);
+        sheet.views = [{ state: "frozen", ySplit: 12 }];
+    }
+    overview.getCell("A10").value = "As Of";
+    overview.getCell("B10").value = excelDate(data.toDate);
+    overview.getCell("B10").numFmt = "dd/mm/yyyy";
+    summary.getCell("A10").value = "Report Period";
+    summary.getCell("B10").value = `${formatDate(data.fromDate)} to ${formatDate(data.toDate)}`;
+
+    const overviewHeaders = ["SUPPLIER CODE", "SUPPLIER NAME", "STATUS", "TOTAL PURCHASES", "TOTAL PAID", "TOTAL CREDIT NOTES", "CURRENT OUTSTANDING", "OPEN INVOICES", "OVERDUE INVOICES", "ACCOUNT STATUS"];
+    overview.columns = [
+        { width: 19 }, { width: 30 }, { width: 14 }, { width: 19 }, { width: 17 },
+        { width: 21 }, { width: 22 }, { width: 16 }, { width: 19 }, { width: 17 }
+    ];
+    overview.getRow(12).values = overviewHeaders;
+    const moneyFmt = '"₹"#,##0.00;[Red]("₹"#,##0.00);-';
+    const semantic = {
+        green: { fill: "FFE5F2E8", font: "FF24613B" },
+        amber: { fill: "FFFFF1D6", font: "FF805500" },
+        red: { fill: "FFFCE5E5", font: "FF9B2525" },
+        blue: { fill: "FFE6F0FA", font: "FF245680" },
+        muted: { fill: "FFF0F0F0", font: "FF707070" }
+    };
+    const setSemantic = (cell, tone) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: tone.fill } };
+        cell.font = { ...(cell.font || {}), bold: true, color: { argb: tone.font } };
+    };
+    let rowNumber = 13;
+    for (const supplier of data.suppliers) {
+        const status = supplier.overdueInvoices > 0 ? "OVERDUE" : supplier.currentOutstandingPaise > 0 ? "DUE" : "CLEARED";
+        overview.getRow(rowNumber).values = [
+            supplier.supplierCode, supplier.supplierName, supplier.status,
+            supplier.totalPurchasesPaise / 100, supplier.totalPaidPaise / 100,
+            supplier.totalCreditNotesPaise / 100, supplier.currentOutstandingPaise / 100,
+            supplier.openInvoices, supplier.overdueInvoices, status
+        ];
+        const row = overview.getRow(rowNumber);
+        for (const col of [4, 5, 6, 7]) row.getCell(col).numFmt = moneyFmt;
+        setSemantic(row.getCell(5), semantic.green);
+        setSemantic(row.getCell(6), semantic.blue);
+        row.getCell(3).font = supplier.status === "INACTIVE"
+            ? { color: { argb: semantic.muted.font } }
+            : { color: { argb: semantic.green.font } };
+        if (status === "CLEARED") {
+            setSemantic(row.getCell(7), semantic.green);
+            setSemantic(row.getCell(10), semantic.green);
+        } else if (status === "DUE") {
+            setSemantic(row.getCell(7), semantic.amber);
+            setSemantic(row.getCell(10), semantic.amber);
+        } else {
+            setSemantic(row.getCell(7), semantic.red);
+            setSemantic(row.getCell(10), semantic.red);
+        }
+        if (supplier.overdueInvoices > 0) setSemantic(row.getCell(9), semantic.red);
+        else if (supplier.openInvoices > 0) setSemantic(row.getCell(8), semantic.amber);
+        if (supplier.overdueInvoices > 0 && supplier.openInvoices > 0) setSemantic(row.getCell(8), semantic.red);
+        rowNumber++;
+    }
+    const overviewTotal = overview.getRow(rowNumber);
+    overviewTotal.values = ["TOTAL", null, null,
+        data.suppliers.reduce((sum, s) => sum + s.totalPurchasesPaise, 0) / 100,
+        data.suppliers.reduce((sum, s) => sum + s.totalPaidPaise, 0) / 100,
+        data.suppliers.reduce((sum, s) => sum + s.totalCreditNotesPaise, 0) / 100,
+        data.suppliers.reduce((sum, s) => sum + s.currentOutstandingPaise, 0) / 100,
+        data.suppliers.reduce((sum, s) => sum + s.openInvoices, 0),
+        data.suppliers.reduce((sum, s) => sum + s.overdueInvoices, 0), null];
+    for (const col of [4, 5, 6, 7]) overviewTotal.getCell(col).numFmt = moneyFmt;
+    styleSupplierReportTotal(overviewTotal);
+    styleSupplierReportHeader(overview, 12, overviewHeaders.length);
+    overview.autoFilter.to.row = Math.max(12, rowNumber - 1);
+
+    const summaryHeaders = ["SUPPLIER CODE", "SUPPLIER NAME", "STATUS", "OPENING OUTSTANDING", "OPENING BALANCES POSTED", "INVOICES POSTED", "CREDIT NOTES", "PAYMENTS", "CLOSING OUTSTANDING", "OPEN INVOICES", "OVERDUE"];
+    summary.columns = [{ width: 19 }, { width: 30 }, { width: 14 }, { width: 22 }, { width: 25 }, { width: 19 }, { width: 18 }, { width: 17 }, { width: 22 }, { width: 16 }, { width: 14 }];
+    summary.getRow(12).values = summaryHeaders;
+    rowNumber = 13;
+    for (const supplier of data.suppliers) {
+        summary.getRow(rowNumber++).values = [supplier.supplierCode, supplier.supplierName, supplier.status,
+            supplier.openingOutstandingPaise / 100, supplier.openingBalancesPostedPaise / 100, supplier.invoicesPostedPaise / 100,
+            supplier.creditNotesPaise / 100, supplier.paymentsPaise / 100,
+            supplier.closingOutstandingPaise / 100, supplier.openInvoices, supplier.overdueInvoices];
+    }
+    const summaryTotals = summary.getRow(rowNumber);
+    const sumField = field => data.suppliers.reduce((sum, s) => sum + s[field], 0);
+    summaryTotals.values = ["TOTAL", null, null, sumField("openingOutstandingPaise") / 100, sumField("openingBalancesPostedPaise") / 100, sumField("invoicesPostedPaise") / 100,
+        sumField("creditNotesPaise") / 100, sumField("paymentsPaise") / 100, sumField("closingOutstandingPaise") / 100,
+        sumField("openInvoices"), sumField("overdueInvoices")];
+    for (const col of [4, 5, 6, 7, 8, 9]) summary.getColumn(col).numFmt = moneyFmt;
+    styleSupplierReportTotal(summaryTotals);
+    styleSupplierReportHeader(summary, 12, summaryHeaders.length);
+    summary.autoFilter.to.row = Math.max(12, rowNumber - 1);
+
+    const definitions = [
+        { sheet: invoices, headers: ["SUPPLIER CODE", "SUPPLIER NAME", "INVOICE ID", "SUPPLIER INVOICE NUMBER", "INVOICE DATE", "POSTING DATE", "BUSINESS SEGMENT", "CAPTURE MODE", "TOTAL QUANTITY", "DUE DATE", "INVOICE TOTAL", "OUTSTANDING AT PERIOD END"], widths: [19, 30, 22, 25, 16, 16, 20, 16, 16, 16, 19, 25], rows: data.invoices.map(r => [r.supplierCode, r.supplierName, r.invoiceId, r.supplierInvoiceNumber, excelDate(r.invoiceDate), excelDate(r.postingDate), r.businessSegment, r.captureMode, r.totalQuantity, excelDate(r.dueDate), r.invoiceTotalPaise / 100, r.outstandingAtPeriodEndPaise / 100]), currencyColumns: [11, 12], dateColumns: [5, 6, 10] },
+        { sheet: payments, headers: ["SUPPLIER CODE", "SUPPLIER NAME", "PAYMENT ID", "PAYMENT DATE", "POSTING DATE", "PAYMENT MODE", "REFERENCE", "AMOUNT"], widths: [19, 30, 22, 16, 16, 18, 30, 18], rows: data.payments.map(r => [r.supplierCode, r.supplierName, r.paymentId, excelDate(r.paymentDate), excelDate(r.postingDate), r.paymentMode, r.reference, r.amountPaise / 100]), currencyColumns: [8], dateColumns: [4, 5] },
+        { sheet: creditNotes, headers: ["SUPPLIER CODE", "SUPPLIER NAME", "CREDIT NOTE ID", "CREDIT NOTE DATE", "POSTING DATE", "REFERENCE", "REASON", "AMOUNT"], widths: [19, 30, 22, 18, 16, 28, 36, 18], rows: data.creditNotes.map(r => [r.supplierCode, r.supplierName, r.creditNoteId, excelDate(r.creditNoteDate), excelDate(r.postingDate), r.reference, r.reason, r.amountPaise / 100]), currencyColumns: [8], dateColumns: [4, 5] },
+        { sheet: outstanding, headers: ["SUPPLIER CODE", "SUPPLIER NAME", "LIABILITY TYPE", "DOCUMENT ID", "DOCUMENT / REFERENCE", "DOCUMENT DATE", "POSTING / AS-ON DATE", "DUE DATE", "ORIGINAL AMOUNT", "PAID / CREDITED THROUGH PERIOD END", "OUTSTANDING AT PERIOD END", "AGING STATUS"], widths: [19, 30, 17, 22, 28, 16, 22, 16, 19, 33, 25, 24], rows: data.outstanding.map(r => [r.supplierCode, r.supplierName, r.liabilityType, r.documentId, r.documentReference, excelDate(r.documentDate), excelDate(r.eventDate), excelDate(r.dueDate), r.originalAmountPaise / 100, r.paidCreditedPaise / 100, r.outstandingPaise / 100, r.agingStatus]), currencyColumns: [9, 10, 11], dateColumns: [6, 7, 8] }
+    ];
+    for (const definition of definitions) {
+        definition.sheet.columns = definition.widths.map(width => ({ width }));
+        definition.sheet.getRow(12).values = definition.headers;
+        let row = 13;
+        for (const values of definition.rows) definition.sheet.getRow(row++).values = values;
+        styleSupplierReportHeader(definition.sheet, 12, definition.headers.length);
+        definition.sheet.autoFilter.to.row = Math.max(12, row - 1);
+        for (const column of definition.currencyColumns) definition.sheet.getColumn(column).numFmt = moneyFmt;
+        for (const column of definition.dateColumns) definition.sheet.getColumn(column).numFmt = "dd/mm/yyyy";
+    }
+
+    await workbook.xlsx.writeFile(filePath);
+    return { success: true, filePath };
+}
+
 module.exports = {
 
     exportBusinessReport,
@@ -1470,6 +1642,7 @@ module.exports = {
 
     exportCustomerPurchaseReport,
 
-    exportBillSummaryReport
+    exportBillSummaryReport,
+    exportSupplierAccountsReport
 
 };

@@ -731,28 +731,24 @@ font-size:15px;
    below changes theme colors only. Keep these values aligned with the
    approved Administrator layout while making the shared layout explicit.
 */
-#adminDialog .modal-content,
-.manager-authorization .modal-content{
+#adminDialog.security-authorization-dialog .modal-content{
     width:420px;
     padding:35px;
     border-radius:18px;
 }
 
-#adminDialog .admin-lock,
-.manager-authorization .admin-lock{
+#adminDialog.security-authorization-dialog .admin-lock{
     font-size:64px;
     margin-bottom:10px;
 }
 
-#adminDialog .modal-content h2,
-.manager-authorization .modal-content h2{
+#adminDialog.security-authorization-dialog .modal-content h2{
     margin: .83em 0 6px;
     font-size:30px;
     line-height:normal;
 }
 
-#adminDialog .admin-error,
-.manager-authorization .admin-error{
+#adminDialog.security-authorization-dialog .admin-error{
     box-sizing:border-box;
     height:22px;
     min-height:22px;
@@ -761,67 +757,56 @@ font-size:15px;
     margin-bottom:12px;
 }
 
-#adminDialog .pin-box,
-.manager-authorization .pin-box{
+#adminDialog.security-authorization-dialog .pin-box{
     height:60px;
     margin-top:-5px;
     margin-bottom:20px;
 }
 
-#adminDialog .modal-buttons,
-.manager-authorization .modal-buttons{
+#adminDialog.security-authorization-dialog .modal-buttons{
     display:flex;
     justify-content:space-between;
     gap:15px;
 }
 
-#adminDialog .modal-buttons button,
-.manager-authorization .modal-buttons button{
+#adminDialog.security-authorization-dialog .modal-buttons button{
     flex:1;
     height:50px;
     font-size:18px;
 }
 
 /* A failed PIN must not translate the shared popup when the error is shown. */
-#adminDialog .modal-content.shake,
-.manager-authorization .modal-content.shake{
+#adminDialog.security-authorization-dialog .modal-content.shake{
     animation:none;
 }
 
-#adminDialog.manager-authorization .modal-content h2,
-.manager-authorization .modal-content h2{
+#adminDialog.authorization-role-manager .modal-content h2{
     color:#B26A00;
 }
 
-#adminDialog.manager-authorization .klbs-primary-btn,
-.manager-authorization .klbs-primary-btn{
+#adminDialog.authorization-role-manager .klbs-primary-btn{
     background:#B26A00;
     border-color:#B26A00;
 }
 
-#adminDialog.manager-authorization .klbs-primary-btn:hover:not(:disabled),
-.manager-authorization .klbs-primary-btn:hover:not(:disabled){
+#adminDialog.authorization-role-manager .klbs-primary-btn:hover:not(:disabled){
     background:#8A4F00;
     border-color:#8A4F00;
 }
 
-#adminDialog.manager-authorization .klbs-cancel-btn,
-.manager-authorization .klbs-cancel-btn{
+#adminDialog.authorization-role-manager .klbs-cancel-btn{
     color:#B26A00;
     border-color:#B26A00;
 }
 
-#adminDialog.manager-authorization .klbs-cancel-btn:hover:not(:disabled),
-.manager-authorization .klbs-cancel-btn:hover:not(:disabled){
+#adminDialog.authorization-role-manager .klbs-cancel-btn:hover:not(:disabled){
     background:#FFF7E8;
     color:#B26A00;
     border-color:#B26A00;
 }
 
-#adminDialog.manager-authorization .klbs-primary-btn:focus-visible,
-#adminDialog.manager-authorization .klbs-cancel-btn:focus-visible,
-.manager-authorization .klbs-primary-btn:focus-visible,
-.manager-authorization .klbs-cancel-btn:focus-visible{
+#adminDialog.authorization-role-manager .klbs-primary-btn:focus-visible,
+#adminDialog.authorization-role-manager .klbs-cancel-btn:focus-visible{
     outline-color:rgba(178,106,0,.28);
 }
 

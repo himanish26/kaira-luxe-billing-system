@@ -68,7 +68,7 @@ function securityAdapter() {
 }
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 9, "V9 is the current schema");
+    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 13, "Supplier V13 invoice capture extends the V12 Supplier authority sequentially");
     assert.deepStrictEqual(HEADS.map(head => head.code), [
         "INTEREST_INCOME", "OTHER_NON_OPERATING_INCOME", "INTEREST_FINANCE_CHARGES",
         "DEPRECIATION", "AMORTISATION", "OTHER_NON_OPERATING_EXPENSE",

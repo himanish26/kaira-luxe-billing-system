@@ -1,10 +1,14 @@
-const CURRENT_DB_SCHEMA_VERSION = 9;
+const CURRENT_DB_SCHEMA_VERSION = 13;
 const SCHEMA_METADATA_TABLE = "klbs_schema_metadata";
 const { migrateV5Foundation } = require("./v5FoundationMigration");
 const { migrateStoreIdentity } = require("./storeIdentityMigration");
 const { migrateExpenseTracker } = require("./expenseTrackerMigration");
 const { migrateReturnCogsReversal } = require("./returnCogsReversalMigration");
 const { migrateManagementAccountingEntries } = require("./managementAccountingEntryMigration");
+const { migrateSupplierDistributor } = require("./supplierDistributorMigration");
+const { migrateSupplierSubledger } = require("./supplierSubledgerMigration");
+const { migrateSupplierRelationships } = require("./supplierRelationshipMigration");
+const { migrateSupplierInvoiceCapture } = require("./supplierInvoiceCaptureMigration");
 
 function run(database, sql, params = []) {
     return new Promise((resolve, reject) => {
@@ -160,11 +164,19 @@ async function runForwardMigrations(database, sourceVersion, targetVersion, step
             sourceVersion: step.from,
             targetVersion: step.to
         });
+        const foreignKeysState=step.foreignKeysOff?await get(database,"PRAGMA foreign_keys"):null;
+        const restoreForeignKeys=Boolean(foreignKeysState&&Number(foreignKeysState.foreign_keys)===1);
+        if(restoreForeignKeys)await run(database,"PRAGMA foreign_keys=OFF");
         await run(database, "BEGIN IMMEDIATE TRANSACTION");
         try {
             await step.up(database);
+            if(restoreForeignKeys){
+                const violations=await all(database,"PRAGMA foreign_key_check");
+                if(violations.length)throw new Error("Database migration would violate foreign keys: "+JSON.stringify(violations));
+            }
             await writeSchemaVersion(database, step.to);
             await run(database, "COMMIT");
+            if(restoreForeignKeys)await run(database,"PRAGMA foreign_keys=ON");
             version = step.to;
             logger?.info("DATABASE_MIGRATION", "Forward database migration succeeded", {
                 migration: step.name || `${step.from}_to_${step.to}`,
@@ -173,6 +185,7 @@ async function runForwardMigrations(database, sourceVersion, targetVersion, step
         }
         catch (error) {
             await run(database, "ROLLBACK").catch(() => {});
+            if(restoreForeignKeys)await run(database,"PRAGMA foreign_keys=ON").catch(()=>{});
             logger?.error("DATABASE_MIGRATION", "Forward database migration failed", error, {
                 migration: step.name || `${step.from}_to_${step.to}`,
                 sourceVersion: step.from,
@@ -194,6 +207,15 @@ async function validateCurrentSchema(database, currentVersion = CURRENT_DB_SCHEM
     if (currentVersion >= 6) requiredTables.push("stores", "store_context");
     if (currentVersion >= 8) requiredTables.push("returns", "return_items");
     if (currentVersion >= 9) requiredTables.push("management_accounting_entries", "management_accounting_entry_sequences");
+    if (currentVersion >= 10) requiredTables.push("supplier_master", "supplier_sequences", "supplier_brands", "supplier_product_segments", "supplier_business_segments", "supplier_invoices", "supplier_invoice_lines", "supplier_payments", "supplier_payment_allocations", "supplier_cost_provenance_links");
+    if (currentVersion >= 11) requiredTables.push("supplier_subledger_sequences", "supplier_opening_balances", "supplier_credit_notes", "supplier_payment_opening_allocations", "supplier_credit_note_invoice_allocations", "supplier_credit_note_opening_allocations");
+    if (currentVersion >= 12) requiredTables.push("supplier_relationship_sequences", "supplier_brand_master", "supplier_product_segment_master", "supplier_relationships");
+    if (currentVersion >= 13) {
+        const invoiceColumns = await all(database, "PRAGMA table_info(supplier_invoices)");
+        const invoiceColumnNames = new Set(invoiceColumns.map(column => column.name));
+        const missingInvoiceColumns = ["capture_mode", "total_quantity"].filter(name => !invoiceColumnNames.has(name));
+        if (missingInvoiceColumns.length) throw new Error(`KLBS database readiness validation failed: required Supplier invoice columns missing (${missingInvoiceColumns.join(", ")}).`);
+    }
     const rows = await all(database, `
         SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${requiredTables.map(() => "?").join(",")})
     `, requiredTables);
@@ -215,7 +237,11 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
         { from: 5, to: 6, name: "v2_1_store_identity", up: migrateStoreIdentity },
         { from: 6, to: 7, name: "v2_1_expense_tracker", up: migrateExpenseTracker },
         { from: 7, to: 8, name: "v2_1_return_cogs_reversal", up: migrateReturnCogsReversal },
-        { from: 8, to: 9, name: "v2_1_management_accounting_entries", up: migrateManagementAccountingEntries }
+        { from: 8, to: 9, name: "v2_1_management_accounting_entries", up: migrateManagementAccountingEntries },
+        { from: 9, to: 10, name: "v2_1_supplier_distributor_accounts", up: migrateSupplierDistributor },
+        { from: 10, to: 11, name: "v2_1_supplier_subledger_completion", up: migrateSupplierSubledger },
+        { from: 11, to: 12, name: "v2_1_supplier_relationship_tuples", up: migrateSupplierRelationships },
+        { from: 12, to: 13, name: "v2_1_supplier_invoice_capture_modes", up: migrateSupplierInvoiceCapture, foreignKeysOff: true }
     ];
     if (detectedVersion === null) {
         logger?.info("DATABASE", "Legacy KLBS database detected; schema metadata is absent");
@@ -234,6 +260,10 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
             }
             throw error;
         }
+        // Recent numbered schemas own financial authorities. Validate the
+        // declared source endpoint before advancing it so a damaged V9
+        // database cannot be relabelled V10 by the additive migration.
+        if (detectedVersion >= 9) await validateCurrentSchema(database, detectedVersion);
         await runForwardMigrations(
             database,
             detectedVersion,

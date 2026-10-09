@@ -15,6 +15,10 @@ const AUTHORIZATION_POLICY = Object.freeze({
     "EXPENSE_POST": AUTHORIZATION_LEVELS.MANAGER,
     "P_AND_L_ENTRY_POST": AUTHORIZATION_LEVELS.MANAGER,
     "P_AND_L_ENTRY_REVERSE": AUTHORIZATION_LEVELS.MANAGER,
+    "SUPPLIER_INVOICE_POST": AUTHORIZATION_LEVELS.MANAGER,
+    "SUPPLIER_PAYMENT_POST": AUTHORIZATION_LEVELS.MANAGER,
+    "SUPPLIER_OPENING_BALANCE_POST": AUTHORIZATION_LEVELS.MANAGER,
+    "SUPPLIER_CREDIT_NOTE_POST": AUTHORIZATION_LEVELS.MANAGER,
     "PAYMENT_CORRECTION": AUTHORIZATION_LEVELS.ADMINISTRATOR,
     "CUSTOMER_REPORT_EXPORT": AUTHORIZATION_LEVELS.ADMINISTRATOR,
     "BILL_SUMMARY_REPORT_EXPORT": AUTHORIZATION_LEVELS.ADMINISTRATOR,
@@ -62,6 +66,10 @@ const ADMIN_PIN_AUDIT_POLICY = Object.freeze({
     EXPENSE_POST: { classification: "BUSINESS_OPERATION", action: "EXPENSE_BATCH_POSTED" },
     P_AND_L_ENTRY_POST: { classification: "BUSINESS_OPERATION", action: "MANAGEMENT_ACCOUNTING_ENTRY_POSTED" },
     P_AND_L_ENTRY_REVERSE: { classification: "BUSINESS_OPERATION", action: "MANAGEMENT_ACCOUNTING_ENTRY_REVERSED" },
+    SUPPLIER_INVOICE_POST: { classification: "BUSINESS_OPERATION", action: "SUPPLIER_INVOICE_POST_AUTHORIZED" },
+    SUPPLIER_PAYMENT_POST: { classification: "BUSINESS_OPERATION", action: "SUPPLIER_PAYMENT_POST_AUTHORIZED" },
+    SUPPLIER_OPENING_BALANCE_POST: { classification: "BUSINESS_OPERATION", action: "SUPPLIER_OPENING_BALANCE_POST_AUTHORIZED" },
+    SUPPLIER_CREDIT_NOTE_POST: { classification: "BUSINESS_OPERATION", action: "SUPPLIER_CREDIT_NOTE_POST_AUTHORIZED" },
     INSTALL_UPDATE: { classification: "BUSINESS_OPERATION", action: "APPLICATION_UPDATED" },
     ACTIVITY_EXPORT: { classification: "BUSINESS_OPERATION", action: "ACTIVITY_LOG_EXPORTED" },
     ACTIVITY_ARCHIVE: { classification: "BUSINESS_OPERATION", action: "ACTIVITY_LOG_ARCHIVED" },
@@ -143,6 +151,12 @@ function createAdministratorSecurityService(database, options = {}) {
         return get(`
             SELECT * FROM settings WHERE id = 1
         `);
+    }
+
+    function getAuthorizationRole(purpose) {
+        return Object.prototype.hasOwnProperty.call(AUTHORIZATION_POLICY, purpose)
+            ? AUTHORIZATION_POLICY[purpose]
+            : null;
     }
 
     async function getStatus() {
@@ -562,7 +576,7 @@ function createAdministratorSecurityService(database, options = {}) {
     }
 
     return {
-        getStatus, authorizePin, changePin, recoverPin, recoverManagerPin, configureManagerPin,
+        getStatus, getAuthorizationRole, authorizePin, changePin, recoverPin, recoverManagerPin, configureManagerPin,
         beginStartupSetup,
         configureMissingAdministratorPin: data =>
             configureMissingPinWithStartupSetup(data || {}, AUTHORIZATION_LEVELS.ADMINISTRATOR),

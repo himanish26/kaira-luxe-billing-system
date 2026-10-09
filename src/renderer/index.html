@@ -509,7 +509,10 @@ style="display:none;">
 
 <div
 id="adminDialog"
-class="modal"
+class="modal security-authorization-dialog authorization-role-administrator"
+role="dialog"
+aria-modal="true"
+aria-labelledby="authorizationDialogTitle"
 style="display:none;">
 
     <div class="modal-content">
@@ -528,7 +531,9 @@ style="display:none;">
 
 <div
 id="adminError"
-class="admin-error">
+class="admin-error"
+role="alert"
+aria-live="assertive">
 
 </div>
 
@@ -538,6 +543,8 @@ class="admin-error">
 type="password"
 id="adminPin"
 placeholder=" Enter 4-digit Administrator PIN"
+aria-label="Enter 4-digit Administrator PIN"
+aria-describedby="adminError"
 inputmode="numeric"
 pattern="[0-9]{4}"
 maxlength="4">
@@ -1989,6 +1996,11 @@ returned after purchase.
                 <strong>CUSTOMERS</strong>
                 <span class="business-workspace-description">Customer directory, profiles and<br>purchase history</span>
             </button>
+            <button id="businessSuppliersBtn" class="business-workspace-card" type="button">
+                <span class="business-workspace-icon" aria-hidden="true">🏭</span>
+                <strong>SUPPLIERS</strong>
+                <span class="business-workspace-description">Supplier directory, profiles and<br>purchase relationships</span>
+            </button>
             <button id="businessAccountingBtn" class="business-workspace-card" type="button">
                 <span class="business-workspace-icon" aria-hidden="true">🧾</span>
                 <strong>ACCOUNTING &amp; DATA</strong>
@@ -1996,6 +2008,122 @@ returned after purchase.
             </button>
         </nav>
     </div>
+</div>
+
+<div id="supplierManagementScreen" class="screen" style="display:none;">
+    <div class="bill-top-bar supplier-topbar">
+        <button id="supplierBackBtn" class="back-btn" type="button">← Business</button>
+    </div>
+    <main class="business-page business-page-after-topbar supplier-page">
+        <header class="business-page-header supplier-page-header"><h1 id="supplierScreenTitle">SUPPLIER PROFILES</h1><p id="supplierScreenSubtitle">Supplier details, contacts and brand mappings</p></header>
+        <div id="supplierMessage" class="customer-directory-message" role="status" aria-live="polite"></div>
+        <section id="supplierDirectoryView" class="supplier-view">
+            <div class="customer-directory-toolbar supplier-directory-toolbar"><label class="customer-search-wrap"><input id="supplierSearch" type="search" placeholder="Search Supplier Code, name, mobile or Brand" aria-label="Search Supplier Code, name, mobile or Brand" autocomplete="off"></label><button id="supplierAddBtn" class="klbs-primary-btn customer-add-button" type="button">+ NEW SUPPLIER</button></div>
+            <div id="supplierDirectoryEmpty" class="customer-directory-empty" hidden>No suppliers yet. Use + New Supplier to create the first supplier.</div><div id="supplierDirectoryNoResults" class="customer-directory-empty" hidden>No suppliers match this search.</div>
+            <div id="supplierDirectoryTableWrap" class="customer-directory-table-wrap table-container supplier-directory-table-wrap" hidden><table id="supplierDirectoryTable" class="customer-directory-table supplier-directory-table"><colgroup><col><col><col><col><col><col><col><col></colgroup><thead><tr><th>SUPPLIER CODE</th><th>SUPPLIER</th><th>BRANDS</th><th>CONTACT</th><th>SEGMENTS</th><th>STATUS</th><th>OUTSTANDING</th><th>ACTION</th></tr></thead><tbody id="supplierRows"></tbody></table></div>
+            <div id="supplierDirectoryPagination" class="customer-directory-pagination history-pagination" hidden><div class="pagination-controls"><button id="supplierPrevious" class="pagination-nav-btn" type="button">Previous</button><span id="supplierPageLabel">Page 1 of 1</span><label for="supplierPageJump">Jump to page:</label><input id="supplierPageJump" type="number" min="1" step="1" inputmode="numeric" value="1" aria-label="Jump to supplier page"><button id="supplierNext" class="pagination-nav-btn" type="button">Next</button></div><span id="supplierDirectoryRangeLabel">Showing 0–0 of 0 suppliers</span></div>
+        </section>
+        <section id="supplierEditorView" class="supplier-profile-drawer" role="dialog" aria-modal="true" aria-labelledby="supplierEditorHeading" hidden>
+            <header class="supplier-drawer-header"><h2 id="supplierEditorHeading">NEW SUPPLIER</h2><button id="supplierEditorCloseBtn" class="supplier-drawer-exit" type="button">CLOSE</button></header>
+            <div class="supplier-drawer-body">
+            <form id="supplierProfileForm" class="supplier-form">
+                <input type="hidden" id="supplierEditingCode">
+                <h3 class="supplier-form-section-title supplier-wide-field">SUPPLIER DETAILS</h3>
+                <label class="supplier-required">Supplier Name *<input name="name" required maxlength="200"><span class="supplier-field-error" data-field-error="name" role="alert"></span></label>
+                <label>Legal / Billing Name<input name="legalName" maxlength="200"></label>
+                <label class="supplier-required">Supplier Type *<select name="supplierType" required><option value="">Select type</option><option value="DISTRIBUTOR">Distributor</option><option value="COMPANY">Company / Direct Brand</option><option value="WHOLESALER">Wholesaler</option><option value="OTHER">Other</option></select><span class="supplier-field-error" data-field-error="supplierType" role="alert"></span></label>
+                <label>Status<select name="status"><option>ACTIVE</option><option>INACTIVE</option></select></label>
+                <label class="supplier-required">Contact Person *<input name="contactPerson" required maxlength="120"><span class="supplier-field-error" data-field-error="contactPerson" role="alert"></span></label><label class="supplier-required">Primary Mobile *<input name="mobile" type="tel" inputmode="numeric" required maxlength="10" placeholder="10-digit Indian mobile"><span class="supplier-field-error" data-field-error="mobile" role="alert"></span></label>
+                <label>Alternate Mobile<input name="alternateMobile" type="tel" inputmode="numeric" maxlength="10" placeholder="Optional"><span class="supplier-field-error" data-field-error="alternateMobile" role="alert"></span></label><label>Email<input name="email" type="text" inputmode="email" autocomplete="email" maxlength="254"><span class="supplier-field-error" data-field-error="email" role="alert"></span></label>
+                <h3 class="supplier-form-section-title supplier-wide-field">TAX &amp; COMMERCIAL</h3>
+                <label>GSTIN<input name="gstin" maxlength="15"><span class="supplier-field-error" data-field-error="gstin" role="alert"></span></label><label>PAN<input name="pan" maxlength="10"><span class="supplier-field-error" data-field-error="pan" role="alert"></span></label>
+                <label class="supplier-required">Default Credit Period (days) *<input name="defaultCreditPeriodDays" type="number" min="0" max="3650" step="1" value="0" required><span class="supplier-field-error" data-field-error="defaultCreditPeriodDays" role="alert"></span></label>
+                <h3 class="supplier-form-section-title supplier-wide-field">ADDRESS</h3>
+                <label>Address Line 1<input name="addressLine1" maxlength="200"></label><label>Address Line 2<input name="addressLine2" maxlength="200"></label>
+                <label>City<input name="city" maxlength="100"></label><label>District<input name="district" maxlength="100"></label><label class="supplier-required">State *<input name="state" required maxlength="100"><span class="supplier-field-error" data-field-error="state" role="alert"></span></label><label>PIN Code<input name="pinCode" inputmode="numeric" maxlength="6"><span class="supplier-field-error" data-field-error="pinCode" role="alert"></span></label>
+                <div class="supplier-wide-field supplier-business-relationships"><h3>BRAND MAPPING *</h3><div id="supplierRelationshipRows"></div><button id="supplierRelationshipAddBtn" class="klbs-cancel-btn" type="button">+ ADD BRAND MAPPING</button><div id="supplierRelationshipError" class="supplier-field-error" role="alert"></div></div>
+                <h3 class="supplier-form-section-title supplier-wide-field">NOTES / REMARKS</h3><label class="supplier-wide-field">Notes / Remarks<textarea name="notes" rows="3" maxlength="2000"></textarea></label>
+            </form>
+            </div>
+            <footer class="supplier-drawer-footer"><div id="supplierProfileValidation" class="supplier-profile-validation" role="alert" aria-live="polite"></div><button id="supplierCancelEdit" class="klbs-cancel-btn" type="button">CANCEL</button><button id="supplierProfileSave" class="klbs-primary-btn" type="submit" form="supplierProfileForm">SAVE SUPPLIER</button></footer>
+        </section>
+        <div id="supplierProfileOverlay" class="supplier-profile-overlay" hidden>
+        <section id="supplierProfileView" class="supplier-profile-drawer" role="dialog" aria-modal="true" aria-labelledby="supplierProfileTitle" hidden>
+            <header class="supplier-drawer-header"><h2 id="supplierProfileTitle">SUPPLIER PROFILE</h2><button id="supplierProfileCloseBtn" class="supplier-drawer-exit" type="button">CLOSE</button></header>
+            <div class="supplier-drawer-body"><div class="supplier-profile-heading"><div><h3 id="supplierProfileName"></h3><span id="supplierProfileCode"></span> · <strong id="supplierProfileStatus"></strong><div id="supplierProfileType" class="supplier-profile-type"></div></div><div class="supplier-profile-actions"><button id="supplierEditBtn" class="klbs-cancel-btn" type="button">EDIT PROFILE</button><button id="supplierViewAccountBtn" class="klbs-primary-btn" type="button">VIEW ACCOUNT</button></div></div>
+            <div id="supplierProfileDetails"></div><div class="supplier-profile-section"><h4>ACCOUNT SUMMARY</h4><div class="supplier-summary-grid" id="supplierProfileSummary"></div></div></div>
+        </section>
+        </div>
+        <div id="supplierRelationshipModal" class="supplier-mapping-modal-overlay" hidden>
+            <section class="supplier-mapping-modal" role="dialog" aria-modal="true" aria-labelledby="supplierRelationshipEditorTitle">
+                <header><h2 id="supplierRelationshipEditorTitle">ADD BRAND MAPPING</h2><button id="supplierRelationshipClose" class="supplier-drawer-exit" type="button">CLOSE</button></header>
+                <div class="supplier-mapping-modal-body">
+                    <label>Brand *<input id="supplierRelationshipBrand" list="supplierBrandSuggestions" autocomplete="off" placeholder="Search or select Brand"><datalist id="supplierBrandSuggestions"></datalist><button id="supplierAddBrandToggle" type="button" class="supplier-vocabulary-action" hidden></button><span id="supplierBrandError" class="supplier-field-error" role="alert"></span></label>
+                    <label>Product Segment *<input id="supplierRelationshipProductSegment" list="supplierProductSegmentSuggestions" autocomplete="off" placeholder="Search or select Product Segment"><datalist id="supplierProductSegmentSuggestions"></datalist><button id="supplierAddProductSegmentToggle" type="button" class="supplier-vocabulary-action" hidden></button><span id="supplierProductSegmentError" class="supplier-field-error" role="alert"></span></label>
+                    <label>Business Segment *<select id="supplierRelationshipBusinessSegment"><option value="">Select Business Segment</option><option value="KL">KL</option><option value="MENS">MENS</option><option value="KIDS">KIDS</option></select><span id="supplierBusinessSegmentError" class="supplier-field-error" role="alert"></span></label>
+                    <div id="supplierRelationshipModalError" class="supplier-field-error" role="alert"></div>
+                </div>
+                <footer><button id="supplierRelationshipCancel" type="button" class="klbs-cancel-btn">CANCEL</button><button id="supplierRelationshipSave" type="button" class="klbs-primary-btn">ADD MAPPING</button></footer>
+            </section>
+        </div>
+        <section id="supplierAccountView" class="supplier-view" hidden>
+            <div class="supplier-profile-heading supplier-account-heading"><div class="supplier-account-identity-heading"><span class="supplier-account-title">SUPPLIER ACCOUNT</span><h2 id="supplierAccountName"></h2><span id="supplierAccountCode"></span></div><div class="supplier-account-actions"><div class="supplier-account-secondary-actions"><button id="supplierExportBtn" class="klbs-cancel-btn" type="button">EXPORT EXCEL</button><button id="supplierOpeningBtn" class="klbs-cancel-btn" type="button">ADD OPENING OUTSTANDING</button><button id="supplierCreditNoteBtn" class="klbs-cancel-btn" type="button">+ POST CREDIT NOTE</button></div><div class="supplier-account-primary-actions"><button id="supplierNewInvoiceBtn" class="klbs-primary-btn" type="button">+ POST INVOICE</button><button id="supplierNewPaymentBtn" class="klbs-primary-btn" type="button">+ POST PAYMENT</button></div></div></div>
+            <div class="supplier-summary-grid" id="supplierAccountSummary"></div>
+            <div id="supplierAgingSummary" class="supplier-aging-summary"></div>
+            <nav class="supplier-tabs" aria-label="Supplier account sections"><button type="button" data-tab="invoices" aria-pressed="false">INVOICES</button><button type="button" data-tab="payments" aria-pressed="false">PAYMENTS</button><button type="button" data-tab="openings" aria-pressed="false">OPENING BALANCES</button><button type="button" data-tab="creditNotes" aria-pressed="false">CREDIT NOTES</button><button type="button" data-tab="outstanding" aria-pressed="false">OUTSTANDING</button><button type="button" data-tab="history" aria-pressed="false">SUPPLIER STATEMENT</button></nav>
+            <div id="supplierAccountTableWrap" class="customer-directory-table-wrap supplier-financial-table-wrap"><table class="customer-directory-table supplier-financial-table"><thead id="supplierAccountHead"></thead><tbody id="supplierAccountRows"></tbody></table></div>
+        </section>
+        <section id="supplierInvoiceFormView" class="supplier-view" hidden>
+            <h2>POST PURCHASE INVOICE</h2>
+            <p id="supplierInvoiceMappingBlock" class="supplier-invoice-block-message" hidden>No active Brand Mapping is available for this supplier. Add an active mapping in Supplier Profile before posting a purchase invoice.</p>
+            <form id="supplierInvoiceForm" class="supplier-form supplier-summary-invoice-form">
+                <div class="supplier-invoice-context supplier-wide-field"><span>SUPPLIER</span><strong id="supplierInvoiceContext"></strong></div>
+                <label>Supplier Invoice Number *<input name="supplierInvoiceNumber" required maxlength="128"></label>
+                <label>Invoice Date *<input name="supplierInvoiceDate" type="date" required></label>
+                <label>Business Segment *<select name="businessSegment" required><option value="">Select Business Segment</option></select></label>
+                <label>Total Quantity *<input name="totalQuantity" type="number" inputmode="numeric" min="1" step="1" required></label>
+                <label>Invoice Total (₹) *<input name="invoiceTotal" inputmode="decimal" placeholder="0.00" required></label>
+                <label>Due Date<input name="dueDate" type="date"></label>
+                <div class="supplier-invoice-posting-date"><span>POSTING / BUSINESS DATE</span><strong id="supplierInvoicePostingDate"></strong></div>
+                <label class="supplier-wide-field">Notes<textarea name="notes" rows="2"></textarea></label>
+                <div class="supplier-invoice-summary supplier-wide-field" aria-live="polite"><div><span>TOTAL QUANTITY</span><strong id="supplierInvoiceSummaryQuantity">—</strong></div><div><span>INVOICE TOTAL</span><strong id="supplierInvoiceSummaryTotal">—</strong></div></div>
+                <div class="supplier-form-actions supplier-wide-field"><button class="klbs-cancel-btn" data-supplier-cancel="true" type="button">CANCEL</button><button class="klbs-primary-btn" type="submit">POST INVOICE</button></div>
+            </form>
+        </section>
+        <section id="supplierOpeningFormView" class="supplier-view" hidden>
+            <h2>ADD OPENING OUTSTANDING</h2><p>Legacy Supplier liability only. This is not a purchase invoice, GST credit, inventory receipt, expense or P&amp;L entry.</p>
+            <form id="supplierOpeningForm" class="supplier-form">
+                <label>As On Date<input name="asOnDate" type="date" required></label><label>Reference<input name="reference" maxlength="128" placeholder="Opening Balance or legacy reference"></label><label>Outstanding Amount (₹)<input name="amount" inputmode="decimal" required></label><label>Due Date (optional)<input name="dueDate" type="date"></label><label class="supplier-wide-field">Remarks<textarea name="remarks" rows="2"></textarea></label>
+                <div class="supplier-form-actions"><button class="klbs-cancel-btn" data-supplier-cancel="true" type="button">CANCEL</button><button class="klbs-primary-btn" type="submit">POST OPENING OUTSTANDING</button></div>
+            </form>
+        </section>
+        <section id="supplierCreditNoteFormView" class="supplier-view" hidden>
+            <h2>POST SUPPLIER CREDIT NOTE</h2><p>Reduces Supplier liability. Physical stock returns remain a separate Inventory workflow.</p>
+            <form id="supplierCreditNoteForm" class="supplier-form">
+                <label>Credit Note Date<input name="creditNoteDate" type="date" required></label><label>Posting / Business Date<input name="postingDate" type="date" required></label><label>Supplier Credit Note Number (optional)<input name="externalNumber" maxlength="128"></label><label>Amount (₹)<input name="amount" inputmode="decimal" required></label><label>Reason<select name="reason" required><option value="">Select reason</option><option>PURCHASE RETURN</option><option>RATE DIFFERENCE</option><option>DAMAGED GOODS</option><option>COMMERCIAL DISCOUNT</option><option>OTHER</option></select></label><label>Reference Supplier Invoice (optional)<select name="referenceInvoiceCode"><option value="">Unlinked / apply oldest liability</option></select></label><label class="supplier-wide-field">Reference<input name="reference" maxlength="128"></label><label class="supplier-wide-field">Remarks<textarea name="remarks" rows="2"></textarea></label>
+                <div class="supplier-form-actions"><button class="klbs-cancel-btn" data-supplier-cancel="true" type="button">CANCEL</button><button class="klbs-primary-btn" type="submit">POST CREDIT NOTE</button></div>
+            </form>
+        </section>
+        <section id="supplierInvoiceDetailView" class="supplier-view" hidden>
+            <h2>PURCHASE INVOICE DETAIL</h2><div id="supplierInvoiceDetail" class="supplier-invoice-detail"></div>
+        </section>
+        <section id="supplierPaymentFormView" class="supplier-view" hidden>
+            <h2>POST SUPPLIER PAYMENT</h2>
+            <div id="supplierPaymentContext" class="supplier-payment-context" aria-live="polite">
+                <div><span>Supplier</span><strong id="supplierPaymentSupplier"></strong></div>
+                <div><span>Total Outstanding</span><strong id="supplierPaymentOutstanding"></strong></div>
+                <div><span>Open Invoices</span><strong id="supplierPaymentOpenInvoices"></strong></div>
+                <div><span>Opening Outstanding</span><strong id="supplierPaymentOpeningOutstanding"></strong></div>
+            </div>
+            <form id="supplierPaymentForm" class="supplier-form">
+                <label>Payment Date<input name="paymentDate" type="date" required></label><label>Payment Mode<select name="paymentMode" required><option>Cash</option><option>UPI</option><option>Card</option><option>Bank Transfer</option><option>Other</option></select></label>
+                <label>Payment Amount (₹)<input id="supplierPaymentAmount" name="amount" inputmode="decimal" required aria-describedby="supplierPaymentAmountError"><small id="supplierPaymentAmountError" class="supplier-payment-validation" role="alert"></small></label><label>Reference<input name="reference" maxlength="128"></label>
+                <div id="supplierPaymentAllocationPreview" class="supplier-payment-preview supplier-wide-field" hidden><strong>Allocation Preview</strong><div id="supplierPaymentAllocationPreviewRows"></div></div>
+                <fieldset class="supplier-wide-field supplier-payment-allocation"><legend>Allocation Method</legend><div class="supplier-payment-allocation-options"><label class="supplier-payment-allocation-option"><input id="supplierAllocationOldest" type="radio" name="allocationMethod" value="OLDEST_INVOICE_FIRST" checked><span>OLDEST INVOICE FIRST</span></label><label class="supplier-payment-allocation-option"><input id="supplierAllocationManual" type="radio" name="allocationMethod" value="MANUAL"><span>MANUAL</span></label></div><p>Oldest Invoice First automatically applies payment to the oldest outstanding liabilities first, including Opening Outstanding and Supplier Invoices.</p><div id="supplierManualAllocationFields" hidden><div id="supplierAllocationRows"></div><button id="supplierAddAllocation" class="klbs-cancel-btn" type="button">+ ADD LIABILITY ALLOCATION</button></div></fieldset>
+                <label class="supplier-wide-field">Remarks<textarea name="remarks" rows="2"></textarea></label><div class="supplier-form-actions"><button class="klbs-cancel-btn" data-supplier-cancel="true" type="button">CANCEL</button><button id="supplierPostPaymentBtn" class="klbs-primary-btn" type="submit" disabled>POST PAYMENT</button></div>
+            </form>
+        </section>
+    </main>
 </div>
 
 <div id="customersScreen" class="screen" style="display:none;">
@@ -2105,7 +2233,7 @@ returned after purchase.
             </button>
             <button id="accountingSupplierAccountsBtn" class="business-workspace-card" type="button">
                 <span class="business-workspace-icon" aria-hidden="true">🧾</span>
-                <strong>SUPPLIER / DISTRIBUTOR<br>ACCOUNTS</strong>
+                <strong>SUPPLIER ACCOUNTS</strong>
                 <span class="business-workspace-description">Invoices, payments and outstanding balances</span>
             </button>
         </nav>
@@ -2507,6 +2635,17 @@ style="display:none;">
 
 </label>
 
+<label class="report-option">
+
+    <input type="radio" name="reportType" value="supplierAccounts">
+
+    <div class="report-option-content">
+        <div class="report-title">🏭 Supplier Accounts Report</div>
+        <div class="report-subtitle">Supplier Financial Activity &amp; Outstanding</div>
+    </div>
+
+</label>
+
     </div>
 
 <div class="reports-card date-range-card">
@@ -2713,61 +2852,6 @@ style="display:none;">
 
 <script src="vendor/JsBarcode.all.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
-
-<!-- FAMILY & FRIENDS PIN POPUP -->
-
-<div
-    id="ffPinDialog"
-    class="modal manager-authorization"
-    style="display:none;">
-
-    <div class="modal-content">
-
-        <div class="admin-lock" aria-hidden="true">
-            🔐
-        </div>
-
-        <h2>
-            Manager Access
-        </h2>
-
-        <div
-            id="ffPinError"
-            class="admin-error">
-        </div>
-
-        <div class="pin-box">
-            <input
-                type="password"
-                id="ffPinInput"
-                maxlength="4"
-                inputmode="numeric"
-                placeholder=" Enter 4-digit Manager PIN">
-        </div>
-
-        <div class="modal-buttons">
-
-            <button
-                id="ffPinCancelBtn"
-                class="klbs-cancel-btn">
-
-                Cancel
-
-            </button>
-
-            <button
-                id="ffPinVerifyBtn"
-                class="klbs-primary-btn">
-
-                Unlock
-
-            </button>
-
-        </div>
-
-    </div>
-
-</div>
 
 <!-- VARIABLE-VALUE SALE LINE POPUP -->
 <div
@@ -3113,6 +3197,8 @@ style="display:none;">
 <script src="modules/expenseTracker.js"></script>
 <script src="modules/managementPnl.js"></script>
 <script src="modules/managementAccountingEntries.js"></script>
+<script src="../shared/supplierContactValidation.js"></script>
+<script src="modules/supplierManagement.js"></script>
 
 </body>
 </html>

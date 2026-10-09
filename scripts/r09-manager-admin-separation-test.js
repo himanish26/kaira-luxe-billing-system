@@ -18,20 +18,15 @@ const settingsCss = fs.readFileSync(path.join(root, "src/renderer/styles/setting
 const managerModalCss = fs.readFileSync(path.join(root, "src/renderer/style.css"), "utf8");
 const indexHtml = fs.readFileSync(path.join(root, "src/renderer/index.html"), "utf8");
 assert.match(settingsCss, /\.admin-error\s*\{[^}]*height:\s*22px[^}]*min-height:\s*22px[^}]*max-height:\s*22px/s);
-assert.match(settingsCss, /\.manager-authorization \.admin-error\s*\{[^}]*height:\s*22px[^}]*min-height:\s*22px[^}]*max-height:\s*22px[^}]*line-height:\s*22px[^}]*margin-bottom:\s*12px/s);
-assert.match(settingsCss, /#adminDialog \.modal-content h2,\s*\.manager-authorization \.modal-content h2\s*\{[^}]*margin:\s*\.83em 0 6px[^}]*font-size:\s*30px[^}]*line-height:\s*normal/s);
-assert.match(settingsCss, /\.manager-authorization \.modal-content h2\s*\{[^}]*margin:\s*\.83em 0 6px[^}]*font-size:\s*30px[^}]*line-height:\s*normal/s);
-assert.match(settingsCss, /\.manager-authorization \.admin-lock\s*\{[^}]*font-size:\s*64px[^}]*margin-bottom:\s*10px/s);
-assert.match(settingsCss, /\.manager-authorization \.pin-box\s*\{[^}]*height:\s*60px[^}]*margin-top:\s*-5px[^}]*margin-bottom:\s*20px/s);
-assert.match(settingsCss, /\.manager-authorization \.modal-buttons button\s*\{[^}]*height:\s*50px[^}]*font-size:\s*18px/s);
-assert.match(managerModalCss, /#ffPinDialog \.admin-error:not\(:empty\)::before\s*\{[^}]*content:\s*"❌ "/s);
-assert(indexHtml.includes('id="adminDialog"') && indexHtml.includes('id="ffPinDialog"'));
-const ffModalSource = indexHtml.slice(indexHtml.indexOf('id="ffPinDialog"'), indexHtml.indexOf('id="ffPinDialog"') + 1800);
-assert.match(ffModalSource, /class="modal manager-authorization"/);
-assert.match(ffModalSource, /class="admin-lock"[\s\S]*?🔐[\s\S]*?Manager Access/);
-assert.match(ffModalSource, /id="ffPinError"[\s\S]*?class="admin-error"[\s\S]*?class="pin-box"/);
-assert.match(ffModalSource, /Manager Access[\s\S]*?placeholder=" Enter 4-digit Manager PIN"[\s\S]*?id="ffPinCancelBtn"[\s\S]*?Cancel[\s\S]*?id="ffPinVerifyBtn"[\s\S]*?Unlock/);
-assert(!ffModalSource.includes('class="ff-pin-lock"') && !ffModalSource.includes('class="ff-pin-box"'));
+assert.match(settingsCss, /#adminDialog\.security-authorization-dialog \.admin-error\s*\{[^}]*height:\s*22px[^}]*min-height:\s*22px[^}]*max-height:\s*22px[^}]*line-height:\s*22px[^}]*margin-bottom:\s*12px/s);
+assert.match(settingsCss, /#adminDialog\.security-authorization-dialog \.modal-content h2\s*\{[^}]*margin:\s*\.83em 0 6px[^}]*font-size:\s*30px[^}]*line-height:\s*normal/s);
+assert.match(settingsCss, /#adminDialog\.security-authorization-dialog \.admin-lock\s*\{[^}]*font-size:\s*64px[^}]*margin-bottom:\s*10px/s);
+assert.match(settingsCss, /#adminDialog\.security-authorization-dialog \.pin-box\s*\{[^}]*height:\s*60px[^}]*margin-top:\s*-5px[^}]*margin-bottom:\s*20px/s);
+assert.match(settingsCss, /#adminDialog\.security-authorization-dialog \.modal-buttons button\s*\{[^}]*height:\s*50px[^}]*font-size:\s*18px/s);
+assert.match(settingsCss, /#adminDialog\.authorization-role-manager \.klbs-primary-btn\s*\{[^}]*background:\s*#B26A00/s);
+assert(!indexHtml.includes('id="ffPinDialog"'));
+assert.match(indexHtml, /id="adminDialog"[\s\S]*?class="modal security-authorization-dialog authorization-role-administrator"[\s\S]*?role="dialog"[\s\S]*?aria-modal="true"[\s\S]*?aria-labelledby="authorizationDialogTitle"/);
+assert(!managerModalCss.includes("ffPinDialog"));
 
 const openMemory = () => new sqlite3.Database(":memory:");
 const run = (db, sql, params = []) => new Promise((resolve, reject) => {
@@ -88,7 +83,14 @@ async function main() {
         "GIFT_VOUCHER",
         "INVENTORY_INWARD",
         "INVENTORY_OUTWARD",
-        "DAY_REOPEN"
+        "DAY_REOPEN",
+        "EXPENSE_POST",
+        "P_AND_L_ENTRY_POST",
+        "P_AND_L_ENTRY_REVERSE",
+        "SUPPLIER_INVOICE_POST",
+        "SUPPLIER_PAYMENT_POST",
+        "SUPPLIER_OPENING_BALANCE_POST",
+        "SUPPLIER_CREDIT_NOTE_POST"
     ];
     for (const purpose of managerPurposes) {
         assert.strictEqual(AUTHORIZATION_POLICY[purpose], AUTHORIZATION_LEVELS.MANAGER);
@@ -110,22 +112,47 @@ async function main() {
     const status = await security.getStatus();
     assert.strictEqual(status.initialized, true);
     assert.strictEqual(status.managerPinConfigured, true);
+    for (const purpose of AUTHORIZATION_PURPOSES) {
+        assert.strictEqual(security.getAuthorizationRole(purpose), AUTHORIZATION_POLICY[purpose]);
+    }
+    assert.strictEqual(security.getAuthorizationRole("UNKNOWN"), null);
 
     const managerGrant = await security.authorizePin("1357", "FF");
     assert.strictEqual(managerGrant.success, true);
     assert.strictEqual(security.consumeGrant(managerGrant.grant, "FF"), true);
     assert.strictEqual(security.consumeGrant(managerGrant.grant, "FF"), false);
+    const managerPurposeGrant = await security.authorizePin("1357", "FF");
+    assert.strictEqual(security.consumeGrant(
+        managerPurposeGrant.grant, "SUPPLIER_PAYMENT_POST"), false);
     assert.strictEqual((await security.authorizePin("2468", "FF")).success, false);
+    assert.strictEqual((await security.authorizePin("2468", "FF")).error,
+        "Incorrect Manager PIN.");
     assert.strictEqual((await security.authorizePin("1357", "PRODUCT_IMPORT")).success, false);
+    assert.strictEqual((await security.authorizePin("1357", "PRODUCT_IMPORT")).error,
+        "Incorrect Administrator PIN.");
     const adminGrant = await security.authorizePin("2468", "PRODUCT_IMPORT");
     assert.strictEqual(adminGrant.success, true);
     assert.strictEqual(security.consumeGrant(adminGrant.grant, "INVENTORY_RESET"), false);
+    const adminRoleGrant = await security.authorizePin("2468", "PRODUCT_IMPORT");
+    assert.strictEqual(security.consumeGrant(
+        adminRoleGrant.grant, "SUPPLIER_PAYMENT_POST"), false);
 
     const expired = await security.authorizePin("1357", "DAY_REOPEN");
     clock += 101;
     assert.strictEqual(security.consumeGrant(expired.grant, "DAY_REOPEN"), false);
     assert.strictEqual((await security.authorizePin("1357", "UNKNOWN")).success, false);
     assert.strictEqual((await security.authorizePin("654321", "FF")).success, false);
+
+    let ttlClock = 5000;
+    const ttlSecurity = createAdministratorSecurityService(legacy, { now: () => ttlClock });
+    const ordinaryTtlGrant = await ttlSecurity.authorizePin("1357", "SUPPLIER_PAYMENT_POST");
+    const ffTtlGrant = await ttlSecurity.authorizePin("1357", "FF");
+    ttlClock += 60_001;
+    assert.strictEqual(ttlSecurity.validateGrant(
+        ordinaryTtlGrant.grant, "SUPPLIER_PAYMENT_POST"), false);
+    assert.strictEqual(ttlSecurity.validateGrant(ffTtlGrant.grant, "FF"), true);
+    ttlClock += 540_000;
+    assert.strictEqual(ttlSecurity.validateGrant(ffTtlGrant.grant, "FF"), false);
 
     assert.strictEqual(
         (await security.configureManagerPin("9999", "9999", "MANAGER")).success,
@@ -173,18 +200,42 @@ async function main() {
     const root = path.resolve(__dirname, "..");
     const sources = {
         main: fs.readFileSync(path.join(root, "src/main/main.js"), "utf8"),
+        preload: fs.readFileSync(path.join(root, "src/main/preload.js"), "utf8"),
         renderer: fs.readFileSync(path.join(root, "src/renderer/app.js"), "utf8"),
+        securityService: fs.readFileSync(path.join(root, "src/services/administratorSecurityService.js"), "utf8"),
+        shortcuts: fs.readFileSync(path.join(root, "src/renderer/modules/shortcuts.js"), "utf8"),
         dayClosing: fs.readFileSync(path.join(root, "src/renderer/modules/system/dayClosing.js"), "utf8"),
         splash: fs.readFileSync(path.join(root, "src/renderer/startupSplash.js"), "utf8"),
         settings: fs.readFileSync(path.join(root, "src/database/settingsService.js"), "utf8")
     };
-    assert(sources.renderer.includes('.authorizePin(enteredPin, purpose)'));
-    assert(sources.renderer.includes('pinAuthorizationAction === "FF"'));
-    assert(sources.renderer.includes('const purpose = pinAuthorizationAction === "FF"') &&
-        sources.renderer.includes(': "GIFT_VOUCHER"'));
-    assert(sources.renderer.includes('document.getElementById("ffPinDialog")'));
-    assert(sources.renderer.includes('ffPinError.innerText =') &&
-        sources.renderer.includes('"Incorrect PIN."'));
+    assert(sources.renderer.includes('.getAuthorizationRole(purpose)'));
+    assert(sources.renderer.includes('role !== "ADMINISTRATOR" && role !== "MANAGER"'));
+    assert(!/managerPurpose\s*=\s*\[[\s\S]{0,700}\.includes\(purpose\)/.test(sources.renderer));
+    assert(sources.renderer.includes('requestAdminAuthorization("FF")'));
+    assert(sources.renderer.includes('requestAdminAuthorization("GIFT_VOUCHER")'));
+    assert(sources.renderer.includes('adminDialog.querySelector(".modal-content")'));
+    assert(!sources.renderer.includes('ffPinDialog'));
+    assert(!sources.shortcuts.includes('ffPinDialog'));
+    assert(sources.main.includes('"security:get-authorization-role"'));
+    assert(sources.preload.includes('getAuthorizationRole: purpose => ipcRenderer.invoke("security:get-authorization-role", purpose)'));
+    assert(sources.renderer.includes('const roleLabel = managerPurpose ? "Manager" : "Administrator"'));
+    assert(sources.renderer.includes('title.textContent = `${roleLabel} Access`'));
+    assert(sources.renderer.includes('Enter 4-digit ${roleLabel} PIN'));
+    assert(sources.renderer.includes('authorization.error || "Authorization failed."'));
+    assert(sources.securityService.includes('`Incorrect ${label} PIN.`'));
+    assert(sources.renderer.includes('adminPin.focus()'));
+    assert(sources.renderer.includes('adminCancelBtn?.click()'));
+    assert(sources.renderer.includes('event.stopImmediatePropagation()'));
+    assert(sources.renderer.includes('adminAuthorizationPreviousFocus'));
+    assert(sources.renderer.includes('if (!adminAuthorizationCompleting) adminCancelBtn?.click()'));
+    assert(sources.renderer.includes('window.isAuthorizationPresentationPending = () => adminAuthorizationPendingLookup'));
+    assert(sources.shortcuts.includes('window.isAuthorizationPresentationPending?.()'));
+    for (const purpose of managerPurposes) {
+        assert.strictEqual(AUTHORIZATION_POLICY[purpose], AUTHORIZATION_LEVELS.MANAGER);
+    }
+    for (const purpose of [...AUTHORIZATION_PURPOSES].filter(item => !managerPurposes.includes(item))) {
+        assert.strictEqual(AUTHORIZATION_POLICY[purpose], AUTHORIZATION_LEVELS.ADMINISTRATOR);
+    }
     assert(sources.dayClosing.includes('requestAdminAuthorization("DAY_REOPEN")'));
     assert(sources.main.includes('authorizePin(pin, "DAY_REOPEN")'));
     assert(sources.splash.includes("4-digit Manager PIN"));
