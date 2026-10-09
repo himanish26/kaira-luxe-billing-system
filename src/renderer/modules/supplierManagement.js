@@ -6,9 +6,29 @@
     const editorView = $("supplierEditorView");
     overlay.append(editorView);
     editorView.classList.add("supplier-profile-drawer");
+    const supplierDrawer = window.KLBSDrawer.create({
+        root: overlay,
+        panel: () => [$("supplierProfileView"), editorView].find(view => view && !view.hidden),
+        background: () => [...screen.children].filter(node => node !== overlay && node !== $("supplierRelationshipModal")),
+        labelledBy: () => currentView === "supplierEditorView" ? "supplierEditorHeading" : "supplierProfileTitle",
+        initialFocus: () => currentView === "supplierEditorView" ? $("supplierProfileForm").querySelector('[name="name"]') : $("supplierEditBtn"),
+        isNestedModalOpen: () => !$('supplierRelationshipModal').hidden,
+        exitButtons: [$("supplierProfileCloseBtn"), $("supplierEditorCloseBtn")],
+        onExit: () => closeSupplierDrawer(),
+        onEscape: () => {
+            if (closeRelationshipModal()) return true;
+            if (currentView === "supplierEditorView" && $("supplierEditingCode").value) { cancelEdit(); return true; }
+            closeSupplierDrawer();
+            return true;
+        },
+        onClosed: () => {
+            if (currentView !== "supplierEditorView") editorView.hidden = true;
+            if (currentView !== "supplierProfileView") $("supplierProfileView").hidden = true;
+        }
+    });
     const pageSize = 50;
     const views = ["supplierDirectoryView", "supplierEditorView", "supplierProfileView", "supplierAccountView", "supplierInvoiceFormView", "supplierInvoiceDetailView", "supplierPaymentFormView", "supplierOpeningFormView", "supplierCreditNoteFormView"];
-    let currentView = "supplierDirectoryView", stack = [], page = 1, pages = 1, supplier = null, invoices = [], liabilities = [], paymentContext = null, paymentContextRequestId = 0, lastOrigin = "directory", rootMode = "directory", activeAccountTab = "invoices", searchTimer = null, directoryRequestId = 0, masterOptions = {}, draftRelationships = [], relationshipBeforeEdit = null, explicitRelationshipValues = { brand: new Map(), productSegment: new Map() }, drawerClosing = false, drawerExitEvents = new Set();
+    let currentView = "supplierDirectoryView", stack = [], page = 1, pages = 1, supplier = null, invoices = [], liabilities = [], paymentContext = null, paymentContextRequestId = 0, lastOrigin = "directory", rootMode = "directory", activeAccountTab = "invoices", searchTimer = null, directoryRequestId = 0, masterOptions = {}, draftRelationships = [], relationshipBeforeEdit = null, explicitRelationshipValues = { brand: new Map(), productSegment: new Map() };
     const money = paise => `₹${(Number(paise || 0) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const paise = value => { const raw=String(value??"").trim(); if(!/^\d+(?:\.\d{1,2})?$/.test(raw)) throw new Error("Enter an amount with no more than two decimal places."); const [whole,fraction=""]=raw.split(".");const amount=Number(whole)*100+Number((fraction+"00").slice(0,2));if(!Number.isSafeInteger(amount))throw new Error("Amount exceeds the supported limit.");return amount; };
     const contactPersonPattern=/^\p{L}[\p{L}\p{M}]*(?:[.'’-]\p{L}[\p{L}\p{M}]*)*\.?(?: \p{L}[\p{L}\p{M}]*(?:[.'’-]\p{L}[\p{L}\p{M}]*)*\.?)*$/u;
@@ -22,21 +42,12 @@
         const previous=currentView, wasDrawer=previous==="supplierProfileView"||previous==="supplierEditorView", drawer=name==="supplierProfileView"||name==="supplierEditorView";
         currentView=name;
         for(const view of views){const keepExiting=wasDrawer&&!drawer&&(view===previous);$(view).hidden=!keepExiting&&view!==name&&!(name==="supplierProfileView"&&view==="supplierDirectoryView")&&!(name==="supplierEditorView"&&view==="supplierDirectoryView");}
-        if(drawer){drawerClosing=false;drawerExitEvents.clear();overlay.hidden=false;overlay.classList.remove("is-closing");overlay.classList.add("is-open");requestAnimationFrame(()=>{if(currentView===name)overlay.classList.add("is-visible");});}
-        else if(wasDrawer&&!overlay.hidden){drawerClosing=true;drawerExitEvents=new Set();overlay.classList.remove("is-visible");overlay.classList.add("is-closing");}
-        else if(!drawerClosing)overlay.hidden=true;
+        if(drawer){overlay.hidden=false;supplierDrawer.open();}
+        else if(wasDrawer&&supplierDrawer.isOpen())supplierDrawer.close();
         updateBackLabel();
     }
-    overlay.addEventListener("transitionend",event=>{
-        if(!drawerClosing)return;
-        if(event.target===overlay&&event.propertyName==="opacity")drawerExitEvents.add("opacity");
-        if(event.target===editorView&&event.propertyName==="transform")drawerExitEvents.add("transform");
-        if(event.target===$("supplierProfileView")&&event.propertyName==="transform")drawerExitEvents.add("transform");
-        if(drawerExitEvents.size<2)return;
-        drawerClosing=false;overlay.hidden=true;overlay.classList.remove("is-open","is-closing","is-visible");$("supplierProfileView").hidden=true;editorView.hidden=true;drawerExitEvents.clear();
-    });
     function back() {
-        if(drawerClosing)return;
+        if(supplierDrawer.isClosing())return;
         if(currentView==="supplierDirectoryView"){window.closeSupplierManagement?.(rootMode);return;}
         if(currentView==="supplierAccountView"){rootMode="accounts";showView("supplierDirectoryView",false);loadDirectory({accounts:true});}
         else if(currentView==="supplierEditorView"){if($("supplierEditingCode").value)cancelEdit();else closeNewSupplier();}
@@ -55,7 +66,7 @@
             if(requestId!==directoryRequestId)return;
             pages=result.totalPages;page=result.page;const body=$("supplierRows"),table=$("supplierDirectoryTable"),wrap=$("supplierDirectoryTableWrap"),empty=$("supplierDirectoryEmpty"),noResults=$("supplierDirectoryNoResults"),pagination=$("supplierDirectoryPagination");body.replaceChildren();table.classList.toggle("supplier-accounts-table",accounts);
             table.querySelector("thead").innerHTML=accounts?"<tr><th>SUPPLIER</th><th>TOTAL PURCHASES</th><th>TOTAL PAID</th><th>OUTSTANDING</th><th class=\"supplier-account-col-open-invoices\">OPEN INVOICES</th><th class=\"supplier-account-col-overdue\">OVERDUE</th><th>STATUS</th><th>ACTION</th></tr>":"<tr><th>SUPPLIER CODE</th><th>SUPPLIER</th><th>BRANDS</th><th>CONTACT</th><th>SEGMENTS</th><th>STATUS</th><th>OUTSTANDING</th><th>ACTION</th></tr>";
-            for(const row of result.rows){const tr=document.createElement("tr");tr.className=accounts?"supplier-directory-row supplier-accounts-display-row":"supplier-directory-row";if(!accounts){tr.tabIndex=0;tr.setAttribute("role","button");tr.setAttribute("aria-label",`Open profile for ${row.name}, ${row.supplier_code}`);}
+            for(const row of result.rows){const tr=document.createElement("tr");tr.className=accounts?"supplier-directory-row supplier-accounts-display-row":"supplier-directory-row";
                 if(accounts){
                     const identity=document.createElement("td");identity.className="supplier-account-identity";const name=document.createElement("strong"),code=document.createElement("span");name.textContent=row.name;code.textContent=row.supplier_code;identity.append(name,code);tr.append(identity);
                     for(const value of [money(row.purchases_paise),money(row.payments_paise)]){const td=document.createElement("td");td.className="supplier-account-financial-value-cell";td.textContent=String(value);tr.append(td);}
@@ -66,8 +77,8 @@
                     const status=document.createElement("td");status.className="supplier-account-lifecycle-status";status.textContent=String(row.status);tr.append(status);
                     const action=document.createElement("td"),button=document.createElement("button");action.className="supplier-account-action-cell";button.type="button";button.className="supplier-view-account-button";button.textContent="VIEW ACCOUNT";button.setAttribute("aria-label","View account for "+row.name+", "+row.supplier_code);button.addEventListener("click",()=>openSupplier(row.supplier_code,"account"));action.append(button);tr.append(action);
                 }
-                else {const brandLabel=row.brands_summary?`${row.brands_summary}${Number(row.brand_count)>2?` +${Number(row.brand_count)-2}`:""}`:"—";for(const value of [row.supplier_code,row.name,brandLabel,row.mobile||"—",row.business_segments||"—",row.status,money(row.outstanding_paise)]){const td=document.createElement("td");td.textContent=String(value??"—");td.title=String(value??"");tr.append(td);}const action=document.createElement("td"),button=document.createElement("button");button.type="button";button.className="customer-open-profile";button.textContent="VIEW PROFILE";button.addEventListener("click",event=>{event.stopPropagation();openSupplier(row.supplier_code,"profile");});action.append(button);tr.append(action);}
-                if(!accounts){const open=()=>openSupplier(row.supplier_code,"profile");tr.addEventListener("click",open);tr.addEventListener("keydown",event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();open();}});}body.append(tr);
+                else {const brandLabel=row.brands_summary?`${row.brands_summary}${Number(row.brand_count)>2?` +${Number(row.brand_count)-2}`:""}`:"—";for(const value of [row.supplier_code,row.name,brandLabel,row.mobile||"—",row.business_segments||"—",row.status,money(row.outstanding_paise)]){const td=document.createElement("td");td.textContent=String(value??"—");td.title=String(value??"");tr.append(td);}const action=document.createElement("td"),button=document.createElement("button");button.type="button";button.className="customer-open-profile";button.textContent="VIEW PROFILE";button.setAttribute("aria-label",`View profile for ${row.name}, ${row.supplier_code}`);button.addEventListener("click",()=>openSupplier(row.supplier_code,"profile"));action.append(button);tr.append(action);}
+                body.append(tr);
             }
             const hasSearch=Boolean(search),hasRows=result.rows.length>0,hasAnySuppliers=accounts?Number(result.totalSupplierCount)>0:Number(result.totalCount)>0;
             empty.textContent=accounts?"No supplier accounts yet.":"No suppliers yet. Use + New Supplier to create the first supplier.";noResults.textContent=accounts?"No supplier accounts match this search.":"No suppliers match this search.";
@@ -273,7 +284,7 @@
     function cancelEdit(){if(currentView!=="supplierEditorView"||!$("supplierEditingCode").value)return false;if(stack.at(-1)==="supplierProfileView")stack.pop();$("supplierEditingCode").value="";fillForm($("supplierProfileForm"),supplier);renderProfile(supplier);showView("supplierProfileView",false);message("");return true;}
     function closeSupplierDrawer(){if(currentView!=="supplierProfileView"&&currentView!=="supplierEditorView")return false;stack=[];$("supplierEditingCode").value="";showView("supplierDirectoryView",false);loadDirectory({accounts:false});return true;}
     function closeNewSupplier(){if(currentView!=="supplierEditorView"||$("supplierEditingCode").value)return false;return closeSupplierDrawer();}
-    $("supplierBackBtn").addEventListener("click",back);$("supplierProfileCloseBtn").addEventListener("click",closeSupplierDrawer);$("supplierEditorCloseBtn").addEventListener("click",closeSupplierDrawer);$("supplierAddBtn").addEventListener("click",()=>{supplier=null;message("");fillForm($("supplierProfileForm"));$("supplierEditorHeading").textContent="NEW SUPPLIER";$("supplierEditingCode").value="";showView("supplierEditorView");});
+    $("supplierBackBtn").addEventListener("click",back);$("supplierAddBtn").addEventListener("click",()=>{supplier=null;message("");fillForm($("supplierProfileForm"));$("supplierEditorHeading").textContent="NEW SUPPLIER";$("supplierEditingCode").value="";showView("supplierEditorView");});
     $("supplierCancelEdit").addEventListener("click",()=>$("supplierEditingCode").value?cancelEdit():closeNewSupplier());$("supplierSearch").addEventListener("input",()=>{page=1;clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadDirectory(),250);});$("supplierPrevious").addEventListener("click",()=>{page=Math.max(1,page-1);loadDirectory();});$("supplierNext").addEventListener("click",()=>{page=Math.min(pages,page+1);loadDirectory();});$("supplierPageJump").addEventListener("keydown",event=>{if(event.key!=="Enter")return;event.preventDefault();const target=Number(event.currentTarget.value);if(Number.isInteger(target)&&target>=1&&target<=pages){page=target;loadDirectory();}else event.currentTarget.value=String(page);});
     $("supplierProfileForm").addEventListener("submit",async event=>{event.preventDefault();try{const form=event.currentTarget;if(!validateProfileForm(form))return;const data=formSupplier(form),code=$("supplierEditingCode").value;supplier=code?await window.electronAPI.updateSupplier(code,data):await window.electronAPI.createSupplier(data);message("Supplier profile saved.");await loadDirectory({accounts:false});renderProfile(supplier);if(code&&stack.at(-1)==="supplierProfileView")stack.pop();$("supplierEditingCode").value="";showView("supplierProfileView",false);}catch(error){message(error.message||"Supplier could not be saved.",true);}});
     $("supplierEditBtn").addEventListener("click",()=>{message("");fillForm($("supplierProfileForm"),supplier);$("supplierEditingCode").value=supplier.supplier_code;$("supplierEditorHeading").textContent="EDIT SUPPLIER";showView("supplierEditorView");});
@@ -318,6 +329,6 @@
     for(const button of screen.querySelectorAll("[data-supplier-cancel]"))button.addEventListener("click",back);
     for(const button of screen.querySelectorAll(".supplier-tabs button"))button.addEventListener("click",()=>renderAccountTab(button.dataset.tab));
     function amountFieldToPaise(form,field){return paise(form.elements[field].value||"0");}
-    window.handleSupplierEscape=()=>{if(screen.style.display==="none")return false;if(drawerClosing)return true;const focused=document.activeElement;if(focused&&screen.contains(focused)&&(focused.matches("select")||focused.list)){focused.blur();return true;}if(closeRelationshipModal())return true;if(currentView==="supplierEditorView"&&$("supplierEditingCode").value){cancelEdit();return true;}if(currentView==="supplierProfileView"||currentView==="supplierEditorView"){closeSupplierDrawer();return true;}if(currentView==="supplierDirectoryView"){window.closeSupplierManagement?.(rootMode);return true;}if(currentView==="supplierAccountView"){enter("accounts");return true;}back();return true;};
+    window.handleSupplierEscape=()=>{if(screen.style.display==="none")return false;if(supplierDrawer.isClosing())return true;const focused=document.activeElement;if(focused&&screen.contains(focused)&&(focused.matches("select")||focused.list)){focused.blur();return true;}if(closeRelationshipModal())return true;if(currentView==="supplierEditorView"&&$("supplierEditingCode").value){cancelEdit();return true;}if(currentView==="supplierProfileView"||currentView==="supplierEditorView"){closeSupplierDrawer();return true;}if(currentView==="supplierDirectoryView"){window.closeSupplierManagement?.(rootMode);return true;}if(currentView==="supplierAccountView"){enter("accounts");return true;}back();return true;};
     window.openSupplierDirectory=()=>enter("directory");window.openSupplierAccounts=()=>enter("accounts");window.closeSupplierManagement=mode=>{screen.style.display="none";if(mode==="accounts")window.returnToAccountingDataWorkspace?.();else window.showBusinessWorkspace?.();};
 })();

@@ -1,4 +1,4 @@
-const CURRENT_DB_SCHEMA_VERSION = 13;
+const CURRENT_DB_SCHEMA_VERSION = 15;
 const SCHEMA_METADATA_TABLE = "klbs_schema_metadata";
 const { migrateV5Foundation } = require("./v5FoundationMigration");
 const { migrateStoreIdentity } = require("./storeIdentityMigration");
@@ -9,6 +9,8 @@ const { migrateSupplierDistributor } = require("./supplierDistributorMigration")
 const { migrateSupplierSubledger } = require("./supplierSubledgerMigration");
 const { migrateSupplierRelationships } = require("./supplierRelationshipMigration");
 const { migrateSupplierInvoiceCapture } = require("./supplierInvoiceCaptureMigration");
+const { migrateStockInwardV14 } = require("./stockInwardMigration");
+const { migrateStockInwardArchiveV15 } = require("./stockInwardArchiveMigration");
 
 function run(database, sql, params = []) {
     return new Promise((resolve, reject) => {
@@ -210,11 +212,34 @@ async function validateCurrentSchema(database, currentVersion = CURRENT_DB_SCHEM
     if (currentVersion >= 10) requiredTables.push("supplier_master", "supplier_sequences", "supplier_brands", "supplier_product_segments", "supplier_business_segments", "supplier_invoices", "supplier_invoice_lines", "supplier_payments", "supplier_payment_allocations", "supplier_cost_provenance_links");
     if (currentVersion >= 11) requiredTables.push("supplier_subledger_sequences", "supplier_opening_balances", "supplier_credit_notes", "supplier_payment_opening_allocations", "supplier_credit_note_invoice_allocations", "supplier_credit_note_opening_allocations");
     if (currentVersion >= 12) requiredTables.push("supplier_relationship_sequences", "supplier_brand_master", "supplier_product_segment_master", "supplier_relationships");
+    if (currentVersion >= 14) requiredTables.push("stock_movement_sequences");
     if (currentVersion >= 13) {
         const invoiceColumns = await all(database, "PRAGMA table_info(supplier_invoices)");
         const invoiceColumnNames = new Set(invoiceColumns.map(column => column.name));
         const missingInvoiceColumns = ["capture_mode", "total_quantity"].filter(name => !invoiceColumnNames.has(name));
         if (missingInvoiceColumns.length) throw new Error(`KLBS database readiness validation failed: required Supplier invoice columns missing (${missingInvoiceColumns.join(", ")}).`);
+    }
+    if (currentVersion >= 14) {
+        const [movementColumns, lineColumns] = await Promise.all([
+            all(database, "PRAGMA table_info(stock_movements)"),
+            all(database, "PRAGMA table_info(stock_movement_lines)")
+        ]);
+        for (const name of ["store_id", "supplier_id", "supplier_invoice_id", "invoice_date", "invoice_total_quantity", "supplier_code_snapshot", "supplier_name", "supplier_invoice_code_snapshot", "invoice_number_snapshot", "store_code_snapshot", "store_name_snapshot"]) {
+            if (!movementColumns.some(column => column.name === name)) throw new Error(`KLBS V14 readiness validation failed: stock_movements.${name} is missing.`);
+        }
+        for (const name of ["sku_snapshot", "product_name_snapshot", "colour_snapshot", "size_snapshot", "resolution_note", "discard_reason", "discarded_by", "discarded_at"]) {
+            if (!lineColumns.some(column => column.name === name)) throw new Error(`KLBS V14 readiness validation failed: stock_movement_lines.${name} is missing.`);
+        }
+        const movementForeignKeys = await all(database, "PRAGMA foreign_key_list(stock_movements)");
+        for (const table of ["stores", "supplier_master", "supplier_invoices"]) {
+            if (!movementForeignKeys.some(key => key.table === table)) throw new Error(`KLBS V14 readiness validation failed: stock_movements foreign key to ${table} is missing.`);
+        }
+    }
+    if (currentVersion >= 15) {
+        const movementColumns = await all(database, "PRAGMA table_info(stock_movements)");
+        for (const name of ["archived_at", "archived_by"]) {
+            if (!movementColumns.some(column => column.name === name)) throw new Error(`KLBS V15 readiness validation failed: stock_movements.${name} is missing.`);
+        }
     }
     const rows = await all(database, `
         SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${requiredTables.map(() => "?").join(",")})
@@ -241,7 +266,9 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
         { from: 9, to: 10, name: "v2_1_supplier_distributor_accounts", up: migrateSupplierDistributor },
         { from: 10, to: 11, name: "v2_1_supplier_subledger_completion", up: migrateSupplierSubledger },
         { from: 11, to: 12, name: "v2_1_supplier_relationship_tuples", up: migrateSupplierRelationships },
-        { from: 12, to: 13, name: "v2_1_supplier_invoice_capture_modes", up: migrateSupplierInvoiceCapture, foreignKeysOff: true }
+        { from: 12, to: 13, name: "v2_1_supplier_invoice_capture_modes", up: migrateSupplierInvoiceCapture, foreignKeysOff: true },
+        { from: 13, to: 14, name: "v2_1_multi_item_stock_inward", up: migrateStockInwardV14, foreignKeysOff: true },
+        { from: 14, to: 15, name: "v2_1_stock_inward_cancelled_archive", up: migrateStockInwardArchiveV15 }
     ];
     if (detectedVersion === null) {
         logger?.info("DATABASE", "Legacy KLBS database detected; schema metadata is absent");
@@ -323,5 +350,6 @@ module.exports = {
     migrateBusinessSegmentColumns,
     migrateVariableValueBillingFoundation,
     migrateV5Foundation,
+    migrateStockInwardArchiveV15,
     _test: { run, get, all }
 };

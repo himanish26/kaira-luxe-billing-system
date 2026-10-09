@@ -5,6 +5,11 @@
     const selectedId = byId("selectedCustomerProfileId");
     const customerButton = byId("customerProfileOpen");
     const drawer = byId("customerProfileModal");
+    const drawerFooter = byId("customerDrawerFooter");
+    const drawerActions = drawer.querySelector(".customer-profile-actions");
+    const drawerActionsPlaceholder = byId("customerDrawerActionsPlaceholder");
+    const drawerActionsHome = drawerActions.parentElement;
+    const drawerActionsNextSibling = drawerActions.nextElementSibling;
     const panel = drawer.querySelector(".customer-drawer-panel");
     const drawerBody = byId("customerDrawerBody");
     const chooserView = byId("customerDrawerChooser");
@@ -12,12 +17,14 @@
     const formView = byId("customerDrawerFormView");
     const drawerError = byId("customerDrawerError");
     const newBillScreen = byId("newBillScreen");
+    const customersScreen = byId("customersScreen");
     const focusableSelector = 'button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
     let selectedProfile = null;
     let latestLookup = 0;
     let pendingMobile = "";
     let chooserShownFor = "";
     let managementSaveHandler = null;
+    let drawerContext = "new-bill";
     let storeCreditMobile = "";
     let availableStoreCredit = null;
     let attentionActive = false;
@@ -28,8 +35,6 @@
     let drawerMode = "closed";
     let drawerEditing = false;
     let drawerProfileRequest = 0;
-    let drawerCloseTimer = null;
-    let drawerCloseFinish = null;
     let drawerFocusSequence = 0;
     let expandedBillNo = "";
     let drawerReturnFocus = null;
@@ -178,6 +183,18 @@
     }
     function setDrawerTitle(title) { byId("customerProfileTitle").textContent = title; }
     function drawerIsOpen() { return drawer.dataset.customerContext === "new-bill" && drawer.style.display !== "none"; }
+    function setDrawerContext(context) {
+        drawerContext = context;
+        drawer.dataset.customerContext = context;
+        drawer.classList.toggle("customer-management-drawer", context === "management");
+        if (context === "management") {
+            drawerFooter.append(drawerActions);
+            drawerFooter.hidden = false;
+        } else {
+            drawerFooter.hidden = true;
+            drawerActionsHome.insertBefore(drawerActions, drawerActionsNextSibling);
+        }
+    }
     function drawerInitialFocusTarget() {
         if (drawerMode === "form") {
             const currentName = String(byId("profileName").value || "").trim();
@@ -186,77 +203,46 @@
         }
         return drawer.querySelector(`${focusableSelector}:not([hidden])`);
     }
-    function openDrawer(view, title) {
+    const customerDrawerShell = window.KLBSDrawer.create({
+        root: drawer,
+        panel,
+        background: () => [...(drawerContext === "management" && customersScreen ? customersScreen.children : newBillScreen.children)].filter(node => node !== drawer),
+        stateClasses: { open: "customer-drawer-open", visible: "customer-drawer-visible", closing: "customer-drawer-closing" },
+        labelledBy: "customerProfileTitle",
+        onEscape: () => { closeDrawer(); return true; },
+        onOpening: () => { drawer.dataset.customerContext = drawerContext; },
+        onClosed: () => { drawerMode = "closed"; drawerReturnFocus = null; },
+        initialFocus: drawerInitialFocusTarget,
+        restoreFocus: opener => drawerContext === "new-bill" ? byId("barcodeInput") : opener
+    });
+    // Keep the shared shell outside hidden feature screens so it can serve both Billing and Customers.
+    document.body?.append(drawer);
+    function openDrawer(view, title, initialFocus) {
         const focusSequence = ++drawerFocusSequence;
         drawerReturnFocus = document.activeElement;
         drawerError.textContent = "";
-        drawer.dataset.customerContext = "new-bill";
-        drawer.style.display = "block";
-        drawer.classList.add("customer-drawer-open");
-        newBillScreen.inert = true;
-        newBillScreen.setAttribute("aria-hidden", "true");
         setDrawerView(view);
         setDrawerTitle(title);
-        requestAnimationFrame(() => {
-            // Resolve the offscreen panel transform before the next frame applies its visible state.
-            window.getComputedStyle(panel).transform;
-            requestAnimationFrame(() => {
-                if (focusSequence !== drawerFocusSequence || !drawerIsOpen() || !drawer.classList.contains("customer-drawer-open")) return;
-                drawer.classList.add("customer-drawer-visible");
-                requestAnimationFrame(() => {
-                    if (focusSequence !== drawerFocusSequence || !drawerIsOpen() || !drawer.classList.contains("customer-drawer-visible")) return;
-                    const target = drawerInitialFocusTarget();
-                    if (!target || !drawer.contains(target) || target.hidden || target.disabled || !target.isConnected || target.getClientRects().length === 0) return;
-                    target.focus({ preventScroll: true });
-                });
-            });
-        });
+        requestAnimationFrame(() => { if (focusSequence === drawerFocusSequence) customerDrawerShell.open({ opener: drawerReturnFocus, initialFocus: initialFocus || drawerInitialFocusTarget() }); });
     }
     function closeDrawer() {
-        if (!drawerIsOpen() || drawer.classList.contains("customer-drawer-closing")) return;
+        if (!customerDrawerShell.isOpen() || customerDrawerShell.isClosing()) return;
         drawerFocusSequence += 1;
         drawerProfileRequest += 1;
         purchaseHistoryRequest += 1;
         clearExpandedBill();
         drawerError.textContent = "";
-        drawer.classList.remove("customer-drawer-open", "customer-drawer-visible");
-        drawer.classList.add("customer-drawer-closing");
-        let finished = false;
-        const finish = () => {
-            if (finished) return;
-            finished = true;
-            if (drawerCloseTimer !== null) clearTimeout(drawerCloseTimer);
-            drawerCloseTimer = null;
-            drawerCloseFinish = null;
-            drawer.style.display = "none";
-            drawer.classList.remove("customer-drawer-closing");
-            newBillScreen.inert = false;
-            newBillScreen.removeAttribute("aria-hidden");
-            drawer.dataset.customerContext = "management";
-            drawerMode = "closed";
-            drawerReturnFocus = null;
-            byId("barcodeInput")?.focus();
-        };
-        drawerCloseFinish = finish;
-        panel.addEventListener("transitionend", finish, { once: true });
-        drawerCloseTimer = window.setTimeout(finish, 280);
+        if (drawerContext === "management") managementSaveHandler = null;
+        customerDrawerShell.close();
     }
     window.closeNewBillCustomerDrawer = closeDrawer;
     byId("customerDrawerBack").addEventListener("click", closeDrawer);
     drawer.addEventListener("click", event => { if (event.target === drawer) event.preventDefault(); });
-    document.addEventListener("keydown", event => {
-        if (!drawerIsOpen() || event.key !== "Tab") return;
-        const items = [...drawer.querySelectorAll(focusableSelector)].filter(item => !item.hidden && item.getClientRects().length > 0);
-        if (!items.length) { event.preventDefault(); return; }
-        const first = items[0], last = items[items.length - 1];
-        if (!drawer.contains(document.activeElement)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); return; }
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    }, true);
 
     function showForm(profile, { newBill = false, editing = false } = {}) {
         drawerEditing = editing;
         const newBillContext = newBill || drawerIsOpen();
+        if (newBillContext) setDrawerContext("new-bill");
         drawerError.textContent = "";
         byId("customerProfileTitle").textContent = profile ? (editing ? "EDIT CUSTOMER DETAILS" : "CUSTOMER PROFILE") : "NEW CUSTOMER";
         byId("customerDrawerHelper").textContent = newBillContext ? "Customer details are optional for billing." : "Customer Profile · Optional";
@@ -271,23 +257,16 @@
         byId("customerProfileValidation").textContent = "";
         detailsSetProfileId(profile?.id);
         setDrawerView("form");
-        if (newBill) {
-            drawer.classList.add("customer-drawer-open");
-            drawer.style.display = "block";
-            newBillScreen.inert = true;
-            newBillScreen.setAttribute("aria-hidden", "true");
-        }
         const currentName = String(profile?.name || nameInput.value || "").trim();
         const currentMobile = String(profile?.mobile || mobileInput.value || "").trim();
         const focus = currentName && normalizeMobile(currentMobile) ? byId("profileBirthday") : currentName ? byId("profileMobile") : byId("profileName");
-        requestAnimationFrame(() => { drawer.classList.add("customer-drawer-visible"); focus.focus(); });
+        if (newBillContext) openDrawer("form", byId("customerProfileTitle").textContent, focus);
+        else requestAnimationFrame(() => focus.focus());
     }
     function detailsSetProfileId(id) { drawer.dataset.profileId = id ? String(id) : ""; }
 
     function showManagementModal(profile = null) {
-        drawer.classList.remove("customer-drawer-open", "customer-drawer-closing");
-        drawer.dataset.customerContext = "management";
-        drawer.style.display = "flex";
+        setDrawerContext("management");
         drawerError.textContent = "";
         setDrawerView("form");
         byId("customerDrawerHelper").textContent = "Customer Profile · Optional";
@@ -305,7 +284,7 @@
         let focus = byId("profileName");
         if (profile?.name && normalizeMobile(profile.mobile)) focus = byId("profileBirthday");
         else if (profile?.name) focus = byId("profileMobile");
-        requestAnimationFrame(() => focus.focus());
+        openDrawer("form", byId("customerProfileTitle").textContent, focus);
     }
 
     function showChooser(matches) {
@@ -607,7 +586,7 @@
     byId("customerProfileCancel").addEventListener("click", () => {
         if (drawerIsOpen() && drawerEditing) { drawerEditing = false; loadDrawerProfile(Number(selectedId.value)); return; }
         if (drawerIsOpen()) { closeDrawer(); return; }
-        managementSaveHandler = null; drawer.style.display = "none";
+        managementSaveHandler = null; closeDrawer();
     });
     byId("customerDrawerEdit").addEventListener("click", async () => {
         try {
@@ -629,7 +608,7 @@
         const id = Number(drawer.dataset.profileId); const save = byId("customerProfileSave"); save.disabled = true;
         try {
             const profile = id ? await window.electronAPI.updateCustomerProfile(id, data) : await window.electronAPI.createCustomerProfile(data);
-            if (managementSaveHandler) { const done = managementSaveHandler; managementSaveHandler = null; drawer.style.display = "none"; await done(profile); return; }
+            if (drawerContext === "management") { const done = managementSaveHandler; managementSaveHandler = null; closeDrawer(); if (done) await done(profile); return; }
             setSelected(profile);
             if (!id) { nameInput.value = profile.name; mobileInput.value = profile.mobile; }
             if (drawerIsOpen()) {
@@ -643,17 +622,16 @@
         managementSaveHandler = typeof onSaved === "function" ? onSaved : null;
         showManagementModal(profile || null);
     };
-    // Customer Management continues to use the shared, accepted modal form.
+    // Customer Management uses the same profile fields through the shared drawer shell.
     window.customerProfileInputHelpers = { digitsOnly, formatDdMmInput, isValidDdMm, normalizeOptionalEmail };
     window.clearSelectedCustomerProfile = () => { setSelected(null); chooserShownFor = ""; };
     window.resetCustomerProfileDraft = () => {
         clearTimeout(mobileInput._customerLookupTimer); latestLookup += 1; drawerProfileRequest += 1; purchaseHistoryRequest += 1;
+        setDrawerContext("new-bill");
         pendingMobile = ""; chooserShownFor = ""; selectedProfile = null; selectedId.value = "";
         storeCreditMobile = ""; availableStoreCredit = null; updateCustomerButton();
-        if (drawerCloseTimer !== null) clearTimeout(drawerCloseTimer);
-        if (drawerCloseFinish) panel.removeEventListener("transitionend", drawerCloseFinish);
-        drawerCloseTimer = null; drawerCloseFinish = null;
-        drawer.style.display = "none"; drawer.classList.remove("customer-drawer-open", "customer-drawer-visible", "customer-drawer-closing");
+        customerDrawerShell.dismiss();
+        drawer.style.display = "none"; drawer.classList.remove("customer-drawer-open", "customer-drawer-visible", "customer-drawer-closing", "klbs-drawer-open", "klbs-drawer-visible", "klbs-drawer-closing");
         newBillScreen.inert = false; newBillScreen.removeAttribute("aria-hidden"); drawer.dataset.customerContext = "management";
         byId("customerProfileValidation").textContent = ""; drawerError.textContent = "";
         for (const id of ["profileName", "profileMobile", "profileBirthday", "profileAnniversary", "profileEmail", "profileNotes"]) {

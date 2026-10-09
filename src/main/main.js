@@ -200,6 +200,8 @@ const {
 
 const database = require("../database/database");
 const { databaseReady, closeDatabase } = database;
+const { createStyleFamilyService } = require("../database/styleFamilyService");
+const styleFamilyService = createStyleFamilyService(database);
 const masterRecoveryVerifier = require("../config/masterRecoveryVerifier");
 const { createAdministratorSecurityService } = require("../services/administratorSecurityService");
 const administratorSecurity = createAdministratorSecurityService(database, {
@@ -223,6 +225,23 @@ function requireSecurityGrant(grant, purpose) {
     if (!administratorSecurity.consumeGrant(grant, purpose)) {
         throw new Error("Required authorization is missing, invalid, or has expired.");
     }
+}
+
+// A Manager-authorized Stock Inward workspace is scoped to this renderer
+// process and is cleared whenever its main frame navigates or exits.
+const stockInwardWorkspaceSessions = new Map();
+const stockInwardReceiptTickets = new Map();
+function clearStockInwardReceiptTickets(senderId) { stockInwardReceiptTickets.delete(senderId); }
+function requireStockInwardRenderer(event) {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Unauthorized renderer for Stock Inward.");
+}
+function requireStockInwardWorkspace(event, token) {
+    requireStockInwardRenderer(event);
+    const session = stockInwardWorkspaceSessions.get(event.sender.id);
+    if (!session || !token || session.token !== token || session.purpose !== "INVENTORY_INWARD") {
+        throw new Error("Manager authorization is required to access Stock Inward.");
+    }
+    return session;
 }
 
 function requireIntegrationSession(grant, purpose) {
@@ -308,6 +327,7 @@ const {
 );
 
 const inventoryTransactionService = require("../database/inventoryTransactionService");
+const stockInwardService = require("../database/stockInwardService");
 
 const {
 
@@ -388,6 +408,7 @@ const {
     printTestReceipt,
 
     printDayClosingReceipt,
+    printStockInwardReceipt,
     printCreditNote,
     saveCreditNotePdf
 
@@ -577,6 +598,7 @@ function attachWindowDiagnostics(window, component) {
 
 app.on("before-quit", () => {
     remoteDashboard.stop();
+    stockInwardService.closeDefaultService().catch(error => technicalLogger.warn("DATABASE", "Stock Inward database connection close failed", { classification: String(error.message || "").slice(0, 200) }));
     if (orderlyShutdownLogged) return;
     orderlyShutdownLogged = true;
     technicalLogger.info("APPLICATION", "KLBS application shutdown requested");
@@ -617,6 +639,16 @@ function createWindow() {
 
     );
     attachWindowDiagnostics(mainWindow, "MAIN_WINDOW");
+    mainWindow.webContents.on("did-start-navigation", (_event, _url, _isInPlace, isMainFrame) => {
+        if (isMainFrame) {
+            stockInwardWorkspaceSessions.delete(mainWindow.webContents.id);
+            clearStockInwardReceiptTickets(mainWindow.webContents.id);
+        }
+    });
+    mainWindow.webContents.on("render-process-gone", () => {
+        stockInwardWorkspaceSessions.delete(mainWindow.webContents.id);
+        clearStockInwardReceiptTickets(mainWindow.webContents.id);
+    });
 
     mainWindow.on(
 
@@ -1429,6 +1461,167 @@ ipcMain.handle("suppliers:export-account", async (event, supplierId) => {
 /* ============================================================
    INVENTORY TRANSACTION HANDLERS
 ============================================================ */
+
+ipcMain.handle("inventory:style-search", async (event, input) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) {
+        throw new Error("Unauthorized renderer for Product Search.");
+    }
+    await databaseReady;
+    return styleFamilyService.resolveStyleFamily(input);
+});
+
+function stockInwardInput(input) {
+    const value = { ...(input || {}) };
+    delete value.authorizationGrant;
+    value.actor = "MANAGER";
+    return value;
+}
+ipcMain.handle("stock-inward:enter", async (event, grant) => {
+    requireStockInwardRenderer(event);
+    requireSecurityGrant(grant, "INVENTORY_INWARD");
+    const token = require("crypto").randomBytes(32).toString("hex");
+    stockInwardWorkspaceSessions.set(event.sender.id, { token, purpose: "INVENTORY_INWARD" });
+    return { token };
+});
+ipcMain.handle("stock-inward:exit", async (event, token) => {
+    requireStockInwardWorkspace(event, token);
+    stockInwardWorkspaceSessions.delete(event.sender.id);
+    clearStockInwardReceiptTickets(event.sender.id);
+    return { success: true };
+});
+const stockInwardCalls = {
+    "stock-inward:resume-list": () => stockInwardService.listResumable(),
+    "stock-inward:history": (_e, input) => stockInwardService.listRecentHistory(input || {}),
+    "stock-inward:suppliers": () => stockInwardService.getSuppliers(),
+    "stock-inward:create": (_e, input) => stockInwardService.createDraft(input || {}, "USER"),
+    "stock-inward:load": (_e, id) => stockInwardService.load(id),
+    "stock-inward:update-context": (_e, input) => stockInwardService.updateContext(input || {}),
+    "stock-inward:resolve-barcode": (_e, barcode) => stockInwardService.resolveBarcode(barcode),
+    "stock-inward:scan": (_e, input) => stockInwardService.scan(input || {}),
+    "stock-inward:edit-line": (_e, input) => stockInwardService.editLine(input || {}),
+    "stock-inward:remove-line": (_e, input) => stockInwardService.removeLine(input || {}),
+    "stock-inward:retry-matching": (_e, id) => stockInwardService.retryMatching(id),
+    "stock-inward:cancel": (_e, input) => stockInwardService.cancelDraft(input?.movementId, "USER"),
+    "stock-inward:abandon-empty": (_e, id) => stockInwardService.abandonEmptyDraft(id),
+    "stock-inward:invoices": (_e, supplierId) => stockInwardService.getSupplierInvoices(supplierId),
+    "stock-inward:duplicate-invoice": (_e, input) => stockInwardService.findDuplicateInvoice(input || {}),
+    "stock-inward:current-master-unresolved": (_e, id) => stockInwardService.currentMasterForUnresolved(id)
+};
+for (const [channel, operation] of Object.entries(stockInwardCalls)) {
+    ipcMain.handle(channel, async (event, token, ...args) => {
+        requireStockInwardWorkspace(event, token);
+        await databaseReady;
+        return operation(event, ...args);
+    });
+}
+ipcMain.handle("stock-inward:discard-line", async (event, token, input) => {
+    requireStockInwardWorkspace(event, token);
+    requireSecurityGrant(input?.authorizationGrant, "INVENTORY_INWARD");
+    await databaseReady;
+    return stockInwardService.discardLine(stockInwardInput(input));
+});
+ipcMain.handle("stock-inward:archive-cancelled", async (event, token, input) => {
+    requireStockInwardWorkspace(event, token);
+    await databaseReady;
+    return stockInwardService.archiveCancelled(input?.movementId, "MANAGER");
+});
+ipcMain.handle("stock-inward:print-receipt", async (event, token, input) => {
+    requireStockInwardWorkspace(event, token);
+    await databaseReady;
+    let consumeImmediateTicket = false;
+    let ticketStore = null;
+    let movementId = 0;
+    try {
+        movementId=Number(input?.movementId);
+        const mode=input?.mode;
+        const requestedIds=Array.isArray(input?.postedLineIds)?input.postedLineIds.map(Number):[];
+        if(!Number.isSafeInteger(movementId)||movementId<=0||!["immediate","history"].includes(mode)) {
+            return {success:false,error:"Receipt could not be prepared."};
+        }
+        let ticket=null;
+        if(mode==="immediate") {
+            ticketStore=stockInwardReceiptTickets.get(event.sender.id);
+            ticket=ticketStore?.get(movementId);
+            if(!ticket||ticket.token!==token||!requestedIds.length||
+                requestedIds.some(id=>!Number.isSafeInteger(id)||id<=0)||
+                requestedIds.slice().sort((a,b)=>a-b).join(",")!==ticket.lineIds.slice().sort((a,b)=>a-b).join(",")) {
+                return {success:false,error:"Receipt is available only immediately after a successful Stock Inward posting."};
+            }
+            consumeImmediateTicket=true;
+        }
+        const loaded=await stockInwardService.load(movementId);
+        if(!loaded || !["COMPLETE","PARTIALLY_POSTED"].includes(loaded.document.status)) return {success:false,error:"Receipt is available after stock has been posted."};
+        const requestedSet=new Set(requestedIds);
+        const postedLines=loaded.lines.filter(line=>(mode==="history"||requestedSet.has(Number(line.id)))&&line.posting_state==="POSTED"&&Number(line.posted_quantity)>0);
+        if(mode==="immediate"&&postedLines.length!==requestedSet.size)return {success:false,error:"Posted receipt items could not be verified."};
+        if(!postedLines.length)return {success:false,error:"No posted items are available to print."};
+        const businessDate=String(loaded.document.business_date||"");
+        const match=/^(\d{4})-(\d{2})-(\d{2})/.exec(businessDate);
+        const invoiceDate=String(loaded.document.invoice_date||"");
+        const invoiceMatch=/^(\d{4})-(\d{2})-(\d{2})/.exec(invoiceDate);
+        const monthNames=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        const displayDate=match?`${match[3]}-${monthNames[Number(match[2])-1]||match[2]}-${match[1]}`:businessDate;
+        const displayInvoiceDate=invoiceMatch?`${invoiceMatch[3]}-${monthNames[Number(invoiceMatch[2])-1]||invoiceMatch[2]}-${invoiceMatch[1]}`:invoiceDate||"—";
+        const receipt={
+            receiptMode:mode==="history"?"HISTORY":"IMMEDIATE",
+            storeName:"KAIRA LUXE",
+            movementNo:loaded.document.movement_no,
+            businessDate:displayDate,
+            supplierName:loaded.document.supplier_name||"—",
+            supplierCode:loaded.document.supplier_code_snapshot||"—",
+            invoiceNumber:loaded.document.invoice_number_snapshot||loaded.document.invoice_no||"—",
+            invoiceDate:displayInvoiceDate,
+            items:postedLines.map(line=>({barcode:line.barcode,product:line.product_name_snapshot||"Product",sku:line.sku_snapshot||"—",colour:line.colour_snapshot||"—",size:line.size_snapshot||"—",quantity:Number(line.posted_quantity)})),
+            postedNowSkuCount:mode==="immediate"?postedLines.length:null,
+            postedNowQuantity:mode==="immediate"?postedLines.reduce((sum,line)=>sum+Number(line.posted_quantity),0):null,
+            totalPostedSkuCount:loaded.lines.filter(line=>line.posting_state==="POSTED"&&Number(line.posted_quantity)>0).length,
+            totalPostedQuantity:loaded.summary.postedUnits,
+            scannedQuantity:loaded.summary.scannedQty,
+            invoiceQuantity:loaded.document.invoice_total_quantity,
+            unresolvedQuantity:loaded.summary.unresolvedUnits,
+            reconciliationState:loaded.summary.reconciliation.state,
+            reconciliation:loaded.summary.reconciliation.text,
+            documentStatus:loaded.document.status,
+            printedAt:new Date().toLocaleString("en-IN",{timeZone:"Asia/Kolkata",day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:true})
+        };
+        return await printStockInwardReceipt(receipt);
+    } catch(error) {
+        technicalLogger.error("PRINTER","Stock Inward thermal receipt failed",error,{documentType:"STOCK_INWARD"});
+        return {success:false,error:"Receipt could not be printed. Check the printer and retry."};
+    } finally {
+        if(consumeImmediateTicket) {
+            ticketStore?.delete(movementId);
+            if(ticketStore?.size===0)stockInwardReceiptTickets.delete(event.sender.id);
+        }
+    }
+});
+ipcMain.handle("stock-inward:post", async (event, token, input) => {
+    requireStockInwardWorkspace(event, token);
+    await databaseReady;
+    try {
+        const result=await stockInwardService.post(stockInwardInput(input));
+        if(result?.posted&&Array.isArray(result.postedLineIds)&&result.postedLineIds.length){
+            let tickets=stockInwardReceiptTickets.get(event.sender.id);
+            if(!tickets){tickets=new Map();stockInwardReceiptTickets.set(event.sender.id,tickets);}
+            tickets.set(Number(input?.movementId),{token,lineIds:result.postedLineIds.map(Number)});
+        }
+        return result;
+    } catch (error) {
+        technicalLogger.error("INVENTORY", "Stock Inward posting failed", error, { movementId: input?.movementId });
+        throw error;
+    }
+});
+ipcMain.handle("stock-inward:export-unknown", async (event, token, movementId) => {
+    requireStockInwardWorkspace(event, token);
+    await databaseReady;
+    const rows = await stockInwardService.getUnknownExportRows(movementId);
+    if (!rows.length) return { success: false, empty: true };
+    const movementNo = rows[0].movement_no;
+    const today = String(rows[0].business_date || "").split("-").reverse().join("_") || "Unknown_Date";
+    const result = await dialog.showSaveDialog(mainWindow, { defaultPath: `KL_Stock_Inward_Unknown_Barcodes_${movementNo}_${today}.xlsx`, filters: [{ name: "Excel Workbook", extensions: ["xlsx"] }] });
+    if (result.canceled || !result.filePath) return { success: false, cancelled: true };
+    return require("../database/stockInwardExcelExporter").exportUnknownBarcodes(rows, result.filePath);
+});
 
 
 /* GET PRODUCT FOR STOCK INWARD / OUTWARD */

@@ -37,6 +37,8 @@ function showInventory() {
     settingsPageContent.innerHTML =
         window.productMasterTemplate;
 
+    window.initializeStyleExplorer?.();
+
     initializeInventoryEvents();
 
     loadInventorySummary();
@@ -922,7 +924,13 @@ function initializeInventoryEvents() {
 
         stockInwardBtn.onclick = async () => {
             const grant = await requestAdminAuthorization("INVENTORY_INWARD");
-            if (grant) openStockTransaction("INWARD", grant);
+            if (!grant) return;
+            try {
+                const authorized = await window.electronAPI.stockInwardEnter(grant);
+                if (authorized) await window.openStockInwardPage?.();
+            } catch (error) {
+                alert(error.message || "Stock Inward access could not be opened.");
+            }
 
         };
 

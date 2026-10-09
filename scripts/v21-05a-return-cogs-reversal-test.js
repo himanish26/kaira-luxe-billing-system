@@ -55,8 +55,8 @@ async function testMigrationAndConstraints() {
             INSERT INTO bill_items VALUES (11,'OLD-BILL','KL',10000,'CAPTURED','PRODUCT_MASTER','SALE_TIME_COST_PRICE_PAISE');
             INSERT INTO return_items VALUES (21,1,11,1);
         `);
-        await prepareDatabaseSchema({ database: db, runCurrentMigrations: async () => {} });
-        assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 13);
+        await prepareDatabaseSchema({ database: db, currentVersion: 13, runCurrentMigrations: async () => {} });
+        assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 14);
         assert.strictEqual(await readSchemaVersion(db), 13);
         assert.strictEqual(Number((await get(db, `SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table'
             AND name IN ('management_accounting_entries','management_accounting_entry_sequences')`)).count), 2,

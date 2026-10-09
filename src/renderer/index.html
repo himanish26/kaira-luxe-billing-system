@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <title>Kaira Luxe Billing System</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="styles/stockInward.css">
 </head>
 
 <body>
@@ -947,14 +948,14 @@ maxlength="4">
 
         </div>
 
-    <!-- Shared customer form: modal for Customer Management, right drawer for New Bill. -->
-    <div class="modal" id="customerProfileModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="customerProfileTitle">
-        <div class="modal-content customer-profile-dialog customer-drawer-panel">
-            <header class="customer-drawer-header">
-                <h3 id="customerProfileTitle">CUSTOMER DETAILS</h3>
-                <button id="customerDrawerBack" type="button" class="customer-drawer-exit" aria-label="Exit customer drawer">EXIT</button>
+    <!-- Shared Customer form and profile content for New Bill and Customers drawers. -->
+    <div class="modal klbs-drawer-overlay" id="customerProfileModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="customerProfileTitle">
+        <div class="modal-content customer-profile-dialog customer-drawer-panel klbs-drawer-panel" tabindex="-1">
+            <header class="customer-drawer-header klbs-drawer-header">
+                <h3 id="customerProfileTitle" class="klbs-drawer-title">CUSTOMER DETAILS</h3>
+                <button id="customerDrawerBack" type="button" class="customer-drawer-exit klbs-drawer-exit" aria-label="Exit customer drawer">EXIT</button>
             </header>
-            <div id="customerDrawerBody" class="customer-drawer-body">
+            <div id="customerDrawerBody" class="customer-drawer-body klbs-drawer-body">
                 <section id="customerDrawerChooser" class="customer-drawer-chooser" hidden>
                     <h4>Select a customer</h4>
                     <p>This mobile number is shared by multiple customer profiles.</p>
@@ -1021,8 +1022,9 @@ maxlength="4">
                 <label for="profileEmail">Email (optional)<input id="profileEmail" type="email" maxlength="254"></label>
                 <label for="profileNotes">Notes (optional)<textarea id="profileNotes" maxlength="2000" rows="2"></textarea></label>
             </div>
-            <div id="customerProfileValidation" class="customer-profile-validation" role="alert" aria-live="polite"></div>
-            <div class="customer-profile-actions">
+                    <div id="customerProfileValidation" class="customer-profile-validation" role="alert" aria-live="polite"></div>
+                    <span id="customerDrawerActionsPlaceholder" hidden></span>
+                    <div class="customer-profile-actions">
                 <button id="customerProfileCancel" type="button" class="klbs-cancel-btn">CANCEL</button>
                 <button id="customerProfileSave" type="button" class="klbs-primary-btn">SAVE</button>
             </div>
@@ -1035,6 +1037,7 @@ maxlength="4">
                 </section>
                 <div id="customerDrawerError" class="customer-drawer-error" role="status" aria-live="polite"></div>
             </div>
+            <footer id="customerDrawerFooter" class="klbs-drawer-footer" hidden></footer>
         </div>
     </div>
 
@@ -2023,9 +2026,9 @@ returned after purchase.
             <div id="supplierDirectoryTableWrap" class="customer-directory-table-wrap table-container supplier-directory-table-wrap" hidden><table id="supplierDirectoryTable" class="customer-directory-table supplier-directory-table"><colgroup><col><col><col><col><col><col><col><col></colgroup><thead><tr><th>SUPPLIER CODE</th><th>SUPPLIER</th><th>BRANDS</th><th>CONTACT</th><th>SEGMENTS</th><th>STATUS</th><th>OUTSTANDING</th><th>ACTION</th></tr></thead><tbody id="supplierRows"></tbody></table></div>
             <div id="supplierDirectoryPagination" class="customer-directory-pagination history-pagination" hidden><div class="pagination-controls"><button id="supplierPrevious" class="pagination-nav-btn" type="button">Previous</button><span id="supplierPageLabel">Page 1 of 1</span><label for="supplierPageJump">Jump to page:</label><input id="supplierPageJump" type="number" min="1" step="1" inputmode="numeric" value="1" aria-label="Jump to supplier page"><button id="supplierNext" class="pagination-nav-btn" type="button">Next</button></div><span id="supplierDirectoryRangeLabel">Showing 0–0 of 0 suppliers</span></div>
         </section>
-        <section id="supplierEditorView" class="supplier-profile-drawer" role="dialog" aria-modal="true" aria-labelledby="supplierEditorHeading" hidden>
-            <header class="supplier-drawer-header"><h2 id="supplierEditorHeading">NEW SUPPLIER</h2><button id="supplierEditorCloseBtn" class="supplier-drawer-exit" type="button">CLOSE</button></header>
-            <div class="supplier-drawer-body">
+        <section id="supplierEditorView" class="supplier-profile-drawer klbs-drawer-panel" aria-labelledby="supplierEditorHeading" hidden>
+            <header class="supplier-drawer-header klbs-drawer-header"><h2 id="supplierEditorHeading" class="klbs-drawer-title">NEW SUPPLIER</h2><button id="supplierEditorCloseBtn" class="supplier-drawer-exit klbs-drawer-exit" type="button">EXIT</button></header>
+            <div class="supplier-drawer-body klbs-drawer-body">
             <form id="supplierProfileForm" class="supplier-form">
                 <input type="hidden" id="supplierEditingCode">
                 <h3 class="supplier-form-section-title supplier-wide-field">SUPPLIER DETAILS</h3>
@@ -2045,12 +2048,12 @@ returned after purchase.
                 <h3 class="supplier-form-section-title supplier-wide-field">NOTES / REMARKS</h3><label class="supplier-wide-field">Notes / Remarks<textarea name="notes" rows="3" maxlength="2000"></textarea></label>
             </form>
             </div>
-            <footer class="supplier-drawer-footer"><div id="supplierProfileValidation" class="supplier-profile-validation" role="alert" aria-live="polite"></div><button id="supplierCancelEdit" class="klbs-cancel-btn" type="button">CANCEL</button><button id="supplierProfileSave" class="klbs-primary-btn" type="submit" form="supplierProfileForm">SAVE SUPPLIER</button></footer>
+            <footer class="supplier-drawer-footer klbs-drawer-footer"><div id="supplierProfileValidation" class="supplier-profile-validation" role="alert" aria-live="polite"></div><button id="supplierCancelEdit" class="klbs-cancel-btn" type="button">CANCEL</button><button id="supplierProfileSave" class="klbs-primary-btn" type="submit" form="supplierProfileForm">SAVE SUPPLIER</button></footer>
         </section>
-        <div id="supplierProfileOverlay" class="supplier-profile-overlay" hidden>
-        <section id="supplierProfileView" class="supplier-profile-drawer" role="dialog" aria-modal="true" aria-labelledby="supplierProfileTitle" hidden>
-            <header class="supplier-drawer-header"><h2 id="supplierProfileTitle">SUPPLIER PROFILE</h2><button id="supplierProfileCloseBtn" class="supplier-drawer-exit" type="button">CLOSE</button></header>
-            <div class="supplier-drawer-body"><div class="supplier-profile-heading"><div><h3 id="supplierProfileName"></h3><span id="supplierProfileCode"></span> · <strong id="supplierProfileStatus"></strong><div id="supplierProfileType" class="supplier-profile-type"></div></div><div class="supplier-profile-actions"><button id="supplierEditBtn" class="klbs-cancel-btn" type="button">EDIT PROFILE</button><button id="supplierViewAccountBtn" class="klbs-primary-btn" type="button">VIEW ACCOUNT</button></div></div>
+        <div id="supplierProfileOverlay" class="supplier-profile-overlay klbs-drawer-overlay" hidden>
+        <section id="supplierProfileView" class="supplier-profile-drawer klbs-drawer-panel" aria-labelledby="supplierProfileTitle" hidden tabindex="-1">
+            <header class="supplier-drawer-header klbs-drawer-header"><h2 id="supplierProfileTitle" class="klbs-drawer-title">SUPPLIER PROFILE</h2><button id="supplierProfileCloseBtn" class="supplier-drawer-exit klbs-drawer-exit" type="button">EXIT</button></header>
+            <div class="supplier-drawer-body klbs-drawer-body"><div class="supplier-profile-heading"><div><h3 id="supplierProfileName"></h3><span id="supplierProfileCode"></span> · <strong id="supplierProfileStatus"></strong><div id="supplierProfileType" class="supplier-profile-type"></div></div><div class="supplier-profile-actions"><button id="supplierEditBtn" class="klbs-cancel-btn" type="button">EDIT PROFILE</button><button id="supplierViewAccountBtn" class="klbs-primary-btn" type="button">VIEW ACCOUNT</button></div></div>
             <div id="supplierProfileDetails"></div><div class="supplier-profile-section"><h4>ACCOUNT SUMMARY</h4><div class="supplier-summary-grid" id="supplierProfileSummary"></div></div></div>
         </section>
         </div>
@@ -2831,10 +2834,13 @@ style="display:none;">
 
 <!-- Main Settings pages -->
 <script src="modules/settings.js"></script>
+<script src="components/klbsDrawer.js"></script>
 <script src="modules/inventory.js"></script>
+<script src="modules/stockInward.js"></script>
 <script src="modules/reports.js"></script>
 <script src="modules/shortcuts.js"></script>
 <script src="modules/productMasterTemplate.js"></script>
+<script src="modules/styleExplorer.js"></script>
 
 <!-- System hub -->
 <script src="modules/system.js"></script>
@@ -2852,6 +2858,18 @@ style="display:none;">
 
 <script src="vendor/JsBarcode.all.min.js"></script>
 <script src="vendor/qrcode.min.js"></script>
+
+<!-- VARIABLE-VALUE SALE LINE POPUP -->
+<div id="siVvpQuantityDialog" class="custom-dialog stock-inward-vvp-dialog" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="siVvpQuantityTitle">
+    <div class="custom-dialog-box stock-inward-vvp-dialog-box">
+        <h2 id="siVvpQuantityTitle">ENTER QUANTITY</h2>
+        <div class="si-vvp-product"><strong id="siVvpProductName"></strong><span id="siVvpProductIdentity"></span></div>
+        <label for="siVvpQuantityInput">Quantity</label>
+        <input id="siVvpQuantityInput" type="text" inputmode="numeric" autocomplete="off" aria-describedby="siVvpQuantityError">
+        <div id="siVvpQuantityError" class="si-vvp-error" role="alert" aria-live="polite"></div>
+        <div class="dialog-actions"><button type="button" id="siVvpQuantityCancel" class="klbs-cancel-btn">CANCEL</button><button type="button" id="siVvpQuantityAdd" class="klbs-primary-btn">ADD QUANTITY</button></div>
+    </div>
+</div>
 
 <!-- VARIABLE-VALUE SALE LINE POPUP -->
 <div

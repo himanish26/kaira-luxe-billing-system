@@ -113,11 +113,48 @@ window.productMasterTemplate = `
 
 </div>
 
-<input
-    type="text"
-    id="inventorySearch"
-    class="inventory-search"
-    placeholder="🔍 Search Barcode, Product, Brand or Style Code...">
+<div class="inventory-search-tools">
+    <input
+        type="text"
+        id="inventorySearch"
+        class="inventory-search"
+        placeholder="🔍 Search Barcode, Product, Brand or Style Code...">
+    <button type="button" id="openStyleExplorerBtn" class="inventory-style-open-btn">
+        🔎 PRODUCT SEARCH
+    </button>
+</div>
+
+<div id="inventoryStyleExplorerOverlay" class="inventory-style-overlay klbs-drawer-overlay" hidden>
+    <aside id="inventoryStyleExplorerDrawer" class="inventory-style-drawer klbs-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="inventoryStyleExplorerTitle" tabindex="-1">
+        <header class="inventory-style-header klbs-drawer-header">
+            <h2 id="inventoryStyleExplorerTitle" class="klbs-drawer-title">PRODUCT SEARCH</h2>
+            <button type="button" id="closeStyleExplorerBtn" class="inventory-style-close klbs-drawer-exit" aria-label="Exit Product Search">EXIT</button>
+        </header>
+        <div class="inventory-style-body klbs-drawer-body">
+            <input id="styleExplorerInput" class="inventory-style-search" type="text" autocomplete="off" placeholder="Scan barcode or enter Style Code">
+            <div id="styleExplorerState" class="inventory-style-state" role="status" aria-live="polite"></div>
+            <div id="styleExplorerResults" class="inventory-style-results" hidden>
+                <section class="inventory-style-family-head" aria-live="polite">
+                    <div class="inventory-style-family-identity">
+                        <strong id="styleExplorerBrandStyle"></strong>
+                        <span id="styleExplorerCategory"></span>
+                        <small id="styleExplorerProductName"></small>
+                    </div>
+                    <div id="styleExplorerScanned" class="inventory-style-scanned"></div>
+                </section>
+                <div id="styleExplorerSummary" class="inventory-style-summary"></div>
+                <div class="inventory-style-filters">
+                    <label class="inventory-style-colour-label" for="styleExplorerColour">COLOUR</label>
+                    <select id="styleExplorerColour"><option value="">All colours</option></select>
+                    <label class="inventory-style-stock-filter" for="styleExplorerInStock"><input id="styleExplorerInStock" type="checkbox"> IN STOCK ONLY</label>
+                </div>
+                <div id="styleExplorerVariantRows" class="inventory-style-colour-groups" aria-live="polite"></div>
+                <p id="styleExplorerNoStock" class="inventory-style-no-stock" hidden>No variants currently in stock</p>
+            </div>
+            <div id="styleExplorerCandidates" class="inventory-style-candidates" hidden></div>
+        </div>
+    </aside>
+</div>
 
 <div
     id="inventoryTableContainer"

@@ -487,8 +487,8 @@ function handleEscape() {
         return;
     }
 
-    if (window.isNewBillCustomerDrawerOpen?.()) {
-        window.closeNewBillCustomerDrawer?.();
+    if (window.KLBSDrawer?.hasOpenDrawer?.()) {
+        window.KLBSDrawer.getActive()?.close();
         return;
     }
 
@@ -523,6 +523,7 @@ function handleEscape() {
         ["giftVoucherDialog", "giftVoucherCancelBtn"],
         ["returnReasonDialog", "returnReasonCancelBtn"],
         ["variableValueDialog", "variableValueCancelBtn"],
+        ["siVvpQuantityDialog", "siVvpQuantityCancel"],
         ["dayReopenReasonModal", "cancelDayReopenReasonBtn"]
     ]) {
         const modal = document.getElementById(modalId);
@@ -823,6 +824,8 @@ function isKLBSModalOpen() {
 
     if (window.isAuthorizationPresentationPending?.()) return true;
 
+    if (window.KLBSDrawer?.hasOpenDrawer?.()) return true;
+
     if (window.isNewBillCustomerDrawerOpen?.()) return true;
 
     const modalIds = [
@@ -837,6 +840,7 @@ function isKLBSModalOpen() {
         "giftVoucherDialog",
         "returnReasonDialog",
         "variableValueDialog",
+        "siVvpQuantityDialog",
         "customerProfileModal",
         "dayReopenReasonModal",
         "dayClosingLifecycleOverlay",

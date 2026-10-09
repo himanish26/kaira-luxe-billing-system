@@ -1,4 +1,6 @@
 const { contextBridge, ipcRenderer } = require("electron");
+let stockInwardWorkspaceToken = null;
+const stockInwardInvoke = (channel, ...args) => ipcRenderer.invoke(channel, stockInwardWorkspaceToken, ...args);
 
 contextBridge.exposeInMainWorld(
     "electronAPI",
@@ -329,11 +331,49 @@ reprintStoreCredit: (storeCreditNo) =>
                 barcode
             ),
 
+        searchInventoryStyle: (input) =>
+            ipcRenderer.invoke(
+                "inventory:style-search",
+                input
+            ),
+
         stockInward: (data) =>
             ipcRenderer.invoke(
                 "stock-inward",
                 data
             ),
+
+        stockInwardEnter: async (grant) => {
+            const result = await ipcRenderer.invoke("stock-inward:enter", grant);
+            stockInwardWorkspaceToken = result?.token || null;
+            return Boolean(stockInwardWorkspaceToken);
+        },
+        stockInwardExit: async () => {
+            if (!stockInwardWorkspaceToken) return { success: true };
+            try { return await ipcRenderer.invoke("stock-inward:exit", stockInwardWorkspaceToken); }
+            finally { stockInwardWorkspaceToken = null; }
+        },
+        stockInwardListDrafts: () => stockInwardInvoke("stock-inward:resume-list"),
+        stockInwardHistory: (options) => stockInwardInvoke("stock-inward:history", options || {}),
+        stockInwardSuppliers: () => stockInwardInvoke("stock-inward:suppliers"),
+        stockInwardCreate: (data) => stockInwardInvoke("stock-inward:create", data),
+        stockInwardLoad: (id) => stockInwardInvoke("stock-inward:load", id),
+        stockInwardUpdateContext: (data) => stockInwardInvoke("stock-inward:update-context", data),
+        stockInwardResolveBarcode: (barcode) => stockInwardInvoke("stock-inward:resolve-barcode", barcode),
+        stockInwardScan: (data) => stockInwardInvoke("stock-inward:scan", data),
+        stockInwardEditLine: (data) => stockInwardInvoke("stock-inward:edit-line", data),
+        stockInwardRemoveLine: (data) => stockInwardInvoke("stock-inward:remove-line", data),
+        stockInwardRetryMatching: (id) => stockInwardInvoke("stock-inward:retry-matching", id),
+        stockInwardDiscardLine: (data) => stockInwardInvoke("stock-inward:discard-line", data),
+        stockInwardPost: (data) => stockInwardInvoke("stock-inward:post", data),
+        stockInwardCancel: (data) => stockInwardInvoke("stock-inward:cancel", data),
+        stockInwardAbandonEmpty: (id) => stockInwardInvoke("stock-inward:abandon-empty", id),
+        stockInwardInvoices: (supplierId) => stockInwardInvoke("stock-inward:invoices", supplierId),
+        stockInwardFindDuplicateInvoice: (data) => stockInwardInvoke("stock-inward:duplicate-invoice", data),
+        stockInwardCurrentMasterUnresolved: (id) => stockInwardInvoke("stock-inward:current-master-unresolved", id),
+        stockInwardArchiveCancelled: (data) => stockInwardInvoke("stock-inward:archive-cancelled", data),
+        stockInwardExportUnknown: (id) => stockInwardInvoke("stock-inward:export-unknown", id),
+        stockInwardPrintReceipt: (data) => stockInwardInvoke("stock-inward:print-receipt", data),
 
         stockOutward: (data) =>
             ipcRenderer.invoke(

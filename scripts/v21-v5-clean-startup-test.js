@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const RESULT_PREFIX = "V21_V13_STARTUP=";
+const RESULT_PREFIX = "V21_V14_STARTUP=";
 
 async function child(tempRoot, phase) {
     const { app } = require("electron");
@@ -29,12 +29,18 @@ async function child(tempRoot, phase) {
     const foreignKeys = await all("PRAGMA foreign_key_check");
     const stockTables = await get("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('stock_movements','stock_movement_lines','expenses')");
     const identity = await get("SELECT s.store_code, s.store_name, s.status FROM store_context c JOIN stores s ON s.id=c.current_store_id WHERE c.id=1");
-    assert.strictEqual(Number(version.schema_version), 13);
+    assert.strictEqual(Number(version.schema_version), 15);
     assert.strictEqual(integrity.integrity_check, "ok");
     assert.strictEqual(foreignKeys.length, 0);
     assert.strictEqual(Number(stockTables.count), 3);
     assert.deepStrictEqual(identity, { store_code: "KL001", store_name: "Kaira Luxe", status: "ACTIVE" });
-    assert.strictEqual(database.CURRENT_DB_SCHEMA_VERSION, 13);
+    assert.strictEqual(database.CURRENT_DB_SCHEMA_VERSION, 15);
+    const archiveColumns = await get("SELECT COUNT(*) AS count FROM pragma_table_info('stock_movements') WHERE name IN ('archived_at','archived_by')");
+    assert.strictEqual(Number(archiveColumns.count), 2);
+    const stockInwardColumns = await get("SELECT COUNT(*) AS count FROM pragma_table_info('stock_movements') WHERE name IN ('invoice_total_quantity','invoice_date','supplier_invoice_id','store_id')");
+    const lineDiscardColumns = await get("SELECT COUNT(*) AS count FROM pragma_table_info('stock_movement_lines') WHERE name IN ('discard_reason','discarded_by','discarded_at','sku_snapshot')");
+    assert.strictEqual(Number(stockInwardColumns.count), 4);
+    assert.strictEqual(Number(lineDiscardColumns.count), 4);
     const accountingTables = await get("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('management_accounting_entries','management_accounting_entry_sequences')");
     assert.strictEqual(Number(accountingTables.count), 2);
     const periodTable = await get("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='management_accounting_period_status'");
@@ -70,9 +76,9 @@ function parent() {
             assert(line, `Startup result missing.\n${result.stdout}\n${result.stderr}`);
             results.push(JSON.parse(line.slice(RESULT_PREFIX.length)));
         }
-        assert.deepStrictEqual(results[0], { phase: "fresh", version: 13, integrity: "ok", foreignKeyViolations: 0, foundationTables: 3, accountingTables: 2, accountingRows: 0, supplierTables: 20, supplierRows: 0 });
-        assert.deepStrictEqual(results[1], { phase: "repeat", version: 13, integrity: "ok", foreignKeyViolations: 0, foundationTables: 3, accountingTables: 2, accountingRows: 0, supplierTables: 20, supplierRows: 0 });
-        console.log("PASS actual Electron clean database startup and repeated startup at schema V13");
+        assert.deepStrictEqual(results[0], { phase: "fresh", version: 15, integrity: "ok", foreignKeyViolations: 0, foundationTables: 3, accountingTables: 2, accountingRows: 0, supplierTables: 20, supplierRows: 0 });
+        assert.deepStrictEqual(results[1], { phase: "repeat", version: 15, integrity: "ok", foreignKeyViolations: 0, foundationTables: 3, accountingTables: 2, accountingRows: 0, supplierTables: 20, supplierRows: 0 });
+        console.log("PASS actual Electron clean database startup and repeated startup at schema V15");
         console.log(`Disposable database: ${path.join(tempRoot, "fresh.db")}`);
     }
     finally {
