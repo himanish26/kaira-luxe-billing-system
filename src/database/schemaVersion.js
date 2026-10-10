@@ -1,4 +1,4 @@
-const CURRENT_DB_SCHEMA_VERSION = 15;
+const CURRENT_DB_SCHEMA_VERSION = 16;
 const SCHEMA_METADATA_TABLE = "klbs_schema_metadata";
 const { migrateV5Foundation } = require("./v5FoundationMigration");
 const { migrateStoreIdentity } = require("./storeIdentityMigration");
@@ -11,6 +11,7 @@ const { migrateSupplierRelationships } = require("./supplierRelationshipMigratio
 const { migrateSupplierInvoiceCapture } = require("./supplierInvoiceCaptureMigration");
 const { migrateStockInwardV14 } = require("./stockInwardMigration");
 const { migrateStockInwardArchiveV15 } = require("./stockInwardArchiveMigration");
+const { migrateStockOutwardCompletionV16 } = require("./stockOutwardCompletionMigrationV16");
 
 function run(database, sql, params = []) {
     return new Promise((resolve, reject) => {
@@ -241,6 +242,12 @@ async function validateCurrentSchema(database, currentVersion = CURRENT_DB_SCHEM
             if (!movementColumns.some(column => column.name === name)) throw new Error(`KLBS V15 readiness validation failed: stock_movements.${name} is missing.`);
         }
     }
+    if (currentVersion >= 16) {
+        const trigger = await get(database, "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='trg_stock_movement_delete_prohibited'");
+        if (!trigger || !String(trigger.sql).includes("STOCK_OUTWARD_DOCUMENT_DELETED")) {
+            throw new Error("KLBS V16 readiness validation failed: guarded Stock Outward document deletion is missing.");
+        }
+    }
     const rows = await all(database, `
         SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${requiredTables.map(() => "?").join(",")})
     `, requiredTables);
@@ -268,7 +275,8 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
         { from: 11, to: 12, name: "v2_1_supplier_relationship_tuples", up: migrateSupplierRelationships },
         { from: 12, to: 13, name: "v2_1_supplier_invoice_capture_modes", up: migrateSupplierInvoiceCapture, foreignKeysOff: true },
         { from: 13, to: 14, name: "v2_1_multi_item_stock_inward", up: migrateStockInwardV14, foreignKeysOff: true },
-        { from: 14, to: 15, name: "v2_1_stock_inward_cancelled_archive", up: migrateStockInwardArchiveV15 }
+        { from: 14, to: 15, name: "v2_1_stock_inward_cancelled_archive", up: migrateStockInwardArchiveV15 },
+        { from: 15, to: 16, name: "v2_1_stock_outward_document_lifecycle", up: migrateStockOutwardCompletionV16 }
     ];
     if (detectedVersion === null) {
         logger?.info("DATABASE", "Legacy KLBS database detected; schema metadata is absent");
@@ -351,5 +359,6 @@ module.exports = {
     migrateVariableValueBillingFoundation,
     migrateV5Foundation,
     migrateStockInwardArchiveV15,
+    migrateStockOutwardCompletionV16,
     _test: { run, get, all }
 };

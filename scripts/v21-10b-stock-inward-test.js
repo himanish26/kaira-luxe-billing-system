@@ -43,6 +43,10 @@ async function v5MovementTables(db) {
         await base(db); await v5MovementTables(db);
         await run(db,"INSERT INTO products VALUES(1,'111','SKU-1','Tee','Brand','Tee','Black','M',999,1,0)");
         await run(db,"INSERT INTO products VALUES(5,'vvp-1','SKU-VVP','Variable Price Top','Brand','Top','Black','Free Size',1,0,1)");
+        await run(db,"INSERT INTO products VALUES(10,'000123456789','SKU-ZERO','Zero Prefix','Brand','Top','Black','M',1,1,0)");
+        await run(db,"INSERT INTO products VALUES(11,'ABC12345','SKU-ALPHA','Alpha Barcode','Brand','Top','Black','M',1,1,0)");
+        await run(db,"INSERT INTO products VALUES(12,'KL-2026-001','SKU-HYPHEN','Hyphen Barcode','Brand','Top','Black','M',1,1,0)");
+        await run(db,"INSERT INTO products VALUES(13,'JOCKEY-BLK-L','SKU-MIXED','Mixed Barcode','Brand','Top','Black','M',1,1,0)");
         await run(db,"INSERT INTO inventory_transactions VALUES(19,1,'111','INWARD',2,'STOCK_INWARD','V5-OLD',1,NULL,'historic','MANAGER','2025-01-02T00:00:00.000Z')");
         await run(db,"INSERT INTO stock_movements VALUES(7,'V5-OLD','INWARD','COMPLETE',1,'JPS & CO','LEGACY-INV',NULL,'2025-01-02',NULL,NULL,'legacy-key','MANAGER','2025-01-02T00:00:00.000Z',NULL,NULL,NULL,'legacy','2025-01-02T00:00:00.000Z','2025-01-02T00:00:00.000Z')");
         await run(db,"INSERT INTO stock_movement_lines VALUES(9,7,'111',2,2,1,'READY','POSTED',2,19,'2025-01-02T00:00:00.000Z','2025-01-02T00:00:00.000Z')");
@@ -73,6 +77,17 @@ async function v5MovementTables(db) {
             await service.updateContext({movementId:draft.movementId,supplierId:1,invoiceNumber:invoiceNumber||`AUTO-${++receivingNo}`,invoiceDate:"2026-10-09",invoiceTotalQuantity:qty,reference:"Receiving stock"});
             return draft;
         }
+        const olderInvoiceDraft=await configuredDraft(1,"OLD-INVOICE-DATE-1");
+        await service.updateContext({movementId:olderInvoiceDraft.movementId,supplierId:1,invoiceNumber:"OLD-INVOICE-DATE-1",invoiceDate:"2026-09-30",invoiceTotalQuantity:1,reference:"Older supplier invoice"});
+        await service.scan({movementId:olderInvoiceDraft.movementId,barcode:"111"});
+        const originalCreatedAt=(await get(db,"SELECT created_at FROM stock_movements WHERE id=?",[olderInvoiceDraft.movementId])).created_at;
+        await run(db,"UPDATE stock_movements SET business_date='2026-10-08' WHERE id=?",[olderInvoiceDraft.movementId]);
+        await assert.rejects(service.post({movementId:olderInvoiceDraft.movementId,authorizationGrant:"manager-grant",actor:"MANAGER"}),error=>error.code==="STOCK_INWARD_BUSINESS_DATE_MISMATCH","backdated Stock Inward posting is rejected by the service");
+        const broughtForward=await service.updateContext({movementId:olderInvoiceDraft.movementId,supplierId:1,invoiceNumber:"OLD-INVOICE-DATE-1",invoiceDate:"2026-09-30",invoiceTotalQuantity:1,reference:"Older supplier invoice",businessDate:"2026-10-09"});
+        assert.equal(broughtForward.document.business_date,"2026-10-09","old draft can be explicitly brought forward to the current business date");
+        assert.equal(broughtForward.document.invoice_date,"2026-09-30","older supplier Invoice Date remains valid independently of inventory business date");
+        assert.equal(broughtForward.document.created_at,originalCreatedAt,"bringing a draft forward preserves its original creation timestamp");
+        assert.equal((await service.post({movementId:olderInvoiceDraft.movementId,authorizationGrant:"manager-grant",actor:"MANAGER"})).posted,true,"brought-forward draft posts on the authorized business date");
         const created = await service.createDraft({supplierId:1,invoiceNumber:"EXT-77",invoiceDate:"2026-10-09",invoiceTotalQuantity:"3",reference:"Receiving stock"},"CASHIER");
         assert.match(created.movementNo,/^KLINW\d{6}$/);
         const incompleteDraft=await service.createDraft({},"CASHIER");
@@ -81,9 +96,11 @@ async function v5MovementTables(db) {
         assert.equal(activeDuplicate.kind,"ACTIVE","normalized Supplier-scoped duplicate identifies the active original receipt");
         assert.equal(activeDuplicate.document.movement_no,created.movementNo);
         const productionDraftService = createStockInwardService(db,{getCurrentStore:async()=>({id:1,storeCode:"KL001",storeName:"Kaira Luxe",status:"ACTIVE"}),getBusinessDate:()=>"2026-10-09"});
+        const inwardSequenceBeforeReuse=Number((await get(db,"SELECT next_movement_number FROM stock_movement_sequences WHERE id=1")).next_movement_number);
         const reusedReservation=await productionDraftService.createDraft({});
         assert.equal(reusedReservation.movementId,incompleteDraft.movementId,"NEW reuses the existing untouched empty reservation instead of multiplying empty documents");
         assert.equal(reusedReservation.reusedEmptyReservation,true);
+        assert.equal(Number((await get(db,"SELECT next_movement_number FROM stock_movement_sequences WHERE id=1")).next_movement_number),inwardSequenceBeforeReuse,"reusing an existing empty reservation does not consume an unused inward sequence number");
         const duplicateBeforeScan=await service.updateContext({movementId:incompleteDraft.movementId,supplierId:1,invoiceNumber:" ext-77 ",invoiceDate:"2026-10-09",invoiceTotalQuantity:3});
         assert.equal(duplicateBeforeScan.invoiceDuplicate.document.movement_no,created.movementNo,"same Store + Supplier + normalized invoice is detected before scanning");
         const distinctInvoice=await service.updateContext({movementId:incompleteDraft.movementId,supplierId:1,invoiceNumber:"EXT-78",invoiceDate:"2026-10-09",invoiceTotalQuantity:3});
@@ -117,19 +134,19 @@ async function v5MovementTables(db) {
         const emptyDraft = await service.createDraft({},"CASHIER");
         assert.deepEqual(await service.abandonEmptyDraft(emptyDraft.movementId),{removed:false,historyExcluded:true},"untouched session is safely excluded because V14 prohibits document deletion");
         assert.equal((await service.load(emptyDraft.movementId)).document.status,"DRAFT","empty internal reservation remains non-cancelled");
-        assert.equal((await service.listRecentHistory()).some(row=>row.id===emptyDraft.movementId),false,"empty abandoned session does not pollute history");
+        assert.equal((await service.listRecentHistory()).rows.some(row=>row.id===emptyDraft.movementId),false,"empty abandoned session does not pollute history");
         assert.equal((await service.listResumable()).some(row=>row.id===emptyDraft.movementId),false,"empty abandoned session is not resumable");
         const emptyCancelled = await service.createDraft({},"CASHIER");
         assert.deepEqual(await service.cancelDraft(emptyCancelled.movementId),{success:true,empty:true,historyExcluded:true},"explicit cancel on an untouched session remains non-business history");
-        assert.equal((await service.listRecentHistory()).some(row=>row.id===emptyCancelled.movementId),false,"blank Cancel Draft does not create a visible CANCELLED record");
+        assert.equal((await service.listRecentHistory()).rows.some(row=>row.id===emptyCancelled.movementId),false,"blank Cancel Draft does not create a visible CANCELLED record");
         const meaningfulCancelled = await service.createDraft({supplierId:1,invoiceNumber:"CANCEL-REF",invoiceDate:"2026-10-09",invoiceTotalQuantity:1},"CASHIER");
         await service.cancelDraft(meaningfulCancelled.movementId,"MANAGER");
-        assert((await service.listRecentHistory()).some(row=>row.id===meaningfulCancelled.movementId&&row.status==="CANCELLED"),"explicit cancellation of meaningful work remains auditable history");
+        assert((await service.listRecentHistory()).rows.some(row=>row.id===meaningfulCancelled.movementId&&row.status==="CANCELLED"),"explicit cancellation of meaningful work remains auditable history");
         const reReceiveCancelled=await service.createDraft({supplierId:1,invoiceNumber:"CANCEL-REF",invoiceDate:"2026-10-10",invoiceTotalQuantity:1},"CASHIER");
         assert(reReceiveCancelled.movementNo,"wholly unposted CANCELLED invoice identity can be received correctly in a new document");
         await service.cancelDraft(reReceiveCancelled.movementId,"MANAGER");
         await service.archiveCancelled(meaningfulCancelled.movementId,"MANAGER");
-        assert.equal((await service.listRecentHistory()).some(row=>row.id===meaningfulCancelled.movementId),false,"archived cancelled row disappears from normal Recent history");
+        assert.equal((await service.listRecentHistory()).rows.some(row=>row.id===meaningfulCancelled.movementId),false,"archived cancelled row disappears from normal Recent history");
         assert.equal((await get(db,"SELECT status,archived_at,archived_by FROM stock_movements WHERE id=?",[meaningfulCancelled.movementId])).status,"CANCELLED","archive preserves underlying cancelled movement row");
         const auditedArchiveService=createStockInwardService(db,{allowMultipleDrafts:true,getCurrentStore:async()=>({id:1,storeCode:"KL001",storeName:"Kaira Luxe",status:"ACTIVE"}),getBusinessDate:()=>"2026-10-09",now:()=>new Date("2026-10-09T06:00:00.000Z"),appendActivityInTransaction:canonicalActivity.appendActivityInTransaction});
         const activityArchiveDraft=await auditedArchiveService.createDraft({invoiceNumber:"AUDIT-ARCHIVE-1",reference:"Cancelled receipt"},"CASHIER");
@@ -143,7 +160,7 @@ async function v5MovementTables(db) {
         assert.deepEqual(JSON.parse(archiveActivity.change_data),{version:1,changes:[]},"archive uses canonical Activity V1 change_data shape");
         assert.equal(archiveActivity.user_name,"MANAGER");
         assert.match((await get(db,"SELECT details FROM activities WHERE reference_no=? ORDER BY id DESC LIMIT 1",[activityArchiveDraft.movementNo])).details,/CANCELLED.*archived/i,"Activity identifies the document and before/after list visibility");
-        assert.equal((await auditedArchiveService.listRecentHistory()).some(row=>row.id===activityArchiveDraft.movementId),false,"canonical Activity append allows archive to leave normal Recent history");
+        assert.equal((await auditedArchiveService.listRecentHistory()).rows.some(row=>row.id===activityArchiveDraft.movementId),false,"canonical Activity append allows archive to leave normal Recent history");
         assert.deepEqual(await get(db,"SELECT COUNT(*) AS count,COALESCE(SUM(quantity),0) AS quantity FROM inventory_transactions"),archiveLedgerBefore,"archive does not mutate inventory ledger");
         assert.equal(Number((await get(db,"SELECT COUNT(*) AS count FROM supplier_invoices")).count),archiveSupplierInvoicesBefore,"archive does not mutate Supplier invoice financial records");
         assert.equal(JSON.stringify(await get(db,"SELECT * FROM supplier_master WHERE id=1")),archiveSupplierBefore,"archive does not mutate Supplier records");
@@ -152,12 +169,23 @@ async function v5MovementTables(db) {
         const failingArchiveService=createStockInwardService(db,{allowMultipleDrafts:true,getCurrentStore:async()=>({id:1,storeCode:"KL001",storeName:"Kaira Luxe",status:"ACTIVE"}),getBusinessDate:()=>"2026-10-09",now:()=>new Date("2026-10-09T06:00:00.000Z"),appendActivityInTransaction:async()=>{throw new Error("injected Activity append failure");}});
         await assert.rejects(failingArchiveService.archiveCancelled(rollbackArchiveDraft.movementId,"MANAGER"),/injected Activity append failure/);
         assert.equal((await get(db,"SELECT archived_at FROM stock_movements WHERE id=?",[rollbackArchiveDraft.movementId])).archived_at,null,"Activity failure rolls back archive metadata");
-        assert((await auditedArchiveService.listRecentHistory()).some(row=>row.id===rollbackArchiveDraft.movementId),"failed archive leaves the cancelled record visible");
+        assert((await auditedArchiveService.listRecentHistory()).rows.some(row=>row.id===rollbackArchiveDraft.movementId),"failed archive leaves the cancelled record visible");
         let state = await service.load(created.movementId);
         assert.equal(state.document.supplier_name,"JPS & CO"); assert.equal(state.summary.scannedQty,0);
         assert.equal(state.summary.reconciliation.text,"SHORT BY 3");
         const vvpResolution = await service.resolveBarcode("vvp-1");
         assert.equal(vvpResolution.resolution,"UNIQUE"); assert.equal(vvpResolution.product.variable_value,1,"Stock Inward reuses the authoritative Product Master VVP flag"); assert.equal(vvpResolution.product.active,0,"inactive VVP remains a uniquely resolved Product");
+        for (const barcode of ["000123456789","ABC12345","KL-2026-001","JOCKEY-BLK-L"]) {
+            const resolved=await service.resolveBarcode(barcode);
+            assert.equal(resolved.resolution,"UNIQUE",`${barcode} resolves through exact Product Master lookup`);
+            assert.equal(resolved.product.barcode,barcode,`${barcode} identity is preserved`);
+        }
+        const universalBarcodeDraft=await configuredDraft(4);
+        for (const barcode of ["000123456789","ABC12345","KL-2026-001","JOCKEY-BLK-L"]) {
+            await service.scan({movementId:universalBarcodeDraft.movementId,barcode});
+        }
+        assert.deepEqual((await service.load(universalBarcodeDraft.movementId)).lines.map(line=>line.barcode),["000123456789","ABC12345","KL-2026-001","JOCKEY-BLK-L"],"numeric, leading-zero, alphabetic, and hyphenated barcodes remain distinct in draft lines");
+        await assert.rejects(service.resolveBarcode("ABC\u0001"),/control characters/i,"unsafe control characters remain rejected");
         const vvpDoc = await configuredDraft(100);
         await assert.rejects(service.scan({movementId:vvpDoc.movementId,barcode:"vvp-1",quantity:0}),/positive whole number/i);
         await assert.rejects(service.scan({movementId:vvpDoc.movementId,barcode:"vvp-1",quantity:-2}),/positive whole number/i);
@@ -201,7 +229,7 @@ async function v5MovementTables(db) {
         assert.equal(state.summary.eligibleToPost,1);
         state = await service.post({movementId:created.movementId,authorizationGrant:"manager-grant",actor:"MANAGER"});
         assert.equal(state.document.status,"COMPLETE");
-        assert((await service.listRecentHistory()).some(row=>row.id===created.movementId&&row.status==="COMPLETE"),"completed document remains available in durable read-only history");
+        assert((await service.listRecentHistory()).rows.some(row=>row.id===created.movementId&&row.status==="COMPLETE"),"completed document remains available in durable read-only history");
         assert.equal((await get(db,"SELECT COUNT(*) AS n FROM inventory_transactions WHERE reference_id=?",[created.movementNo])).n,2);
         await assert.rejects(service.post({movementId:created.movementId,authorizationGrant:"manager-grant"}),/already posted|cannot be posted/i);
         await assert.rejects(service.archiveCancelled(created.movementId,"MANAGER"),/Only cancelled/i,"archive cannot hide a completed receipt");
@@ -315,10 +343,10 @@ async function v5MovementTables(db) {
         assert(discardHandler&&discardHandler[0].includes('requireSecurityGrant(input?.authorizationGrant, "INVENTORY_INWARD")'),"unresolved DISCARD Manager authorization remains active");
         const archiveUi=ui.match(/async function archiveCancelled\([\s\S]*?\n    \}/);
         assert(archiveUi&&!archiveUi[0].includes("requestAdminAuthorization")&&!archiveUi[0].includes("confirm("),"archive UI uses its KLBS modal without PIN or browser confirmation");
-        assert.match(ui,/REMOVE CANCELLED STOCK INWARD[\s\S]*?This does not affect inventory/i,"archive confirmation modal explains existing cancelled state and no-stock effect");
+        assert.match(ui,/id="siArchiveTitle">REMOVE CANCELLED STOCK INWARD[\s\S]*?id="siArchiveDescription">Remove this cancelled Stock Inward from the list\?/i,"archive confirmation explains the cancelled document and its list-only effect");
         assert.match(main,/stock-inward:exit[\s\S]*?requireStockInwardWorkspace\(event, token\)[\s\S]*?stockInwardWorkspaceSessions.delete/,"leaving Home invalidates its workspace authorization");
         assert.match(main,/did-start-navigation[\s\S]*?stockInwardWorkspaceSessions.delete/,"renderer navigation clears the Manager-authorized workspace session");
-        assert.match(migration,/invoice_total_quantity INTEGER CHECK/); assert.match(ui,/REVIEW \/ POST STOCK INWARD/);
+        assert.match(migration,/invoice_total_quantity INTEGER CHECK/); assert.match(ui,/REVIEW STOCK INWARD/);
         assert.match(ui,/INVENTORY_INWARD/); assert.match(main,/requireSecurityGrant\(input\?\.authorizationGrant, "INVENTORY_INWARD"\)/);
         assert.match(ui,/stockInwardExportUnknown/); assert.match(ui,/Escape/);
         assert.match(ui,/stockInwardHistory/); assert.match(ui,/RECENT STOCK INWARDS/);
@@ -341,15 +369,16 @@ async function v5MovementTables(db) {
         assert.match(appHtml,/id="settingsPageBackBtn"[\s\S]*?class="back-btn"/,"Stock Inward reuses the existing global KLBS page Back control");
         assert.match(ui,/globalBack\.textContent = "← BACK"[\s\S]*?globalBack\.onclick = \(\) => pageMode === "home" \? leavePage\(\) : returnToHome\(\)/,"the canonical Back control keeps one-level Home/Active destinations");
         assert.doesNotMatch(ui,/stockInwardBack|si-back-btn/,"no Stock-Inward-specific Back button or style is introduced");
-        assert.match(ui,/siPageTitle[^]*?textContent = "STOCK INWARD"/,"all Stock Inward modes retain the locked common page title");
+        assert.match(ui,/el\("siPageTitle"\)\.textContent = activeIsNew \? "NEW STOCK INWARD" : readOnly \? "STOCK INWARD DETAILS" : "EDIT STOCK INWARD"/,"each document render preserves its lifecycle-specific Stock Inward heading");
         assert.match(ui,/globalBack\.insertAdjacentHTML\("afterend", '<h1 id="siPageTitle">STOCK INWARD<\/h1>'\)/,"title uses the established page top bar beside canonical Back control");
         assert.match(ui,/OPEN STOCK INWARDS[\s\S]*?drafts\.map\(draftCard\)/,"Home renders every open Stock Inward independently");
         assert.match(ui,/id="siNewDraft" class="klbs-primary-btn si-new-btn"/,"New remains available with open documents");
         assert.doesNotMatch(ui,/Finish the partially posted Stock Inward before starting another|Complete or delete the current Stock Inward before starting another/,"Home has no global open-document lock message");
-        assert.match(ui,/RESUME[\s\S]*?DELETE DRAFT/,"meaningful drafts expose separate Resume and Delete actions");
+        assert.match(ui,/>RESUME<\/button>/,"meaningful drafts expose a Resume action in the aligned row");
+        assert.match(ui,/data-delete-draft="\$\{row\.id\}">DELETE<\/button>/,"eligible drafts expose a Delete action in the aligned row");
         assert.match(ui,/target\.meaningful[\s\S]*?\["DRAFT","PENDING_MASTER"\][\s\S]*?postedUnits[\s\S]*?Delete this Stock Inward draft\? Scanned items in this draft will not be added to stock/,"Delete Draft is limited to meaningful wholly unposted work and warns that it does not add stock");
         assert.match(ui,/stockInwardCancel\(\{movementId\}\)/,"Delete Draft uses the audited cancellation lifecycle instead of physical deletion");
-        assert.match(ui,/REMARKS \/ NOTES[\s\S]*?id="siRemarks"[\s\S]*?Optional receiving remarks/,"operator receiving remarks are restored");
+        assert.match(ui,/class="si-remarks-field">REMARKS[\s\S]*?id="siRemarks"[\s\S]*?Optional remarks/,"operator receiving remarks are available as optional input");
         assert.match(ui,/siRemarks"\)\.value = documentData\.document\.reference_text \|\| ""[\s\S]*?reference:el\("siRemarks"\)\.value/,"remarks persist and resume through the existing reference_text field");
         assert.match(ui,/siRemarks[\s\S]*?readOnly && !String\(doc\.reference_text \|\| ""\)\.trim\(\)/,"historical remarks show read-only when populated");
         assert.match(ui,/id="siBusinessDate"[\s\S]*?formatBusinessDate\(documentData\.document\.business_date\)/,"document identity keeps a user-readable business date");
@@ -372,8 +401,9 @@ async function v5MovementTables(db) {
         assert.match(ui,/NO UNRESOLVED BARCODES/,"exception drawer has an explicit empty state");
         assert.match(ui,/siExport[\s\S]*summary\.unresolvedBarcodes <= 0/,"unknown export disables when active unresolved lines are empty");
         assert.match(ui,/globalBack\.parentElement\.classList\.add\("si-page-topbar",\s*"management-pnl-topbar"\)/,"Stock Inward title shares established KLBS full-page top bar and canonical Back control");
-        assert.match(stockCss,/\.si-main-scroll\s*\{[^}]*overflow:\s*visible/,"document uses natural settings-page scrolling without a nested scrollbar");
-        assert.match(stockCss,/\.si-actions\s*\{[^}]*position:\s*sticky[^}]*bottom:\s*0/,"actions remain reachable in page flow without a separate fixed page shell");
+        assert.match(ui,/activeIsNew \? "NEW STOCK INWARD" : readOnly \? "STOCK INWARD DETAILS" : "EDIT STOCK INWARD"/,"new Stock Inward receives a NEW title while resumed and historical documents are not mislabeled");
+        assert.match(stockCss,/\.si-main-scroll\s*\{[^}]*overflow:\s*visible/,"inward content retains its existing settings-page scroll behavior");
+        assert.match(stockCss,/\.si-actions\s*\{[^}]*position:\s*sticky[^}]*bottom:\s*0/,"inward actions retain their established behavior");
         assert.doesNotMatch(stockCss,/^\.back-btn\s*\{|\.stock-inward-page-header/,"shared Back styling is reused without redefining it");
         assert.match(stockCss,/\.si-unresolved-row\s*\{[^}]*display:\s*grid/,"unresolved content uses compact aligned rows");
         assert.match(stockCss,/\.si-unresolved-actions \.si-discard-btn/,"discard is visually distinct from retry/remove");
@@ -389,7 +419,7 @@ async function v5MovementTables(db) {
         assert.match(ui,/siVvpQuantityCancel[\s\S]*?siVvpQuantityAdd/,"small KLBS quantity modal provides Cancel and Add Quantity actions");
         const inwardService = fs.readFileSync(path.join(__dirname,"../src/database/stockInwardService.js"),"utf8");
         assert.match(inwardService,/async function abandonEmptyDraft[\s\S]*?if \(meaningful\) return \{ removed:false \}[\s\S]*?historyExcluded:true/,"empty sessions are excluded from visible history without weakening V14 delete protection");
-        assert.match(inwardService,/async function listRecentHistory\(\)[\s\S]*?archived_at IS NULL/,"Recent history filters persisted archived rows");
+        assert.match(inwardService,/async function listRecentHistory\(input = \{\}\)[\s\S]*?archived_at IS NULL/,"Recent history filters persisted archived rows");
         assert.match(inwardService,/function normalizedInvoiceNumber\([\s\S]*?toLocaleUpperCase\("en-IN"\)[\s\S]*?async function duplicateInvoiceRow[\s\S]*?store_id=\? OR \([\s\S]*?supplier_id=\?[\s\S]*?normalizedInvoiceNumber\(row\.invoice_number_snapshot \|\| row\.invoice_no\)/,"invoice duplicate identity is normalized and Store + Supplier-scoped, including safely scoped single-Store legacy rows");
         assert.match(inwardService,/async function currentMasterForUnresolved[\s\S]*?productForBarcode\(line\.barcode\)/,"unresolved drawer checks each barcode against current Product Master");
         assert.match(inwardService,/async function archiveCancelled[\s\S]*?status !== "CANCELLED"[\s\S]*?STOCK_INWARD_CANCELLED_ARCHIVED/,"archive accepts only CANCELLED and logs Activity");
@@ -433,7 +463,8 @@ async function v5MovementTables(db) {
         const normalSku = await simulateScan({isVvp:false,capturedQuantity:15});
         assert.equal(normalSku.modalCount,0,"normal Product never opens quantity modal");
         assert.equal(normalSku.calls[0].quantity,1,"normal Product scan remains one unit");
-        assert.equal(fs.readFileSync(path.join(__dirname,"../src/database/schemaVersion.js"),"utf8").includes("CURRENT_DB_SCHEMA_VERSION = 15"),true);
-        console.log("PASS V13/V5 preservation, V14 integrity, persistent draft, repeated scanning, invoice reconciliation, unknown partial post, retry, idempotency, no Supplier liability, UI/authorization contracts.");
+        const schemaAuthority=fs.readFileSync(path.join(__dirname,"../src/database/schemaVersion.js"),"utf8");
+        assert.equal(schemaAuthority.includes("CURRENT_DB_SCHEMA_VERSION = 16"),true,"V16 adds guarded outward document deletion while preserving V14/V15 inward contracts");
+        console.log("PASS V13/V5 preservation, V14 integrity, V16 outward-only deletion guard, persistent draft, repeated scanning, invoice reconciliation, unknown partial post, retry, idempotency, no Supplier liability, UI/authorization contracts.");
     } finally { db.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

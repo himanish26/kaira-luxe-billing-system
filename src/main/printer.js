@@ -912,6 +912,39 @@ async function printStockInwardReceipt(receiptData) {
     }
 }
 
+async function printStockOutwardReceipt(receiptData) {
+    let printWindow = null;
+    try {
+        const settings = await getSettings();
+        if (!settings.default_printer) throw new Error("No default KLBS receipt printer is configured.");
+        printWindow = new BrowserWindow({
+            show: false,
+            width: 302,
+            height: 800,
+            webPreferences: { nodeIntegration: true, contextIsolation: false }
+        });
+        await printWindow.loadFile(path.join(__dirname,"../renderer/stock-outward-receipt.html"));
+        const serialized=JSON.stringify(receiptData).replace(/</g,"\\u003c");
+        await printWindow.webContents.executeJavaScript(`window.stockOutwardReceipt=${serialized}; if(window.renderStockOutwardReceipt) window.renderStockOutwardReceipt();`);
+        await new Promise(resolve=>setTimeout(resolve,300));
+        await new Promise((resolve,reject)=>printWindow.webContents.print({
+            silent:true,
+            printBackground:true,
+            deviceName:settings.default_printer,
+            margins:{marginType:"none"},
+            landscape:false,
+            scaleFactor:100,
+            usePrinterDefaultPageSize:true
+        },(success,error)=>success?resolve():reject(new Error(error||"Printer rejected Stock Outward output."))));
+        return {success:true};
+    } catch(error) {
+        technicalLogger.error("PRINTER","Stock Outward thermal receipt failed",error,{documentType:"STOCK_OUTWARD"});
+        throw new Error("Stock Outward receipt could not be printed.");
+    } finally {
+        if(printWindow&&!printWindow.isDestroyed())printWindow.close();
+    }
+}
+
 module.exports = {
 
     printBill,
@@ -927,6 +960,7 @@ module.exports = {
     printTestReceipt,
 
     printDayClosingReceipt,
-    printStockInwardReceipt
+    printStockInwardReceipt,
+    printStockOutwardReceipt
 
 };

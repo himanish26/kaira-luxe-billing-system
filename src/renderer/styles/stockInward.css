@@ -1,12 +1,9 @@
 /* Stock Inward uses the existing settings page, Back control, KLBS buttons,
    form controls, modal surface, and universal drawer shell. These rules cover
    only the receiving page's document layout and domain status details. */
-#settingsPage:has(.stock-inward-page) > .bill-top-bar {
-    margin: 0 auto 18px;
-    padding: 20px 28px 0;
-}
+#settingsPage:has(.stock-inward-page) > .bill-top-bar { margin: 0 auto 18px; padding: 20px 28px 0; }
 #settingsPageContent:has(.stock-inward-page) {
-    width: min(1440px, calc(100% - 56px));
+    width: calc(100% - 56px);
     max-width: none;
     height: auto;
     max-height: none;
@@ -30,17 +27,16 @@
     font-weight: 800;
 }
 .si-current-draft, .si-recent-history { margin: 0 0 22px; }
-.si-current-card { display: grid; gap: 10px; margin: 0 0 9px; padding: 12px 16px; border: 1px solid #eadfe4; border-left: 4px solid var(--primary); border-radius: 9px; background: #fff; box-shadow: 0 3px 12px rgba(54,26,42,.045); }
-.si-open-top { display: grid; grid-template-columns: minmax(205px,1.05fr) minmax(260px,2fr) minmax(135px,.8fr); align-items: center; gap: 14px; min-width: 0; }
-.si-open-document { display: flex; min-width: 0; align-items: center; gap: 9px; }
-.si-open-document > strong { color: var(--primary); font-size: 18px; white-space: nowrap; }
-.si-open-supplier { min-width: 0; color: #332c31; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
-.si-open-top > small { color: #665a60; font-size: 12px; text-align: right; white-space: nowrap; }
-.si-open-bottom { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 14px; }
-.si-current-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 7px clamp(15px,2.3vw,32px); color: #51464c; font-size: 13px; }
-.si-current-stats span { white-space: nowrap; }
-.si-current-stats b { color: #332c31; font-size: 15px; }
-.si-card-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.si-current-card { display: grid; grid-template-columns: minmax(150px,1.15fr) minmax(110px,.8fr) minmax(145px,1.15fr) minmax(125px,1fr) minmax(65px,.5fr) minmax(85px,.6fr) minmax(110px,.8fr) auto; min-width: 0; align-items: center; gap: 10px; margin: 0 0 9px; padding: 12px 16px; border: 1px solid #eadfe4; border-left: 4px solid var(--primary); border-radius: 9px; background: #fff; box-shadow: 0 3px 12px rgba(54,26,42,.045); }
+.si-open-field { display: grid; min-width: 0; gap: 4px; color: #332c31; font-size: 14px; font-weight: 700; }
+.si-open-field > small { color: #665a60; font-size: 10px; font-weight: 800; letter-spacing: .025em; }
+.si-open-field > span { min-width: 0; overflow-wrap: anywhere; }
+.si-open-field > span > small { display: block; margin-top: 3px; font-weight: 500; }
+.si-open-number strong { color: var(--primary); font-size: 16px; white-space: nowrap; }
+.si-open-count { text-align: center; font-variant-numeric: tabular-nums; }
+.si-open-status { justify-items: start; }
+.si-card-actions { display: flex; min-width: max-content; align-items: center; justify-content: flex-end; gap: 7px; }
+.si-open-updated { grid-column: 1/-1; color: #665a60; font-size: 11px; }
 .si-history-actions { white-space: nowrap; text-align: center; vertical-align: middle; }
 .si-card-actions button { min-height: 38px; padding-inline: 14px; font-size: 13px; }
 .si-new-btn { min-height: 50px; margin: 0 0 12px; padding: 0 24px; font-size: 17px; }
@@ -78,6 +74,7 @@
 .si-history-table .si-archive-btn { min-height: 32px; margin-left: 5px; padding: 6px 9px; font-size: 11px; }
 .si-history-table .si-history-empty { padding: 22px 12px !important; color: #665a60; text-align: center; }
 .si-recent-history .history-pagination { padding: 14px 8px; }
+.si-recent-history .history-pagination { position: relative; z-index: 2; margin: 0 0 18px; scroll-margin-bottom: 28px; }
 .si-recent-history .history-pagination[hidden] { display: none; }
 .si-recent-history .history-pagination .pagination-controls { gap: 8px 12px; }
 .si-recent-history .history-pagination .pagination-nav-btn { width: auto; min-width: 94px; height: 38px; font-size: 14px; }
@@ -200,6 +197,7 @@
 .si-duplicate-state { margin: 12px 0 7px; padding: 9px 11px; border: 1px solid; border-radius: 7px; font-weight: 800; }
 .si-duplicate-state.warning { border-color: #d7a632; background: #fff4d8; color: #694900; }
 .si-duplicate-state.success { border-color: #77a977; background: #e8f3e8; color: #145214; }
+.si-duplicate-state.fully-received { margin: 12px 0 7px; padding: 0; border: 0; border-radius: 0; background: #fff; box-shadow: none; color: #145214; font-weight: 800; text-align: left; }
 .si-duplicate-copy { margin: 7px 0 12px; color: #51464c; line-height: 1.45; }
 .si-duplicate-dialog > footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 9px; margin-top: 18px; padding-top: 14px; border-top: 1px solid #eadfe4; }
 .si-duplicate-dialog > #siDuplicateBody > button { min-height: 40px; }
@@ -244,19 +242,21 @@
     #settingsPage:has(.stock-inward-page) > .bill-top-bar { padding-inline: 20px; }
     #settingsPageContent:has(.stock-inward-page) { width: calc(100% - 40px); }
     .si-context-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-    .si-open-top { grid-template-columns: minmax(190px,1fr) minmax(220px,1.4fr); }
-    .si-open-top > small { grid-column: 2; text-align: left; }
+    .si-current-card { grid-template-columns: repeat(4,minmax(0,1fr)); }
+    .si-card-actions { grid-column: 1/-1; flex-wrap: wrap; justify-content: flex-start; }
     .si-history-table { min-width: 920px; }
     .si-unresolved-row, .si-unresolved-row.is-historical { grid-template-columns: minmax(105px,1fr) 48px minmax(120px,1fr); gap: 8px; }
     .si-unresolved-actions, .si-master-state { grid-column: 1/-1; justify-content: flex-start; }
+}
+@media (min-width: 1051px) and (max-width: 1300px) {
+    .si-current-card { grid-template-columns: repeat(4,minmax(0,1fr)); }
+    .si-card-actions { grid-column: 1/-1; flex-wrap: wrap; justify-content: flex-start; }
 }
 @media (max-width: 700px) {
     #settingsPage:has(.stock-inward-page) > .bill-top-bar { grid-template-columns: auto 1fr; gap: 10px; padding: 14px 12px 0; }
     #settingsPage:has(.stock-inward-page) > .bill-top-bar > #siPageTitle { font-size: 22px; text-align: right; }
     #settingsPageContent:has(.stock-inward-page) { width: calc(100% - 24px); }
-    .si-open-top { grid-template-columns: minmax(0,1fr); gap: 7px; }
-    .si-open-top > small { grid-column: auto; text-align: left; }
-    .si-open-bottom { grid-template-columns: minmax(0,1fr); }
+    .si-current-card { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; padding: 10px; }
     .si-card-actions { flex-wrap: wrap; }
     .si-context-grid { grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; }
     .si-document-head { flex-wrap: wrap; gap: 8px; }

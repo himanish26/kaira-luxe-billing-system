@@ -278,8 +278,9 @@ window.productMasterTemplate = `
     </button>
 
     <button
-        id="stockOutwardBtn"
-        class="dashboard-btn">
+        id="stockOutwardV21Btn"
+        class="dashboard-btn"
+        type="button">
 
         📤 Stock Outward
 
@@ -475,62 +476,6 @@ window.productMasterTemplate = `
 
                 <textarea
                     id="stockInwardRemarks"
-                    class="stock-transaction-input stock-remarks"
-                    placeholder="Enter remarks"></textarea>
-
-            </div>
-
-        </div>
-
-
-        <!-- OUTWARD FIELDS -->
-
-        <div
-            id="stockOutwardFields"
-            style="display:none;">
-
-            <div class="stock-form-group">
-
-                <label>
-                    Reason
-                </label>
-
-                <select
-                    id="stockOutwardReason"
-                    class="stock-transaction-input">
-
-                    <option value="">
-                        Select Reason
-                    </option>
-
-                    <option value="DAMAGE">
-                        Damage
-                    </option>
-
-                    <option value="SUPPLIER_RETURN">
-                        Supplier Return
-                    </option>
-
-                    <option value="ADJUSTMENT">
-                        Stock Adjustment
-                    </option>
-
-                </select>
-
-            </div>
-
-
-            <div class="stock-form-group">
-
-                <label>
-                    Remarks
-                    <span class="optional-field">
-                        (Optional)
-                    </span>
-                </label>
-
-                <textarea
-                    id="stockOutwardRemarks"
                     class="stock-transaction-input stock-remarks"
                     placeholder="Enter remarks"></textarea>
 

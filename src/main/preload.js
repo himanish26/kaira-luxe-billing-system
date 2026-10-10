@@ -1,6 +1,26 @@
 const { contextBridge, ipcRenderer } = require("electron");
 let stockInwardWorkspaceToken = null;
 const stockInwardInvoke = (channel, ...args) => ipcRenderer.invoke(channel, stockInwardWorkspaceToken, ...args);
+let stockOutwardWorkspaceToken = null;
+const stockOutwardInvoke = (channel, ...args) => ipcRenderer.invoke(channel, stockOutwardWorkspaceToken, ...args);
+const normalizeStockOutwardInvoke = async operation => {
+    try { return await operation(); }
+    catch (error) {
+        const match = /KLBS_STOCK_OUTWARD_ERROR:(\{[^\r\n]*\})/.exec(String(error?.message || ""));
+        if (!match) throw error;
+        let details;
+        try { details = JSON.parse(match[1]); } catch { throw error; }
+        const normalized = new Error("Stock Outward operation failed.");
+        if (typeof details.code === "string" && details.code.startsWith("STOCK_OUTWARD_")) normalized.code = details.code;
+        if (Number.isSafeInteger(details.available)) normalized.available = details.available;
+        if (Number.isSafeInteger(details.alreadyAdded)) normalized.alreadyAdded = details.alreadyAdded;
+        if (Number.isSafeInteger(details.requested)) normalized.requested = details.requested;
+        if (typeof details.productName === "string") normalized.productName = details.productName;
+        throw normalized;
+    }
+};
+const stockOutwardScanInvoke = input => stockOutwardInvoke("stock-outward:scan", input || {});
+const stockOutwardEditLineInvoke = input => normalizeStockOutwardInvoke(() => stockOutwardInvoke("stock-outward:edit-line", input || {}));
 
 contextBridge.exposeInMainWorld(
     "electronAPI",
@@ -375,11 +395,29 @@ reprintStoreCredit: (storeCreditNo) =>
         stockInwardExportUnknown: (id) => stockInwardInvoke("stock-inward:export-unknown", id),
         stockInwardPrintReceipt: (data) => stockInwardInvoke("stock-inward:print-receipt", data),
 
-        stockOutward: (data) =>
-            ipcRenderer.invoke(
-                "stock-outward",
-                data
-            ),
+        stockOutwardEnter: async (grant) => {
+            const result = await ipcRenderer.invoke("stock-outward:enter", grant);
+            stockOutwardWorkspaceToken = result?.token || null;
+            return Boolean(stockOutwardWorkspaceToken);
+        },
+        stockOutwardExit: async () => {
+            if (!stockOutwardWorkspaceToken) return { success: true };
+            try { return await ipcRenderer.invoke("stock-outward:exit", stockOutwardWorkspaceToken); }
+            finally { stockOutwardWorkspaceToken = null; }
+        },
+        stockOutwardListDrafts: () => stockOutwardInvoke("stock-outward:resume-list"),
+        stockOutwardHistory: options => stockOutwardInvoke("stock-outward:history", options || {}),
+        stockOutwardCreate: data => stockOutwardInvoke("stock-outward:create", data || {}),
+        stockOutwardLoad: id => stockOutwardInvoke("stock-outward:load", id),
+        stockOutwardUpdateContext: data => stockOutwardInvoke("stock-outward:update-context", data || {}),
+        stockOutwardSaveDraft: data => stockOutwardInvoke("stock-outward:save-draft", data || {}),
+        stockOutwardScan: data => stockOutwardScanInvoke(data || {}),
+        stockOutwardEditLine: data => stockOutwardEditLineInvoke(data || {}),
+        stockOutwardRemoveLine: data => stockOutwardInvoke("stock-outward:remove-line", data || {}),
+        stockOutwardCancel: data => stockOutwardInvoke("stock-outward:cancel", data || {}),
+        stockOutwardDelete: data => stockOutwardInvoke("stock-outward:delete", data || {}),
+        stockOutwardPost: data => stockOutwardInvoke("stock-outward:post", data || {}),
+        stockOutwardPrintReceipt: data => stockOutwardInvoke("stock-outward:print-receipt", data || {}),
 
 
 

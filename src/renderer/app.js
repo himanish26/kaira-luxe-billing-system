@@ -1491,12 +1491,22 @@ function showReturnReasonDialog() {
     });
 }
 
-function showProductNotFoundDialog(barcode) {
+let productNotFoundScannerOwner = null;
+let productNotFoundModalCompletion = null;
+let productNotFoundClearValue = null;
+let insufficientStockScannerOwner = null;
+let insufficientStockModalCompletion = null;
+let insufficientStockClearValue = null;
+
+function showProductNotFoundDialog(barcode, options = {}) {
 
     productNotFoundOpen = true;
 
     const barcodeInput =
-        document.getElementById("barcodeInput");
+        options.scannerInput || document.getElementById("barcodeInput");
+    productNotFoundScannerOwner = barcodeInput;
+    productNotFoundModalCompletion = options.onClose || null;
+    productNotFoundClearValue = options.clearValue ?? null;
 
     if (barcodeInput) {
 
@@ -1525,23 +1535,27 @@ if (productNotFoundOkBtn) {
             productNotFoundDialog.style.display =
                 "none";
 
-            const barcodeInput =
-                document.getElementById(
-                    "barcodeInput"
-                );
+            const barcodeInput = productNotFoundScannerOwner || document.getElementById("barcodeInput");
+            const completion = productNotFoundModalCompletion;
+            const clearValue = productNotFoundClearValue;
+            productNotFoundScannerOwner = null;
+            productNotFoundModalCompletion = null;
+            productNotFoundClearValue = null;
 
             if (barcodeInput) {
 
                 barcodeInput.disabled = false;
+                if (clearValue !== null && barcodeInput.value.trim() === String(clearValue).trim()) barcodeInput.value = "";
 
                 requestAnimationFrame(() => {
 
                     barcodeInput.focus();
-                    barcodeInput.select();
+                    if (barcodeInput.id === "barcodeInput") barcodeInput.select();
 
                 });
 
             }
+            completion?.();
 
         }
     );
@@ -1555,11 +1569,15 @@ if (productNotFoundOkBtn) {
 function showInsufficientStockDialog(
     productName,
     availableStock,
-    currentBillQty
+    currentBillQty,
+    options = {}
 ) {
 
     const barcodeInput =
-        document.getElementById("barcodeInput");
+        options.scannerInput || document.getElementById("barcodeInput");
+    insufficientStockScannerOwner = barcodeInput;
+    insufficientStockModalCompletion = options.onClose || null;
+    insufficientStockClearValue = options.clearValue ?? null;
 
     if (barcodeInput) {
 
@@ -1569,10 +1587,12 @@ function showInsufficientStockDialog(
 
     }
 
+    const addedLabel = options.addedLabel || "Already Added to Bill";
     insufficientStockMessage.innerText =
         `${productName}\n\n` +
         `Available Stock: ${availableStock}\n` +
-        `Already Added to Bill: ${currentBillQty}`;
+        `${addedLabel}: ${currentBillQty}` +
+        (options.requestedQuantity == null ? "" : `\nRequested Quantity: ${options.requestedQuantity}`);
 
     insufficientStockDialog.style.display =
         "flex";
@@ -1589,29 +1609,46 @@ if (insufficientStockOkBtn) {
             insufficientStockDialog.style.display =
                 "none";
 
-            const barcodeInput =
-                document.getElementById(
-                    "barcodeInput"
-                );
+            const barcodeInput = insufficientStockScannerOwner || document.getElementById("barcodeInput");
+            const completion = insufficientStockModalCompletion;
+            const clearValue = insufficientStockClearValue;
+            insufficientStockScannerOwner = null;
+            insufficientStockModalCompletion = null;
+            insufficientStockClearValue = null;
 
             if (barcodeInput) {
 
                 barcodeInput.disabled = false;
+                if (clearValue !== null && barcodeInput.value.trim() === String(clearValue).trim()) barcodeInput.value = "";
 
                 requestAnimationFrame(() => {
 
                     barcodeInput.focus();
 
-                    barcodeInput.select();
+                    if (barcodeInput.id === "barcodeInput") barcodeInput.select();
 
                 });
 
             }
+            completion?.();
 
         }
     );
 
 }
+
+window.showStockOutwardProductNotFoundDialog = (barcode, scannerInput) => new Promise(resolve => {
+    showProductNotFoundDialog(barcode, { scannerInput, onClose: resolve });
+});
+window.showStockOutwardInsufficientStockDialog = details => new Promise(resolve => {
+    showInsufficientStockDialog(details.productName, details.available, details.alreadyAdded, {
+        scannerInput: details.scannerInput,
+        addedLabel: "Already Added to Outward",
+        requestedQuantity: details.requested,
+        onClose: resolve
+    });
+});
+window.showStockOutwardInactiveWarning = (scannerInput) => showNativeAlert("This product is inactive. Contact ADMINISTRATOR.", scannerInput);
 
     if (adminCancelBtn){
 
@@ -5243,12 +5280,6 @@ catch (error) {
 
 }
 
-barcodeInput.addEventListener("input", () => {
-
-    barcodeInput.value =
-        barcodeInput.value.replace(/\D/g, "");
-
-});
 if (barcodeInput) {
 
     barcodeInput.addEventListener(
@@ -5263,8 +5294,13 @@ if (barcodeInput) {
                 return;
             }
 
-            const barcode =
-                barcodeInput.value.trim();
+            const scannedBarcode = barcodeInput.value;
+
+            if (/[\u0000-\u001F\u007F-\u009F]/.test(scannedBarcode)) {
+                return;
+            }
+
+            const barcode = scannedBarcode.trim();
 
             if (!barcode) {
                 return;

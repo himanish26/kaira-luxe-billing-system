@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>KLBS Stock Outward Receipt</title>
+  <style>
+    @page { size: 80mm auto; margin: 0; }
+    * { box-sizing: border-box; }
+    html, body { width: 80mm; height: auto; margin: 0; padding: 0; background: #fff; }
+    body { color: #000; font: 12px/1.25 Arial, Helvetica, sans-serif; -webkit-font-smoothing: antialiased; }
+    .receipt { width: 72mm; margin: 0 auto; padding: 3mm 2mm; }
+    header { text-align: center; margin-bottom: 5px; }
+    header strong { display: block; font-size: 19px; font-weight: 900; letter-spacing: .4px; }
+    header span { display: block; margin-top: 2px; font-size: 13px; font-weight: 700; }
+    .doc-number { margin: 5px 0 2px; text-align: center; font-size: 15px; font-weight: 800; overflow-wrap: anywhere; }
+    .rule { border-top: 1px dashed #000; margin: 6px 0; }
+    .identity { display: grid; grid-template-columns: 1fr; gap: 4px; }
+    .identity div { min-width: 0; overflow-wrap: anywhere; }
+    .identity b { display: block; margin-bottom: 1px; font-size: 9px; letter-spacing: .3px; }
+    h2 { margin: 5px 0; text-align: center; font-size: 12px; font-weight: 800; }
+    .item { padding: 5px 0; border-bottom: 1px dotted #555; page-break-inside: avoid; break-inside: avoid; }
+    .item-name { font-weight: 700; overflow-wrap: anywhere; }
+    .sku, .barcode, .item-meta { margin-top: 2px; overflow-wrap: anywhere; }
+    .barcode { word-break: break-all; }
+    .item-meta { display: flex; justify-content: space-between; gap: 5px; }
+    .item-meta span { min-width: 0; overflow-wrap: anywhere; }
+    .item-meta strong { flex: 0 0 auto; }
+    .summary { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; }
+    .summary b { text-align: right; }
+    footer { margin-top: 7px; text-align: center; font-size: 10px; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <main id="receipt" class="receipt"></main>
+  <script>
+    window.renderStockOutwardReceipt = function () {
+      const data = window.stockOutwardReceipt || {};
+      const esc = value => String(value ?? "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+      const items = Array.isArray(data.items) ? data.items : [];
+      document.getElementById("receipt").innerHTML = `
+        <header><strong>${esc(data.storeName || "KAIRA LUXE")}</strong><span>STOCK OUTWARD</span></header>
+        <div class="doc-number">${esc(data.movementNo)}</div>
+        <div class="rule"></div>
+        <section class="identity">
+          <div><b>DATE</b>${esc(data.businessDate)}</div>
+          <div><b>REASON</b>${esc(data.reason)}</div>
+          <div><b>REMARKS</b>${esc(data.remarks || "—")}</div>
+        </section>
+        <div class="rule"></div><h2>ITEMS</h2>
+        ${items.map(item => `<article class="item"><div class="item-name">${esc(item.product)}</div><div class="sku">${esc(item.sku)}</div><div class="barcode">${esc(item.barcode)}</div><div class="item-meta"><span>${esc(item.colour)} · ${esc(item.size)}</span><strong>QTY: ${esc(item.quantity)}</strong></div></article>`).join("") || `<div>No items posted.</div>`}
+        <div class="rule"></div><h2>SUMMARY</h2>
+        <section class="summary"><span>TOTAL ITEMS</span><b>${esc(data.totalItems)}</b><span>TOTAL OUTWARD UNITS</span><b>${esc(data.totalUnits)}</b></section>
+        <div class="rule"></div><footer>Printed: ${esc(data.printedAt)}</footer>`;
+    };
+  </script>
+</body>
+</html>

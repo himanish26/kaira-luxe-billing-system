@@ -117,7 +117,14 @@
             if (!groups.has(key)) groups.set(key, { label: colour, variants: [] });
             groups.get(key).variants.push(item);
         }
-        for (const group of groups.values()) {
+        const orderedGroups = [...groups.values()];
+        const scannedGroupIndex = orderedGroups.findIndex(group =>
+            group.variants.some(item => scannedBarcode && String(item.barcode).trim() === scannedBarcode)
+        );
+        if (scannedGroupIndex > 0) {
+            orderedGroups.unshift(orderedGroups.splice(scannedGroupIndex, 1)[0]);
+        }
+        for (const group of orderedGroups) {
             const section = document.createElement("section");
             section.className = "inventory-style-colour-group";
             const groupHasScannedSku = group.variants.some(item => scannedBarcode && String(item.barcode).trim() === scannedBarcode);
@@ -232,6 +239,9 @@
                 setText("styleExplorerState", "This style has too many variants to display safely.");
             } else {
                 setText("styleExplorerState", "Product not found.");
+            }
+            if (result.exactProduct && String(result.exactProduct.barcode).trim() === query && !byId("styleExplorerResults").hidden) {
+                byId("styleExplorerResults").parentElement.scrollTop = 0;
             }
         } catch (error) {
             console.error("Product Search failed", error);

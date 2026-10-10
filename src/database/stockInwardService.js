@@ -21,10 +21,11 @@ function dateOrNull(value) {
     return text;
 }
 function normalizedInvoiceNumber(value) { return String(value || "").trim().toLocaleUpperCase("en-IN"); }
-function numericBarcodeText(value) {
-    if (typeof value !== "string") throw new StockInwardError("Barcode must contain numbers only.", "STOCK_INWARD_BARCODE_INVALID");
+function productBarcodeText(value) {
+    if (typeof value !== "string") throw new StockInwardError("Enter a valid product barcode.", "STOCK_INWARD_BARCODE_INVALID");
+    if (/[\u0000-\u001F\u007F-\u009F]/.test(value)) throw new StockInwardError("Barcode contains unsupported control characters.", "STOCK_INWARD_BARCODE_INVALID");
     const barcode = value.trim();
-    if (!/^[0-9]+$/.test(barcode)) throw new StockInwardError("Barcode must contain numbers only.", "STOCK_INWARD_BARCODE_INVALID");
+    if (!barcode) throw new StockInwardError("Enter a valid product barcode.", "STOCK_INWARD_BARCODE_INVALID");
     return barcode;
 }
 function receivingHeader(input) {
@@ -94,7 +95,7 @@ function createStockInwardService(database, options = {}) {
         const meaningful = lines.length > 0 || doc.supplier_id != null || doc.supplier_invoice_id != null ||
             Boolean(String(doc.invoice_no || "").trim()) || Boolean(String(doc.reference_text || "").trim()) ||
             doc.invoice_date != null || doc.invoice_total_quantity != null;
-        return { document: doc, lines, meaningful, summary: { knownSkus: known.length, knownUnits, unresolvedBarcodes: unresolved.length,
+        return { document: doc, lines, meaningful, currentBusinessDate: businessDate(now()), summary: { knownSkus: known.length, knownUnits, unresolvedBarcodes: unresolved.length,
             unresolvedUnits: unresolved.reduce((sum, line) => sum + Number(line.scanned_quantity), 0), scannedQty,
             eligibleToPost: known.filter(line => line.posting_state === "UNPOSTED").reduce((sum, line) => sum + Number(line.recognized_quantity), 0),
             postedUnits, reconciliation } };
@@ -136,12 +137,6 @@ function createStockInwardService(database, options = {}) {
                 if (!invoice || invoice.status !== "POSTED" || Number(invoice.store_id) !== activeStore.id || (supplier && Number(invoice.supplier_id) !== Number(supplier.id))) throw new StockInwardError("Supplier Invoice must belong to the selected Supplier and current Store.", "STOCK_INWARD_INVOICE_MISMATCH");
                 if (!supplier) supplier = await get("SELECT id,supplier_code,name,status FROM supplier_master WHERE id=?", [invoice.supplier_id]);
             }
-            const seq = await get("SELECT next_movement_number FROM stock_movement_sequences WHERE id=1");
-            if (!seq || !Number.isSafeInteger(Number(seq.next_movement_number))) throw new StockInwardError("Stock Inward number sequence is unavailable.", "STOCK_INWARD_SEQUENCE_INVALID");
-            const number = Number(seq.next_movement_number);
-            if (number > 999999) throw new StockInwardError("Stock Inward document number sequence is exhausted.", "STOCK_INWARD_SEQUENCE_EXHAUSTED");
-            await run("UPDATE stock_movement_sequences SET next_movement_number=? WHERE id=1 AND next_movement_number=?", [number + 1, number]);
-            const code = `KLINW${String(number).padStart(6, "0")}`;
             const instant = now().toISOString();
             const invoiceNo = String(input.invoiceNumber || input.invoiceNo || invoice?.supplier_invoice_number || "").trim() || null;
             const invoiceDate = dateOrNull(input.invoiceDate);
@@ -163,6 +158,12 @@ function createStockInwardService(database, options = {}) {
                     [supplier?.id || null,supplier?.name || null,supplier?.supplier_code || null,invoice?.id || null,invoice?.invoice_code || null,invoiceNo,invoiceNo,String(input.reference || "").trim() || null,invoiceDate,invoiceQty,now().toISOString(),empty.id]);
                 return {movementId:empty.id,movementNo:empty.movement_no,reusedEmptyReservation:true};
             }
+            const seq = await get("SELECT next_movement_number FROM stock_movement_sequences WHERE id=1");
+            if (!seq || !Number.isSafeInteger(Number(seq.next_movement_number))) throw new StockInwardError("Stock Inward number sequence is unavailable.", "STOCK_INWARD_SEQUENCE_INVALID");
+            const number = Number(seq.next_movement_number);
+            if (number > 999999) throw new StockInwardError("Stock Inward document number sequence is exhausted.", "STOCK_INWARD_SEQUENCE_EXHAUSTED");
+            await run("UPDATE stock_movement_sequences SET next_movement_number=? WHERE id=1 AND next_movement_number=?", [number + 1, number]);
+            const code = `KLINW${String(number).padStart(6, "0")}`;
             const inserted = await run(`INSERT INTO stock_movements(
                 movement_no,direction,status,supplier_id,supplier_name,supplier_code_snapshot,supplier_invoice_id,
                 supplier_invoice_code_snapshot,invoice_no,invoice_number_snapshot,reference_text,invoice_date,invoice_total_quantity,
@@ -187,6 +188,10 @@ function createStockInwardService(database, options = {}) {
             const invoiceNumber = String(input.invoiceNumber || "").trim() || invoice?.supplier_invoice_number || null;
             const invoiceDate = dateOrNull(input.invoiceDate);
             const reference = String(input.reference || "").trim() || null;
+            const requestedBusinessDate = input.businessDate == null ? doc.business_date : String(input.businessDate).trim();
+            if (input.businessDate != null && requestedBusinessDate !== businessDate(now())) {
+                throw new StockInwardError("Stock Inward must use the current KLBS business date.", "STOCK_INWARD_BUSINESS_DATE_MISMATCH");
+            }
             const duplicate = await duplicateInvoiceRow(supplierId, invoiceNumber, doc.id);
             if (duplicate) {
                 const detail = await readDocument(duplicate.id);
@@ -205,16 +210,16 @@ function createStockInwardService(database, options = {}) {
                 return readDocument(doc.id);
             }
             const linkedElsewhere = invoice ? await get("SELECT COUNT(*) AS count FROM stock_movements WHERE supplier_invoice_id=? AND id<>? AND status<>'CANCELLED'", [invoice.id,doc.id]) : null;
-            await run(`UPDATE stock_movements SET supplier_id=?,supplier_name=?,supplier_code_snapshot=?,supplier_invoice_id=?,supplier_invoice_code_snapshot=?,invoice_no=?,invoice_number_snapshot=?,reference_text=?,invoice_date=?,invoice_total_quantity=?,updated_at=? WHERE id=?`,
+            await run(`UPDATE stock_movements SET supplier_id=?,supplier_name=?,supplier_code_snapshot=?,supplier_invoice_id=?,supplier_invoice_code_snapshot=?,invoice_no=?,invoice_number_snapshot=?,reference_text=?,invoice_date=?,invoice_total_quantity=?,business_date=?,updated_at=? WHERE id=?`,
                 [supplier?.id || null,supplier?.name || null,supplier?.supplier_code || null,invoice?.id || null,invoice?.invoice_code || null,
-                    invoiceNumber,invoiceNumber,reference,invoiceDate,invoiceQty,now().toISOString(),doc.id]);
+                    invoiceNumber,invoiceNumber,reference,invoiceDate,invoiceQty,requestedBusinessDate,now().toISOString(),doc.id]);
             const result = await readDocument(doc.id);
             result.splitDeliveryWarning = Number(linkedElsewhere?.count || 0) > 0;
             return result;
         }));
     }
     async function scan(input = {}) {
-        const barcode = numericBarcodeText(input.barcode);
+        const barcode = productBarcodeText(input.barcode);
         const scanQuantity = integer(input.quantity == null ? 1 : input.quantity, "Quantity");
         return serialize(() => transaction(async () => {
             const doc = await assertDraft(input.movementId);
@@ -245,7 +250,7 @@ function createStockInwardService(database, options = {}) {
         }));
     }
     async function resolveBarcode(barcodeInput) {
-        const barcode = numericBarcodeText(barcodeInput);
+        const barcode = productBarcodeText(barcodeInput);
         return serialize(async () => {
             const found = await productForBarcode(barcode);
             if (!found.product) return { resolution: found.resolution, product: null };
@@ -395,6 +400,10 @@ function createStockInwardService(database, options = {}) {
             if (duplicate) throw new StockInwardError(`Invoice ${header.invoiceNumber} was already received as ${duplicate.movement_no}.`, "STOCK_INWARD_DUPLICATE_INVOICE");
             const activeStore = await store();
             if (doc.store_id != null && Number(doc.store_id) !== activeStore.id) throw new StockInwardError("Stock Inward belongs to a different Store.", "STOCK_INWARD_STORE_MISMATCH");
+            const authorizedBusinessDate = businessDate(now());
+            if (doc.business_date !== authorizedBusinessDate) {
+                throw new StockInwardError("Stock Inward must be posted on the current KLBS business date.", "STOCK_INWARD_BUSINESS_DATE_MISMATCH");
+            }
             if (doc.supplier_invoice_id) {
                 const invoice = await get("SELECT id,store_id,supplier_id,status FROM supplier_invoices WHERE id=?", [doc.supplier_invoice_id]);
                 if (!invoice || invoice.status !== "POSTED" || Number(invoice.store_id) !== activeStore.id || Number(invoice.supplier_id) !== Number(doc.supplier_id)) throw new StockInwardError("Linked Supplier Invoice no longer matches this Supplier and Store.", "STOCK_INWARD_INVOICE_MISMATCH");

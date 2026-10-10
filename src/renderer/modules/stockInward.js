@@ -16,6 +16,8 @@
     let unresolvedDrawer = null;
     let currentMasterResults = [];
     let duplicateDialog = null;
+    let duplicateDialogInvoice = null;
+    let dismissedDuplicateInvoice = null;
     let contextSaveTimer = null;
     let duplicateClear = true;
     let contextSaved = false;
@@ -72,7 +74,7 @@
                   <label class="si-remarks-field">REMARKS<input id="siRemarks" type="text" maxlength="500" placeholder="Optional remarks"></label>
                 </section>
                 <section id="siReconciliation" class="si-reconciliation si-neutral" aria-live="polite"></section>
-                <section class="si-scan-area"><label for="siScanner">SCAN PRODUCT</label><input id="siScanner" type="tel" inputmode="numeric" autocomplete="off" placeholder="Scan Barcode Here" aria-label="Scan product barcode" disabled><small id="siScanGateHint">Complete receiving details to start scanning.</small></section>
+                <section class="si-scan-area"><label for="siScanner">SCAN PRODUCT</label><input id="siScanner" type="text" autocomplete="off" placeholder="Scan Barcode Here" aria-label="Scan product barcode" disabled><small id="siScanGateHint">Complete receiving details to start scanning.</small></section>
                 <div id="siMessage" class="si-message" role="status" aria-live="polite"></div>
                 <section class="si-received-items"><h2>RECEIVED ITEMS</h2><div id="siKnownLines"></div></section>
                 <section id="siSummary" class="si-summary"></section>
@@ -88,7 +90,7 @@
               </aside>
             </div>
           </section>`;
-        content.insertAdjacentHTML("beforeend", `<div id="siDuplicateOverlay" class="modal si-duplicate-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="siDuplicateTitle"><section class="modal-content si-duplicate-dialog"><header><h2 id="siDuplicateTitle"></h2><button id="siDuplicateExit" type="button" class="klbs-cancel-btn">CLOSE</button></header><div id="siDuplicateBody"></div><footer id="siDuplicateActions"></footer></section></div>`);
+        content.insertAdjacentHTML("beforeend", `<div id="siDuplicateOverlay" class="modal si-duplicate-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="siDuplicateTitle"><section class="modal-content si-duplicate-dialog"><header><h2 id="siDuplicateTitle"></h2></header><div id="siDuplicateBody"></div><footer id="siDuplicateActions"></footer></section></div>`);
         content.insertAdjacentHTML("beforeend", `<div id="siArchiveOverlay" class="modal si-archive-overlay" hidden role="alertdialog" aria-modal="true" aria-labelledby="siArchiveTitle" aria-describedby="siArchiveDescription"><section class="modal-content si-archive-dialog"><h2 id="siArchiveTitle">REMOVE CANCELLED STOCK INWARD</h2><strong id="siArchiveMovementNo" class="si-archive-movement"></strong><p id="siArchiveDescription">Remove this cancelled Stock Inward from the list?</p><div class="modal-buttons si-archive-actions"><button id="siArchiveCancel" type="button" class="klbs-cancel-btn">CANCEL</button><button id="siArchiveConfirm" type="button" class="klbs-primary-btn">REMOVE</button></div></section></div>`);
         content.insertAdjacentHTML("beforeend", `<div id="siSuccessOverlay" class="modal si-success-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="siSuccessTitle" aria-describedby="siSuccessMessage"><section class="modal-content si-success-dialog"><h2 id="siSuccessTitle">STOCK INWARD COMPLETE</h2><strong id="siSuccessCode"></strong><p id="siSuccessMessage"></p><p id="siSuccessUnresolved" class="si-success-unresolved" hidden></p><p id="siPrintMessage" class="si-print-message" role="status" aria-live="polite"></p><div class="modal-buttons si-success-actions"><button id="siSuccessDone" type="button" class="klbs-primary-btn">DONE</button></div></section></div>`);
         unresolvedDrawer = window.KLBSDrawer.create({
@@ -102,12 +104,12 @@
             if (event.key !== "Escape" || !active || authInProgress) return;
             if (!el("siArchiveOverlay")?.hidden) { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); closeArchiveConfirmation(); return; }
             if (!el("siSuccessOverlay")?.hidden) { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); if (!printInProgress) finishPostingSuccess(); return; }
-            if (el("siVvpQuantityDialog")?.style.display === "flex" || !el("siDuplicateOverlay")?.hidden) return;
+            if (el("siVvpQuantityDialog")?.style.display === "flex") return;
+            if (!el("siDuplicateOverlay")?.hidden) { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); closeDuplicateModal(); return; }
             event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
             if(pageMode === "home") leavePage(); else returnToHome();
         };
         document.addEventListener("keydown", escHandler, true);
-        el("siDuplicateExit").onclick = closeDuplicateModal;
         el("siDuplicateOverlay").addEventListener("click", event => { if(event.target===el("siDuplicateOverlay")) closeDuplicateModal(); });
         el("siDuplicateOverlay").addEventListener("keydown", event => { if(event.key==="Escape"){event.preventDefault();event.stopPropagation();event.stopImmediatePropagation();closeDuplicateModal();} });
         el("siExport").onclick = () => exportUnknown(unresolvedMovementId || documentData?.document.id);
@@ -137,7 +139,7 @@
         el("siReadOnlyBanner").hidden = true;
         el("siActions").hidden = true;
         workspace.hidden=true;resume.hidden=false;
-        const draftCard = row => `<article class="si-current-card"><div class="si-open-top"><div class="si-open-document"><strong>${escapeHtml(row.movement_no)}</strong><span class="si-status-badge ${escapeHtml(row.status.toLowerCase())}">${escapeHtml(row.status.replaceAll("_"," "))}</span></div><span class="si-open-supplier">${escapeHtml(row.supplier_name || "No Supplier")}${row.invoice_no?` · Invoice ${escapeHtml(row.invoice_no)}`:" · Receiving details pending"}</span><small>Updated ${escapeHtml(formatUpdated(row.updated_at))}</small></div><div class="si-open-bottom"><div class="si-current-stats"><span><b>${Number(row.sku_count)||0}</b> SKUs</span><span><b>${Number(row.units)||0}</b> Scanned Units</span>${Number(row.posted_units)>0?`<span><b>${Number(row.posted_units)}</b> Posted</span>`:""}<span><b>${Number(row.unresolved_count)||0}</b> Unresolved</span></div><div class="si-card-actions">${Number(row.posted_units)>0?`<button type="button" class="print-btn si-open-reprint" data-reprint="${Number(row.id)}">🖨 REPRINT RECEIPT</button>`:""}<button type="button" class="klbs-primary-btn" data-id="${row.id}">RESUME STOCK INWARD</button>${["DRAFT","PENDING_MASTER"].includes(row.status)?`<button type="button" class="klbs-cancel-btn si-delete-btn" data-delete-draft="${row.id}">DELETE DRAFT</button>`:""}</div></div></article>`;
+        const draftCard = row => `<article class="si-current-card"><div class="si-open-field si-open-number"><small>STOCK INWARD NO.</small><strong>${escapeHtml(row.movement_no)}</strong></div><div class="si-open-field"><small>BUSINESS DATE</small><span>${escapeHtml(formatBusinessDate(row.business_date))}</span></div><div class="si-open-field si-open-supplier"><small>SUPPLIER</small><span>${escapeHtml(row.supplier_name || "No Supplier")}</span></div><div class="si-open-field si-open-invoice"><small>INVOICE NO.</small><span>${escapeHtml(row.invoice_no || "—")}</span></div><div class="si-open-field si-open-count"><small>ITEMS</small><span>${Number(row.sku_count)||0}<small>${Number(row.unresolved_count)||0} unresolved</small></span></div><div class="si-open-field si-open-count"><small>RECEIVED QTY</small><span>${Number(row.units)||0}${Number(row.posted_units)>0?`<small>${Number(row.posted_units)} posted</small>`:""}</span></div><div class="si-open-field si-open-status"><span class="si-status-badge ${escapeHtml(row.status.toLowerCase())}">${escapeHtml(row.status.replaceAll("_"," "))}</span></div><div class="si-card-actions">${Number(row.posted_units)>0?`<button type="button" class="print-btn si-open-reprint" data-reprint="${Number(row.id)}">🖨 REPRINT RECEIPT</button>`:""}<button type="button" class="klbs-primary-btn" data-id="${row.id}">RESUME</button>${["DRAFT","PENDING_MASTER"].includes(row.status)?`<button type="button" class="klbs-cancel-btn si-delete-btn" data-delete-draft="${row.id}">DELETE</button>`:""}</div><small class="si-open-updated">Updated ${escapeHtml(formatUpdated(row.updated_at))}</small></article>`;
         const historyRows = history.map(row => `<tr>
           <td><span class="si-status-badge ${escapeHtml(String(row.status).toLowerCase())}">${escapeHtml(String(row.status).replaceAll("_"," "))}</span></td>
           <td class="si-history-number">${escapeHtml(row.movement_no)}</td>
@@ -193,7 +195,7 @@
             if (typeof options === "boolean") options = {historical:options};
             const historical = Boolean(options.historical);
             documentData = await api().stockInwardLoad(id);
-            contextSaved = true; duplicateClear = true; currentMasterResults = [];
+            contextSaved = true; duplicateClear = true; dismissedDuplicateInvoice = null; duplicateDialogInvoice = null; currentMasterResults = [];
             reviewOpen = false;
             pageMode = historical ? "view" : "active";
             activeIsNew = Boolean(options.isNew);
@@ -203,7 +205,7 @@
             el("stockInwardResume").hidden = true;
             el("stockInwardWorkspace").hidden = false;
             el("siActions").hidden = readOnly;
-            el("siPageTitle").textContent = "STOCK INWARD";
+            el("siPageTitle").textContent = activeIsNew ? "NEW STOCK INWARD" : readOnly ? "STOCK INWARD DETAILS" : "EDIT STOCK INWARD";
             el("siReview").hidden = true;
             el("siMessage").textContent = "";
             el("siSupplier").innerHTML = `<option value="">No Supplier</option>${suppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)} · ${escapeHtml(s.supplier_code)}${s.status === "INACTIVE" ? " · INACTIVE" : ""}</option>`).join("")}`;
@@ -214,44 +216,32 @@
             el("siRemarks").value = documentData.document.reference_text || "";
             el("siBusinessDate").textContent = formatBusinessDate(documentData.document.business_date);
             el("siCode").textContent = documentData.document.movement_no;
-            el("siSupplier").onchange = async () => { contextSaved=false; await populateInvoices(); await saveContext(); };
+            el("siSupplier").onchange = async () => { dismissedDuplicateInvoice=null; contextSaved=false; await populateInvoices(); await saveContext(); };
             el("siInvoice").onchange = () => {
                 const option=el("siInvoice").selectedOptions[0];
                 if(option?.dataset.invoiceNumber && !el("siInvoiceNumber").value.trim()) el("siInvoiceNumber").value=option.dataset.invoiceNumber;
-                contextSaved=false; saveContext();
+                dismissedDuplicateInvoice=null; contextSaved=false; saveContext();
             };
             ["siInvoiceNumber","siInvoiceDate","siInvoiceQty","siRemarks"].forEach(id => {
-                el(id).oninput = () => { contextSaved=false; updateScannerGate(); if(id === "siInvoiceNumber") checkDuplicateInvoice(); clearTimeout(contextSaveTimer); contextSaveTimer=setTimeout(saveContext,250); };
+                el(id).oninput = () => { contextSaved=false; updateScannerGate(); if(id === "siInvoiceNumber") { dismissedDuplicateInvoice=null; checkDuplicateInvoice(); } clearTimeout(contextSaveTimer); contextSaveTimer=setTimeout(saveContext,250); };
                 el(id).onchange = saveContext;
             });
             el("siInvoiceQty").addEventListener("input", updateLiveReconciliation);
-            el("siScanner").onbeforeinput = event => {
-                if(event.data && event.inputType.startsWith("insert") && !/^[0-9]+$/.test(event.data)) {
-                    event.preventDefault();
-                }
-            };
             el("siScanner").onkeydown = event => {
                 if (event.key !== "Enter") return;
                 event.preventDefault();
                 const scanner = el("siScanner");
-                const barcode = scanner.value.trim();
-                if (!barcode) { showMessage("Scan a product barcode."); return; }
-                if (!/^[0-9]+$/.test(barcode)) {
-                    showMessage("Barcode must contain numbers only.", true);
+                const scannedBarcode = scanner.value;
+                if (/[\u0000-\u001F\u007F-\u009F]/.test(scannedBarcode)) {
+                    showMessage("Barcode contains unsupported control characters.", true);
                     scanner.focus();
                     scanner.select();
                     return;
                 }
+                const barcode = scannedBarcode.trim();
+                if (!barcode) { showMessage("Scan a product barcode."); return; }
                 el("siScanner").value = "";
                 scanQueue = scanQueue.then(() => scanBarcode(barcode)).catch(error => showMessage(error.message, true));
-            };
-            el("siScanner").oninput = () => {
-                const scanner=el("siScanner"), original=scanner.value;
-                scanner.value=original.replace(/\D/g,"");
-                if (el("siMessage").textContent === "Barcode must contain numbers only.") {
-                    el("siMessage").textContent = "";
-                    el("siMessage").classList.remove("error");
-                }
             };
             el("siDeleteDraft").onclick = () => deleteDraft();
             el("siUnresolved").onclick = openUnresolvedDrawer;
@@ -281,8 +271,10 @@
     }
     async function saveContext() {
         if (!documentData) return;
+        if (!el("siDuplicateOverlay")?.hidden) return false;
         try {
             const context = { movementId:documentData.document.id,supplierId:el("siSupplier").value || null,supplierInvoiceId:el("siInvoice").value || null,invoiceNumber:el("siInvoiceNumber").value,invoiceDate:el("siInvoiceDate").value,invoiceTotalQuantity:el("siInvoiceQty").value,reference:el("siRemarks").value };
+            if(isDismissedDuplicate(context.supplierId,context.invoiceNumber)) { duplicateClear=false; updateScannerGate(); return false; }
             const request=++duplicateCheckSequence;
             if(context.supplierId && context.invoiceNumber.trim()) {
                 duplicateClear=false; updateScannerGate();
@@ -304,6 +296,7 @@
     async function checkDuplicateInvoice() {
         const request=++duplicateCheckSequence;
         if(!documentData || !el("siSupplier").value || !el("siInvoiceNumber").value.trim()) { duplicateClear=true; updateScannerGate(); return; }
+        if(isDismissedDuplicate(el("siSupplier").value,el("siInvoiceNumber").value)) { duplicateClear=false; updateScannerGate(); return; }
         duplicateClear=false; updateScannerGate();
         try {
             const duplicate=await api().stockInwardFindDuplicateInvoice({supplierId:Number(el("siSupplier").value),invoiceNumber:el("siInvoiceNumber").value,excludeMovementId:documentData.document.id});
@@ -315,30 +308,63 @@
     }
     function openDuplicateModal(data) {
         const doc=data.document;
-        if(!doc) return;
+        if(!doc || !el("siDuplicateOverlay")?.hidden) return;
+        clearTimeout(contextSaveTimer); contextSaveTimer=null;
         const summary=data.summary, activeDuplicate=doc.status === "DRAFT";
         duplicateDialog=data;
+        duplicateDialogInvoice={
+            supplierId:String(el("siSupplier")?.value || ""),
+            invoiceNumber:String(el("siInvoiceNumber")?.value || "").trim(),
+            persistedSupplierId:String(documentData?.document.supplier_id || ""),
+            persistedSupplierInvoiceId:String(documentData?.document.supplier_invoice_id || ""),
+            persistedInvoiceNumber:String(documentData?.document.invoice_number_snapshot || documentData?.document.invoice_no || "").trim()
+        };
         el("siDuplicateTitle").textContent=activeDuplicate ? "INVOICE ALREADY IN PROGRESS" : "INVOICE ALREADY RECEIVED";
         const resumable=["DRAFT","PENDING_MASTER","PARTIALLY_POSTED"].includes(doc.status);
         const master=data.currentMasterSummary || {checked:0,nowFound:0,stillUnresolved:0};
         const masterPanel=summary.unresolvedBarcodes?`<p class="si-duplicate-state ${master.checked>0&&master.stillUnresolved===0?"success":"warning"}">${master.checked>0&&master.stillUnresolved===0?`✓ ALL ${master.nowFound} UNRESOLVED BARCODES NOW RESOLVABLE`:master.nowFound>0?`⚠ PARTIALLY RESOLVED IN PRODUCT MASTER · ${master.nowFound} NOW FOUND · ${master.stillUnresolved} STILL UNRESOLVED`:`⚠ ${master.stillUnresolved} BARCODE(S) STILL UNRESOLVED`}</p>`:"";
         const copy=doc.status === "COMPLETE"?`All ${summary.postedUnits} units were posted to inventory. This invoice cannot be received again.`:`${summary.postedUnits} of ${summary.scannedQty} scanned units were posted to inventory. ${summary.unresolvedUnits} physical units remain unresolved/unposted. Current Product Master matches do not post stock; resume the original Stock Inward to retry and review.`;
-        const duplicateStatus=doc.status === "COMPLETE"?"✓ FULLY RECEIVED":doc.status === "DRAFT"?"⚠ IN PROGRESS":master.nowFound>0&&master.stillUnresolved>0?"⚠ PARTIALLY RESOLVED IN PRODUCT MASTER":doc.status === "PARTIALLY_POSTED"?"⚠ PARTIALLY POSTED":"⚠ PENDING MASTER";
-        el("siDuplicateBody").innerHTML=`<div class="si-duplicate-party"><strong>${escapeHtml(doc.supplier_name || "Supplier")}</strong><span>${escapeHtml(doc.invoice_number_snapshot || doc.invoice_no || "—")}</span></div><p class="si-duplicate-document">Stock Inward <strong>${escapeHtml(doc.movement_no)}</strong><span class="si-status-badge ${escapeHtml(doc.status.toLowerCase())}">${escapeHtml(doc.status.replaceAll("_"," "))}</span><span>${escapeHtml(formatBusinessDate(doc.business_date))}</span></p><div class="si-duplicate-metrics"><div><small>INVOICE QTY</small><strong>${doc.invoice_total_quantity ?? "—"}</strong></div><div><small>SCANNED</small><strong>${summary.scannedQty}</strong></div><div><small>POSTED</small><strong>${summary.postedUnits}</strong></div><div><small>UNRESOLVED</small><strong>${summary.unresolvedUnits}</strong></div></div><p class="si-duplicate-state ${doc.status === "COMPLETE"?"success":"warning"}">${duplicateStatus}</p>${masterPanel}<p class="si-duplicate-copy">${copy}</p>${summary.unresolvedBarcodes?`<button id="siDuplicateUnresolved" class="klbs-cancel-btn" type="button">VIEW UNRESOLVED BARCODES</button>`:""}`;
+        const duplicateStatus=doc.status === "COMPLETE"?"FULLY RECEIVED":doc.status === "DRAFT"?"⚠ IN PROGRESS":master.nowFound>0&&master.stillUnresolved>0?"⚠ PARTIALLY RESOLVED IN PRODUCT MASTER":doc.status === "PARTIALLY_POSTED"?"⚠ PARTIALLY POSTED":"⚠ PENDING MASTER";
+        el("siDuplicateBody").innerHTML=`<div class="si-duplicate-party"><strong>${escapeHtml(doc.supplier_name || "Supplier")}</strong><span>${escapeHtml(doc.invoice_number_snapshot || doc.invoice_no || "—")}</span></div><p class="si-duplicate-document">Stock Inward <strong>${escapeHtml(doc.movement_no)}</strong><span class="si-status-badge ${escapeHtml(doc.status.toLowerCase())}">${escapeHtml(doc.status.replaceAll("_"," "))}</span><span>${escapeHtml(formatBusinessDate(doc.business_date))}</span></p><div class="si-duplicate-metrics"><div><small>INVOICE QTY</small><strong>${doc.invoice_total_quantity ?? "—"}</strong></div><div><small>SCANNED</small><strong>${summary.scannedQty}</strong></div><div><small>POSTED</small><strong>${summary.postedUnits}</strong></div><div><small>UNRESOLVED</small><strong>${summary.unresolvedUnits}</strong></div></div><p class="si-duplicate-state ${doc.status === "COMPLETE"?"fully-received":"warning"}">${duplicateStatus}</p>${masterPanel}<p class="si-duplicate-copy">${copy}</p>${summary.unresolvedBarcodes?`<button id="siDuplicateUnresolved" class="klbs-cancel-btn" type="button">VIEW UNRESOLVED BARCODES</button>`:""}`;
         el("siDuplicateActions").innerHTML=`${resumable?`<button id="siDuplicateResume" class="klbs-primary-btn" type="button">${doc.status==="DRAFT"?"RESUME STOCK INWARD":"VIEW / RESUME STOCK INWARD"}</button>`:`<button id="siDuplicateView" class="klbs-primary-btn" type="button">VIEW STOCK INWARD</button>`}<button id="siDuplicateClose" class="klbs-cancel-btn" type="button">CLOSE</button>`;
         el("siDuplicateOverlay").hidden=false; el("siDuplicateOverlay").classList.add("si-dialog-visible");
         el("siDuplicateClose").onclick=closeDuplicateModal;
-        el("siDuplicateExit").onclick=closeDuplicateModal;
         el("siDuplicateResume")?.addEventListener("click",async()=>{closeDuplicateModal();await openDraft(doc.id);});
         el("siDuplicateView")?.addEventListener("click",async()=>{closeDuplicateModal();await openDraft(doc.id,{historical:true});});
         el("siDuplicateUnresolved")?.addEventListener("click",async()=>{closeDuplicateModal();await openDraft(doc.id);await openUnresolvedDrawer(el("siUnresolved"),doc.id);});
         el("siDuplicateClose")?.focus();
     }
-    function closeDuplicateModal(){el("siDuplicateOverlay").classList.remove("si-dialog-visible");el("siDuplicateOverlay").hidden=true;duplicateDialog=null;updateScannerGate();if(active){const target=el("siScanner")?.disabled?el("siInvoiceNumber"):el("siScanner");target?.focus();}}
+    function isDismissedDuplicate(supplierId,invoiceNumber){return Boolean(dismissedDuplicateInvoice && String(supplierId || "")===dismissedDuplicateInvoice.supplierId && String(invoiceNumber || "").trim()===dismissedDuplicateInvoice.invoiceNumber);}
+    function isDismissedPersistedDuplicate(supplierId,invoiceNumber){
+        return Boolean(documentData && isDismissedDuplicate(supplierId,invoiceNumber) &&
+            dismissedDuplicateInvoice.supplierId===String(documentData.document.supplier_id || "") &&
+            dismissedDuplicateInvoice.invoiceNumber===String(documentData.document.invoice_number_snapshot || documentData.document.invoice_no || "").trim());
+    }
+    function closeDuplicateModal(){
+        const rejected=duplicateDialogInvoice, invoiceInput=el("siInvoiceNumber"), invoiceSelect=el("siInvoice");
+        const currentInvoice=String(invoiceInput?.value || "").trim();
+        if(rejected?.invoiceNumber && currentInvoice===rejected.invoiceNumber) {
+            const isPersistedPair=rejected.supplierId===rejected.persistedSupplierId && rejected.invoiceNumber===rejected.persistedInvoiceNumber;
+            if(!isPersistedPair) {
+                invoiceInput.value=rejected.persistedInvoiceNumber;
+                const selectedInvoiceNumber=String(invoiceSelect?.selectedOptions?.[0]?.dataset.invoiceNumber || "").trim();
+                if(String(invoiceSelect?.value || "")!==rejected.persistedSupplierInvoiceId && selectedInvoiceNumber===rejected.invoiceNumber) invoiceSelect.value=rejected.persistedSupplierInvoiceId;
+                dismissedDuplicateInvoice=null;
+                duplicateClear=true;
+                contextSaved=false;
+            } else {
+                dismissedDuplicateInvoice={supplierId:rejected.supplierId,invoiceNumber:rejected.invoiceNumber};
+            }
+        }
+        duplicateCheckSequence++;
+        clearTimeout(contextSaveTimer); contextSaveTimer=null;
+        el("siDuplicateOverlay").classList.remove("si-dialog-visible");el("siDuplicateOverlay").hidden=true;duplicateDialog=null;duplicateDialogInvoice=null;updateScannerGate();
+        if(active)invoiceInput?.focus();
+    }
     async function scanBarcode(barcode) {
         barcode = String(barcode ?? "").trim();
         if (!barcode) { showMessage("Scan a product barcode."); return; }
-        if (!/^[0-9]+$/.test(barcode)) { showMessage("Barcode must contain numbers only.",true); el("siScanner")?.focus(); el("siScanner")?.select(); return; }
+        if (/[\u0000-\u001F\u007F-\u009F]/.test(barcode)) { showMessage("Barcode contains unsupported control characters.",true); el("siScanner")?.focus(); el("siScanner")?.select(); return; }
         if (!await saveContext() || !scannerHeaderIsValid() || !duplicateClear) { updateScannerGate(); showMessage("Complete receiving details before scanning.",true); return; }
         try {
             const resolution = await api().stockInwardResolveBarcode(barcode);
@@ -402,7 +428,7 @@
         el("siCode").textContent = doc.movement_no;
         el("siStatus").textContent = doc.status.replaceAll("_", " ");
         el("siStatus").className = `si-status-badge ${doc.status.toLowerCase()}`;
-        el("siPageTitle").textContent = "STOCK INWARD";
+        el("siPageTitle").textContent = activeIsNew ? "NEW STOCK INWARD" : readOnly ? "STOCK INWARD DETAILS" : "EDIT STOCK INWARD";
         el("siActions").hidden = readOnly;
         el("siReadOnlyBanner").hidden = !readOnly;
         el("siHistoricalPrint").hidden = !readOnly || !["COMPLETE","PARTIALLY_POSTED"].includes(doc.status) || summary.postedUnits <= 0;
@@ -538,7 +564,10 @@
     async function showPostReview() {
         if (!await saveContext()) return;
         if (!scannerHeaderIsValid()) { showMessage("Complete all receiving details before Review / Post.",true); updateScannerGate(); return; }
+        if(isDismissedPersistedDuplicate(el("siSupplier").value,el("siInvoiceNumber").value)) return;
+        const request=++duplicateCheckSequence;
         const duplicate=await api().stockInwardFindDuplicateInvoice({supplierId:Number(el("siSupplier").value),invoiceNumber:el("siInvoiceNumber").value,excludeMovementId:documentData.document.id});
+        if(request!==duplicateCheckSequence)return;
         if(duplicate.duplicate){duplicateClear=false;openDuplicateModal(duplicate);updateScannerGate();return;}
         const s = documentData.summary, d = documentData.document;
         if(s.eligibleToPost <= 0){showMessage("At least one recognized unit must be eligible to post.",true);return;}
@@ -559,8 +588,24 @@
         authInProgress = true;
         try {
             const movementId=documentData.document.id;
+            if(isDismissedPersistedDuplicate(documentData.document.supplier_id,documentData.document.invoice_number_snapshot || documentData.document.invoice_no)) { duplicateClear=false; updateScannerGate(); return; }
+            if (documentData.document.business_date !== documentData.currentBusinessDate) {
+                if (!confirm("This older Stock Inward draft must use the current KLBS business date before posting. Continue with the current business date?")) return;
+                documentData = await api().stockInwardUpdateContext({
+                    movementId,
+                    supplierId:el("siSupplier").value || null,
+                    supplierInvoiceId:el("siInvoice").value || null,
+                    invoiceNumber:el("siInvoiceNumber").value,
+                    invoiceDate:el("siInvoiceDate").value,
+                    invoiceTotalQuantity:el("siInvoiceQty").value,
+                    reference:el("siRemarks").value,
+                    businessDate:documentData.currentBusinessDate
+                });
+            }
             const postedBefore=Number(documentData.summary.postedUnits)||0;
+            const duplicateRequest=++duplicateCheckSequence;
             const duplicate=await api().stockInwardFindDuplicateInvoice({supplierId:Number(documentData.document.supplier_id),invoiceNumber:documentData.document.invoice_number_snapshot || documentData.document.invoice_no,excludeMovementId:documentData.document.id});
+            if(duplicateRequest!==duplicateCheckSequence)return;
             if(duplicate.duplicate){duplicateClear=false;openDuplicateModal(duplicate);updateScannerGate();return;}
             documentData = await api().stockInwardPost({movementId});
             render();
@@ -584,7 +629,10 @@
             }
         } catch(error) {
             if(/already received|already assigned|duplicate/i.test(error.message || "")) {
+                if(isDismissedPersistedDuplicate(documentData.document.supplier_id,documentData.document.invoice_number_snapshot || documentData.document.invoice_no)) { duplicateClear=false; updateScannerGate(); return; }
+                const duplicateRequest=++duplicateCheckSequence;
                 const duplicate=await api().stockInwardFindDuplicateInvoice({supplierId:Number(documentData.document.supplier_id),invoiceNumber:documentData.document.invoice_number_snapshot || documentData.document.invoice_no,excludeMovementId:documentData.document.id}).catch(()=>null);
+                if(duplicateRequest!==duplicateCheckSequence)return;
                 if(duplicate?.duplicate){duplicateClear=false;openDuplicateModal(duplicate);}
                 else showMessage("Stock Inward could not be posted. No stock was changed. Please try again.",true);
             } else showMessage("Stock Inward could not be posted. No stock was changed. Please try again.",true);
@@ -665,7 +713,7 @@
     }
     async function returnToHome() {
         if (pageMode === "active" && documentData) {
-            if (!await saveContext()) return;
+            if (!isDismissedPersistedDuplicate(el("siSupplier").value,el("siInvoiceNumber").value) && !await saveContext()) return;
             try { await api().stockInwardAbandonEmpty(documentData.document.id); }
             catch (error) { showMessage(error.message, true); return; }
         }

@@ -231,6 +231,7 @@ function requireSecurityGrant(grant, purpose) {
 // process and is cleared whenever its main frame navigates or exits.
 const stockInwardWorkspaceSessions = new Map();
 const stockInwardReceiptTickets = new Map();
+const stockOutwardWorkspaceSessions = new Map();
 function clearStockInwardReceiptTickets(senderId) { stockInwardReceiptTickets.delete(senderId); }
 function requireStockInwardRenderer(event) {
     if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Unauthorized renderer for Stock Inward.");
@@ -240,6 +241,17 @@ function requireStockInwardWorkspace(event, token) {
     const session = stockInwardWorkspaceSessions.get(event.sender.id);
     if (!session || !token || session.token !== token || session.purpose !== "INVENTORY_INWARD") {
         throw new Error("Manager authorization is required to access Stock Inward.");
+    }
+    return session;
+}
+function requireStockOutwardRenderer(event) {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Unauthorized renderer for Stock Outward.");
+}
+function requireStockOutwardWorkspace(event, token) {
+    requireStockOutwardRenderer(event);
+    const session = stockOutwardWorkspaceSessions.get(event.sender.id);
+    if (!session || !token || session.token !== token || session.purpose !== "INVENTORY_OUTWARD") {
+        throw new Error("Manager authorization is required to access Stock Outward.");
     }
     return session;
 }
@@ -328,6 +340,8 @@ const {
 
 const inventoryTransactionService = require("../database/inventoryTransactionService");
 const stockInwardService = require("../database/stockInwardService");
+const stockOutwardService = require("../database/stockOutwardService");
+const stockOutwardDeletionAuthorization = stockOutwardService.createStockOutwardDeletionAuthorization();
 
 const {
 
@@ -409,6 +423,7 @@ const {
 
     printDayClosingReceipt,
     printStockInwardReceipt,
+    printStockOutwardReceipt,
     printCreditNote,
     saveCreditNotePdf
 
@@ -599,6 +614,7 @@ function attachWindowDiagnostics(window, component) {
 app.on("before-quit", () => {
     remoteDashboard.stop();
     stockInwardService.closeDefaultService().catch(error => technicalLogger.warn("DATABASE", "Stock Inward database connection close failed", { classification: String(error.message || "").slice(0, 200) }));
+    stockOutwardService.closeDefaultService().catch(error => technicalLogger.warn("DATABASE", "Stock Outward database connection close failed", { classification: String(error.message || "").slice(0, 200) }));
     if (orderlyShutdownLogged) return;
     orderlyShutdownLogged = true;
     technicalLogger.info("APPLICATION", "KLBS application shutdown requested");
@@ -643,11 +659,13 @@ function createWindow() {
         if (isMainFrame) {
             stockInwardWorkspaceSessions.delete(mainWindow.webContents.id);
             clearStockInwardReceiptTickets(mainWindow.webContents.id);
+            stockOutwardWorkspaceSessions.delete(mainWindow.webContents.id);
         }
     });
     mainWindow.webContents.on("render-process-gone", () => {
         stockInwardWorkspaceSessions.delete(mainWindow.webContents.id);
         clearStockInwardReceiptTickets(mainWindow.webContents.id);
+        stockOutwardWorkspaceSessions.delete(mainWindow.webContents.id);
     });
 
     mainWindow.on(
@@ -1476,6 +1494,124 @@ function stockInwardInput(input) {
     value.actor = "MANAGER";
     return value;
 }
+ipcMain.handle("stock-outward:enter", async (event, grant) => {
+    requireStockOutwardRenderer(event);
+    requireSecurityGrant(grant, "INVENTORY_OUTWARD");
+    const token = require("crypto").randomBytes(32).toString("hex");
+    stockOutwardWorkspaceSessions.set(event.sender.id, { token, purpose: "INVENTORY_OUTWARD", actorRole: "MANAGER" });
+    return { token };
+});
+ipcMain.handle("stock-outward:exit", async (event, token) => {
+    requireStockOutwardWorkspace(event, token);
+    stockOutwardWorkspaceSessions.delete(event.sender.id);
+    return { success: true };
+});
+function stockOutwardIpcError(error) {
+    if (typeof error?.code === "string" && error.code.startsWith("STOCK_OUTWARD_")) {
+        return new Error(`KLBS_STOCK_OUTWARD_ERROR:${JSON.stringify({
+            code: error.code,
+            ...(Number.isSafeInteger(error.available) ? { available: error.available } : {}),
+            ...(Number.isSafeInteger(error.alreadyAdded) ? { alreadyAdded: error.alreadyAdded } : {}),
+            ...(Number.isSafeInteger(error.requested) ? { requested: error.requested } : {}),
+            ...(typeof error.productName === "string" ? { productName: error.productName } : {})
+        })}`);
+    }
+    return error;
+}
+const stockOutwardCalls = {
+    "stock-outward:resume-list": () => stockOutwardService.listResumable(),
+    "stock-outward:history": (_event, input) => stockOutwardService.listHistory(input || {}),
+    "stock-outward:create": (_event, input) => stockOutwardService.createDraft(input || {}, "MANAGER"),
+    "stock-outward:load": (_event, id) => stockOutwardService.load(id),
+    "stock-outward:update-context": (_event, input) => stockOutwardService.updateContext(input || {}),
+    "stock-outward:save-draft": (_event, input) => stockOutwardService.saveDraft(input || {}),
+    "stock-outward:scan": async (_event, input) => {
+        try { return await stockOutwardService.scan(input || {}); }
+        catch (error) {
+            if (typeof error?.code === "string" && error.code.startsWith("STOCK_OUTWARD_")) {
+                return { success: false, error: {
+                    code: error.code,
+                    ...(Number.isSafeInteger(error.available) ? { available: error.available } : {}),
+                    ...(Number.isSafeInteger(error.alreadyAdded) ? { alreadyAdded: error.alreadyAdded } : {}),
+                    ...(Number.isSafeInteger(error.requested) ? { requested: error.requested } : {}),
+                    ...(typeof error.productName === "string" ? { productName: error.productName } : {})
+                } };
+            }
+            throw error;
+        }
+    },
+    "stock-outward:edit-line": async (_event, input) => {
+        try { return await stockOutwardService.editLine(input || {}); }
+        catch (error) { throw stockOutwardIpcError(error); }
+    },
+    "stock-outward:remove-line": (_event, input) => stockOutwardService.removeLine(input || {}),
+    "stock-outward:cancel": (_event, input) => stockOutwardService.cancelDraft(input?.movementId, "MANAGER")
+};
+for (const [channel, operation] of Object.entries(stockOutwardCalls)) {
+    ipcMain.handle(channel, async (event, token, ...args) => {
+        requireStockOutwardWorkspace(event, token);
+        await databaseReady;
+        return operation(event, ...args);
+    });
+}
+ipcMain.handle("stock-outward:post", async (event, token, input) => {
+    requireStockOutwardWorkspace(event, token);
+    await databaseReady;
+    try {
+        return await stockOutwardService.post({ ...(input || {}), actor: "MANAGER" });
+    } catch (error) {
+        technicalLogger.error("INVENTORY", "Stock Outward document posting failed", error, { movementId: input?.movementId });
+        throw error;
+    }
+});
+ipcMain.handle("stock-outward:delete", async (event, token, input) => {
+    const session = requireStockOutwardWorkspace(event, token);
+    await databaseReady;
+    try {
+        return await stockOutwardService.deleteDocument({
+            movementId: input?.movementId,
+            emptyOnly: input?.emptyOnly === true,
+            actor: session.actorRole,
+            authorization: stockOutwardDeletionAuthorization
+        });
+    } catch (error) {
+        technicalLogger.error("INVENTORY", "Stock Outward document deletion failed", error, { movementId: input?.movementId });
+        throw error;
+    }
+});
+ipcMain.handle("stock-outward:print-receipt", async (event, token, input) => {
+    requireStockOutwardWorkspace(event, token);
+    await databaseReady;
+    try {
+        const detail = await stockOutwardService.load(input?.movementId);
+        if (!detail || detail.document.status !== "COMPLETE" || !detail.lines.length || detail.lines.some(line => line.posting_state !== "POSTED")) {
+            return { success: false, error: "Receipt is available only after Stock Outward has been posted." };
+        }
+        const { formatBusinessDateDisplay } = require("../database/businessDate");
+        const receipt = {
+            storeName: detail.document.store_name_snapshot || "KAIRA LUXE",
+            movementNo: detail.document.movement_no,
+            businessDate: formatBusinessDateDisplay(detail.document.business_date),
+            reason: detail.document.reason,
+            remarks: detail.document.remarks || "—",
+            items: detail.lines.map(line => ({
+                barcode: line.barcode,
+                product: line.product_name_snapshot || "Product",
+                sku: line.sku_snapshot || "—",
+                colour: line.colour_snapshot || "—",
+                size: line.size_snapshot || "—",
+                quantity: Number(line.posted_quantity)
+            })),
+            totalItems: detail.summary.totalItems,
+            totalUnits: detail.summary.totalUnits,
+            printedAt: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })
+        };
+        return await printStockOutwardReceipt(receipt);
+    } catch (error) {
+        technicalLogger.error("PRINTER", "Stock Outward thermal receipt failed", error, { movementId: input?.movementId });
+        return { success: false, error: "Receipt could not be printed. Check the printer and retry." };
+    }
+});
 ipcMain.handle("stock-inward:enter", async (event, grant) => {
     requireStockInwardRenderer(event);
     requireSecurityGrant(grant, "INVENTORY_INWARD");
@@ -1686,39 +1822,6 @@ ipcMain.handle(
     }
 );
 
-
-/* STOCK OUTWARD */
-
-ipcMain.handle(
-    "stock-outward",
-
-    async (event, data) => {
-
-        try {
-            if (!mainWindow || event.sender !== mainWindow.webContents) {
-                throw new Error("Stock outward request rejected.");
-            }
-            requireSecurityGrant(data && data.authorizationGrant, "INVENTORY_OUTWARD");
-            const operationData = { ...(data || {}), createdBy: "MANAGER" };
-            delete operationData.authorizationGrant;
-            return await inventoryTransactionService
-                .stockOutward(operationData);
-
-        }
-
-        catch (error) {
-
-            console.error(
-                "STOCK OUTWARD ERROR:",
-                error
-            );
-
-            throw error;
-
-        }
-
-    }
-);
 
 /* ===========================================
    INVENTORY SUMMARY

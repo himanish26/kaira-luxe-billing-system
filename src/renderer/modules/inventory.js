@@ -479,11 +479,7 @@ let currentStockAuthorizationGrant = null;
 
 function discardStockAuthorization() {
     const grant = currentStockAuthorizationGrant;
-    const purpose = currentStockTransactionType === "INWARD"
-        ? "INVENTORY_INWARD"
-        : currentStockTransactionType === "OUTWARD"
-            ? "INVENTORY_OUTWARD"
-            : null;
+    const purpose = currentStockTransactionType === "INWARD" ? "INVENTORY_INWARD" : null;
     currentStockAuthorizationGrant = null;
     if (grant && purpose && window.electronAPI.administratorSecurity?.discardGrant) {
         window.electronAPI.administratorSecurity.discardGrant(grant, purpose).catch(() => {});
@@ -494,6 +490,8 @@ window.discardStockTransactionAuthorization = discardStockAuthorization;
 
 
 function openStockTransaction(type, authorizationGrant) {
+
+    if (type !== "INWARD") return;
 
     currentStockTransactionType = type;
     currentStockProduct = null;
@@ -517,9 +515,6 @@ function openStockTransaction(type, authorizationGrant) {
     const inwardFields =
         document.getElementById("stockInwardFields");
 
-    const outwardFields =
-        document.getElementById("stockOutwardFields");
-
     const qty =
         document.getElementById("stockTransactionQty");
 
@@ -528,12 +523,6 @@ function openStockTransaction(type, authorizationGrant) {
 
     const inwardRemarks =
         document.getElementById("stockInwardRemarks");
-
-    const outwardReason =
-        document.getElementById("stockOutwardReason");
-
-    const outwardRemarks =
-        document.getElementById("stockOutwardRemarks");
 
     const confirmBtn =
         document.getElementById("confirmStockTransactionBtn");
@@ -545,8 +534,6 @@ function openStockTransaction(type, authorizationGrant) {
     invoice.value = "";
     inwardRemarks.value = "";
 
-    outwardReason.value = "";
-    outwardRemarks.value = "";
 
 
     productDetails.style.display = "none";
@@ -555,23 +542,8 @@ function openStockTransaction(type, authorizationGrant) {
     confirmBtn.disabled = true;
 
 
-    if (type === "INWARD") {
-
-        title.textContent = "📥 Stock Inward";
-
-        inwardFields.style.display = "block";
-
-        outwardFields.style.display = "none";
-
-    } else {
-
-        title.textContent = "📤 Stock Outward";
-
-        inwardFields.style.display = "none";
-
-        outwardFields.style.display = "block";
-
-    }
+    title.textContent = "📥 Stock Inward";
+    inwardFields.style.display = "block";
 
 
     modal.style.display = "flex";
@@ -746,34 +718,6 @@ function validateStockTransaction() {
     }
 
 
-    if (
-        currentStockTransactionType === "OUTWARD"
-    ) {
-
-        const reason =
-            document.getElementById(
-                "stockOutwardReason"
-            ).value;
-
-        const currentStock =
-            Number(
-                currentStockProduct.current_stock ??
-                currentStockProduct.opening_stock ??
-                0
-            );
-
-
-        if (!reason || qty > currentStock) {
-
-            confirmBtn.disabled = true;
-
-            return;
-
-        }
-
-    }
-
-
     confirmBtn.disabled = false;
 
 }
@@ -802,8 +746,8 @@ function initializeInventoryEvents() {
         const stockInwardBtn =
         document.getElementById("stockInwardBtn");
 
-    const stockOutwardBtn =
-        document.getElementById("stockOutwardBtn");
+    const stockOutwardV21Btn =
+        document.getElementById("stockOutwardV21Btn");
 
     const closeStockModalBtn =
         document.getElementById("closeStockModalBtn");
@@ -821,11 +765,6 @@ function initializeInventoryEvents() {
     const stockTransactionQty =
         document.getElementById(
             "stockTransactionQty"
-        );
-
-    const stockOutwardReason =
-        document.getElementById(
-            "stockOutwardReason"
         );
 
     const confirmStockTransactionBtn =
@@ -937,16 +876,16 @@ function initializeInventoryEvents() {
     }
 
 
-    /* STOCK OUTWARD */
-
-    if (stockOutwardBtn) {
-
-        stockOutwardBtn.onclick = async () => {
+    if (stockOutwardV21Btn) {
+        stockOutwardV21Btn.onclick = async () => {
             const grant = await requestAdminAuthorization("INVENTORY_OUTWARD");
-            if (grant) openStockTransaction("OUTWARD", grant);
-
+            if (!grant) return;
+            try {
+                await window.openStockOutwardPage?.(grant);
+            } catch (error) {
+                alert(error.message || "Stock Outward could not be opened.");
+            }
         };
-
     }
 
 
@@ -1001,17 +940,6 @@ function initializeInventoryEvents() {
     }
 
 
-    /* VALIDATE OUTWARD REASON */
-
-    if (stockOutwardReason) {
-
-        stockOutwardReason.addEventListener(
-            "change",
-            validateStockTransaction
-        );
-
-    }
-    
     if (searchBox) {
 
         searchBox.addEventListener("input", (e) => {
@@ -1146,60 +1074,6 @@ remarks:
         }
 
 
-        /* ===============================
-           STOCK OUTWARD
-        =============================== */
-
-        else if (
-            currentStockTransactionType ===
-            "OUTWARD"
-        ) {
-
-            const reason =
-                stockOutwardReason.value;
-
-
-            if (!reason) {
-
-                alert(
-                    "Please select a reason."
-                );
-
-                confirmStockTransactionBtn.disabled =
-                    false;
-
-                return;
-
-            }
-
-
-            result =
-                await window.electronAPI.stockOutward({
-
-                    authorizationGrant: currentStockAuthorizationGrant,
-
-                    productId:
-                        currentStockProduct.id,
-
-                    barcode:
-                        currentStockProduct.barcode,
-
-                    quantity:
-                        transactionQty,
-
-                    reason:
-                        reason,
-
-remarks:
-    document.getElementById(
-        "stockOutwardRemarks"
-    ).value.trim()
-
-                });
-
-        }
-
-
 if (!result) {
     throw new Error(
         "Transaction could not be completed."
@@ -1210,10 +1084,7 @@ if (!result) {
    TRANSACTION SAVED SUCCESSFULLY
 =========================================== */
 
-const successMessage =
-    currentStockTransactionType === "INWARD"
-        ? "Stock inward completed successfully."
-        : "Stock outward completed successfully.";
+const successMessage = "Stock inward completed successfully.";
 
 /* Close modal immediately after successful save */
 
