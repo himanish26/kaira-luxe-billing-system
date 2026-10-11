@@ -156,6 +156,7 @@ function getRendererSettings() {
             admin_security_initialized,
             manager_pin_hash,
             manager_security_initialized,
+            pin_permissions_json,
             smtp_password,
             ...safeSettings
         } = settings;

@@ -15,6 +15,8 @@
     let searchTimer = null;
     let detailReturnFocus = null;
     let historySummaryVisible = false;
+    let trackerInitialized = false;
+    let trackerInitializationPromise = null;
 
     function localDate(date = new Date()) {
         return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -208,13 +210,6 @@
         $("expenseBatchExportBtn").disabled = false;
     }
 
-    async function requestManagerGrant() {
-        if (typeof window.requestAdminAuthorization !== "function") {
-            throw new Error("Manager authorization is unavailable.");
-        }
-        return window.requestAdminAuthorization("EXPENSE_POST");
-    }
-
     async function postDraftBatch() {
         const draftEntries = draftState.getEntries();
         if (!draftEntries.length || postedBatch) return;
@@ -243,28 +238,18 @@
         );
         if (!confirmed) return;
 
-        let grant;
-        try { grant = await requestManagerGrant(); }
-        catch (error) {
-            await window.showNativeAlert(error.message || "Manager authorization could not be opened.");
-            return;
-        }
-        if (!grant) return;
-
         const postButton = $("expensePostBtn");
         postButton.disabled = true;
         postButton.textContent = "POSTING...";
         try {
-            let result = await window.electronAPI.postExpenseBatch(entries, duplicateAcknowledged, grant);
+            let result = await window.electronAPI.postExpenseBatch(entries, duplicateAcknowledged);
             if (!result.success && result.code === "EXPENSE_DUPLICATE_ACK_REQUIRED" && result.duplicates?.length) {
                 const accepted = await window.showNativeConfirm(
                     "A matching posted expense appeared during authorization. Acknowledge this duplicate warning and authorize posting again?",
                     postButton
                 );
                 if (accepted) {
-                    const retryGrant = await requestManagerGrant();
-                    if (!retryGrant) return;
-                    result = await window.electronAPI.postExpenseBatch(entries, true, retryGrant);
+                    result = await window.electronAPI.postExpenseBatch(entries, true);
                 }
             }
             if (!result.success) {
@@ -536,13 +521,30 @@
                 closeExpenseDetails();
             }
         }, true);
-        window.openExpenseTracker = showTracker;
     }
 
-    initialize().catch(error => {
-        $("expenseEntryMessage").textContent = error.message || "Expense Tracker could not be initialized.";
-        $("expenseAddBtn").disabled = true;
-        $("expensePostBtn").disabled = true;
-        $("expenseHistoryOpenBtn").disabled = true;
-    });
+    async function ensureTrackerInitialized() {
+        if (trackerInitialized) return;
+        if (!trackerInitializationPromise) {
+            trackerInitializationPromise = initialize().then(() => {
+                trackerInitialized = true;
+            }).catch(error => {
+                trackerInitializationPromise = null;
+                throw error;
+            });
+        }
+        await trackerInitializationPromise;
+    }
+
+    window.openExpenseTracker = async () => {
+        try {
+            let authorized = await window.electronAPI.administratorSecurity.hasProtectedWorkspace("accountingData");
+            if (!authorized) authorized = Boolean(await window.authorizeKlbsWorkspaceEntry?.("ACCOUNTING_DATA_MODULE_ACCESS"));
+            if (!authorized) return;
+            await ensureTrackerInitialized();
+            showTracker();
+        } catch (error) {
+            $("expenseEntryMessage").textContent = error.message || "Expense Tracker could not be initialized.";
+        }
+    };
 })();

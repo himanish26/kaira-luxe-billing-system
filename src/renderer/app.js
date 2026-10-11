@@ -511,7 +511,7 @@ async function showAdministratorSecurityPage() {
                 <h2>ADMINISTRATOR PIN</h2>
                 <div class="security-status-card"><span>Status</span><strong class="security-status-value security-status-success">Configured</strong></div>
                 <div id="securityChangeStatusMessage" class="security-message" aria-live="polite"></div>
-                <button id="securityOpenChangePinBtn" type="button" class="dashboard-btn security-action-btn">Change Administrator PIN</button>
+                <div class="security-pin-action-row"><button id="securityOpenChangePinBtn" type="button" class="dashboard-btn security-action-btn">Change Administrator PIN</button><button id="securityOpenPinManagementBtn" type="button" class="security-pin-management-btn">PIN Management</button></div>
                 <div id="securityChangePinPanel" class="security-recovery-panel" hidden>
                     <h2>CHANGE ADMINISTRATOR PIN</h2>
                     <div class="security-form-grid">
@@ -631,6 +631,7 @@ renderSettingsPage({
     }
 
     const openChangeButton = document.getElementById("securityOpenChangePinBtn");
+    const pinManagementButton = document.getElementById("securityOpenPinManagementBtn");
     const changePanel = document.getElementById("securityChangePinPanel");
     const changeButton = document.getElementById("securityChangePinBtn");
     const cancelChangeButton = document.getElementById("securityCancelChangePinBtn");
@@ -646,6 +647,25 @@ renderSettingsPage({
         document.getElementById("securityChangeStatusMessage").textContent = "";
         document.getElementById("securityChangeStatusMessage").classList.remove("success");
         document.getElementById("securityCurrentPin").focus();
+    };
+    if (pinManagementButton) pinManagementButton.onclick = async () => {
+        let administratorGrant = null;
+        let masterGrant = null;
+        try {
+            administratorGrant = await requestAdminAuthorization("PIN_MANAGEMENT_ADMIN");
+            if (!administratorGrant) return;
+            masterGrant = await requestAdminAuthorization("PIN_MANAGEMENT_MASTER");
+            if (!masterGrant) {
+                window.electronAPI.administratorSecurity.discardGrant(administratorGrant, "PIN_MANAGEMENT_ADMIN");
+                return;
+            }
+            const session = await window.electronAPI.administratorSecurity.openPinManagement(administratorGrant, masterGrant);
+            openPinManagementDrawer(session, pinManagementButton);
+        } catch (error) {
+            if (administratorGrant) window.electronAPI.administratorSecurity.discardGrant(administratorGrant, "PIN_MANAGEMENT_ADMIN");
+            if (masterGrant) window.electronAPI.administratorSecurity.discardGrant(masterGrant, "PIN_MANAGEMENT_MASTER");
+            await showNativeAlert(error.message || "PIN Management could not be opened.");
+        }
     };
     if (cancelChangeButton) cancelChangeButton.onclick = () => {
         clearAdministratorChangeFields();
@@ -1347,6 +1367,190 @@ function showAuthorizationGranted({ button, modal, input, resetText, onComplete 
 
 }
 
+function openPinManagementDrawer(session, opener) {
+    const authorizationExpiredMessage = "Required authorization is missing, invalid, or has expired.";
+    const rows = [
+        ["familyFriendsDiscount", "Family & Friends Discount"], ["giftVoucher", "Gift Voucher"],
+        ["stockInwardOutward", "Stock Inward / Outward"], ["dayReopen", "Day Reopen"],
+        ["paymentCorrection", "Payment Correction"], ["productMasterImport", "Product Master Import"],
+        ["inventoryReset", "Inventory Reset"], ["backupRestore", "Backup & Restore"],
+        ["applicationUpdates", "Application Updates"], ["activityLogOperations", "Activity Log Protected Operations"],
+        ["integrations", "All Integrations Configuration"],
+        ["customers", "Customers"], ["suppliers", "Suppliers"], ["accountingData", "Accounting & Data"],
+        ["customerReportExport", "Customer Report Export"], ["billSummaryReportExport", "Bill Summary Report Export"],
+        ["receiptSettings", "Receipt Settings Modification"], ["backupLocation", "Backup Location Modification"],
+        ["automaticBackupSettings", "Automatic Backup Settings Modification"],
+        ["administratorPinRecovery", "Administrator PIN Recovery", "MASTER ONLY"],
+        ["pinManagement", "PIN Management", "ADMINISTRATOR + MASTER"],
+        ["restoreDefaultPinSettings", "Restore Default PIN Settings", "ADMINISTRATOR ONLY"]
+    ];
+    const fixedRows = new Set(["pinManagement", "administratorPinRecovery", "restoreDefaultPinSettings"]);
+    const visibleRows = rows.filter(([key]) => !fixedRows.has(key));
+    const overlay = document.createElement("div");
+    overlay.id = "pinManagementOverlay";
+    overlay.className = "klbs-drawer-overlay pin-management-overlay";
+    overlay.hidden = true;
+    overlay.innerHTML = `<aside class="klbs-drawer-panel pin-management-drawer" role="dialog" aria-modal="true" aria-labelledby="pinManagementTitle" tabindex="-1">
+        <header class="klbs-drawer-header"><div><h2 id="pinManagementTitle" class="klbs-drawer-title">PIN MANAGEMENT</h2><p>Configure Administrator and Manager access permissions.</p></div><button type="button" class="klbs-drawer-exit" id="pinManagementExit">EXIT</button></header>
+        <div class="klbs-drawer-body"><div class="pin-management-table-wrap"><table class="pin-management-table"><thead><tr><th>FEATURE</th><th>ADMINISTRATOR</th><th>MANAGER</th></tr></thead><tbody>${visibleRows.map(([key,label,note]) => `<tr><th scope="row">${label}${note ? `<small class="pin-management-feature-note">${note}</small>` : ""}</th>${["administrator","manager"].map(role => `<td><input type="checkbox" data-permission="${key}" data-role="${role}" aria-label="${role} access: ${label}" ${session.permissions[key]?.[role] ? "checked" : ""} ${fixedRows.has(key) ? "disabled" : ""}></td>`).join("")}</tr>`).join("")}</tbody></table></div><p id="pinManagementMessage" class="security-message" role="status" aria-live="polite"></p></div>
+        <footer class="klbs-drawer-footer pin-management-footer"><button type="button" id="pinManagementSave" class="dashboard-btn">SAVE CHANGES</button><button type="button" id="pinManagementDefaults" class="security-secondary-btn">RESTORE DEFAULTS</button><button type="button" id="pinManagementClear" class="security-secondary-btn">CLEAR ALL</button><button type="button" id="pinManagementCancel" class="security-secondary-btn">CANCEL</button></footer>
+    </aside>`;
+    document.body.append(overlay);
+    const readDraft = () => {
+        const result = {};
+        for (const [key] of rows) {
+            result[key] = {};
+            for (const role of ["administrator","manager"]) {
+                result[key][role] = fixedRows.has(key)
+                    ? Boolean(session.permissions[key]?.[role])
+                    : Boolean(overlay.querySelector(`[data-permission="${key}"][data-role="${role}"]`)?.checked);
+            }
+        }
+        return result;
+    };
+    let saved = JSON.stringify(readDraft());
+    let inactivityTimer = null;
+    let inactivityDeadline = Number(session.expiresAt) || (Date.now() + 60 * 1000);
+    let sessionExpired = false;
+    let invalidationPromise = null;
+    let closeStarted = false;
+    const editableRows = rows.filter(([key]) => !fixedRows.has(key)).map(([key]) => key);
+    const isDirty = () => JSON.stringify(readDraft()) !== saved;
+    const isDraftValid = () => editableRows.every(key => {
+        const administrator = overlay.querySelector(`[data-permission="${key}"][data-role="administrator"]`).checked;
+        const manager = overlay.querySelector(`[data-permission="${key}"][data-role="manager"]`).checked;
+        return Number(administrator) + Number(manager) === 1;
+    });
+    const updateSaveAvailability = () => {
+        overlay.querySelector("#pinManagementSave").disabled = !isDraftValid();
+    };
+    const message = (text, success = false) => {
+        const target = overlay.querySelector("#pinManagementMessage");
+        target.textContent = text || "";
+        target.classList.toggle("success", success);
+    };
+    let drawer;
+    const scheduleInactivityExpiry = expiresAt => {
+        inactivityDeadline = Math.max(inactivityDeadline, Number(expiresAt) || 0);
+        clearTimeout(inactivityTimer);
+        inactivityTimer = window.setTimeout(() => { void invalidateSession(); }, Math.max(0, inactivityDeadline - Date.now()));
+    };
+    const invalidateSession = async () => {
+        if (invalidationPromise) return invalidationPromise;
+        sessionExpired = true;
+        clearTimeout(inactivityTimer);
+        invalidationPromise = window.electronAPI.administratorSecurity.closePinManagement(session.sessionToken).catch(() => false);
+        return invalidationPromise;
+    };
+    const recordActivity = async () => {
+        if (sessionExpired || closeStarted) return false;
+        try {
+            const result = await window.electronAPI.administratorSecurity.recordPinManagementActivity(session.sessionToken);
+            if (!result?.active) {
+                await invalidateSession();
+                return false;
+            }
+            scheduleInactivityExpiry(result.expiresAt);
+            return true;
+        } catch (_) {
+            await invalidateSession();
+            return false;
+        }
+    };
+    const handleExpiredAction = async error => {
+        if (/PIN Management authorization has expired|authorization.*expired|expired.*authorization/i.test(String(error?.message || ""))) {
+            await invalidateSession();
+            message(authorizationExpiredMessage);
+            return true;
+        }
+        return false;
+    };
+    const close = async () => {
+        if (drawer.isClosing() || closeStarted) return;
+        if (isDirty()) {
+            const confirmed = await showNativeConfirm("Discard unsaved PIN permission changes?", overlay.querySelector("#pinManagementCancel"));
+            if (!confirmed) return;
+        }
+        closeStarted = true;
+        await invalidateSession();
+        drawer.close();
+    };
+    drawer = window.KLBSDrawer.create({
+        root: overlay,
+        panel: overlay.querySelector(".pin-management-drawer"),
+        labelledBy: "pinManagementTitle",
+        initialFocus: () => overlay.querySelector("#pinManagementSave"),
+        exitButtons: [overlay.querySelector("#pinManagementExit")],
+        onExit: close,
+        onEscape: () => { void close(); return true; },
+        onClosed: () => {
+            void invalidateSession();
+            overlay.remove(); opener?.focus();
+        }
+    });
+    overlay.querySelectorAll("input[data-permission]").forEach(input => input.addEventListener("change", () => {
+        void recordActivity();
+        if (!fixedRows.has(input.dataset.permission)) {
+            if (!input.checked) input.checked = true;
+            const otherRole = input.dataset.role === "administrator" ? "manager" : "administrator";
+            if (input.checked) overlay.querySelector(`[data-permission="${input.dataset.permission}"][data-role="${otherRole}"]`).checked = false;
+        }
+        message(isDraftValid() ? "" : "Assign Administrator or Manager to every feature before saving.");
+        updateSaveAvailability();
+    }));
+    overlay.querySelectorAll("input[data-permission]").forEach(input => input.addEventListener("click", event => {
+        if (input.checked && !fixedRows.has(input.dataset.permission)) event.preventDefault();
+    }));
+    overlay.querySelector("#pinManagementCancel").onclick = close;
+    overlay.addEventListener("keydown", event => {
+        if (event.target.matches(".pin-management-drawer input:not([disabled]), .pin-management-drawer button:not([disabled])") && event.key !== "Enter" && event.key !== " ") {
+            void recordActivity();
+        }
+    }, true);
+    overlay.querySelector("#pinManagementClear").onclick = () => {
+        void recordActivity();
+        overlay.querySelectorAll("input[data-permission]").forEach(input => {
+            if (!fixedRows.has(input.dataset.permission)) input.checked = false;
+        });
+        message("Assign Administrator or Manager to every feature before saving.");
+        updateSaveAvailability();
+    };
+    overlay.querySelector("#pinManagementSave").onclick = async () => {
+        if (!(await recordActivity())) { message(authorizationExpiredMessage); return; }
+        const button = overlay.querySelector("#pinManagementSave");
+        button.disabled = true;
+        try {
+            const proposed = readDraft();
+            const result = await window.electronAPI.administratorSecurity.savePinPermissions(session.sessionToken, proposed);
+            saved = JSON.stringify(proposed);
+            message(`PIN permissions saved. Active authorization grants were invalidated.${result.activityWarning ? ` ${result.activityWarning}` : ""}`, true);
+        } catch (error) {
+            if (!(await handleExpiredAction(error))) message(error.message || "PIN permissions could not be saved.");
+        }
+        finally { updateSaveAvailability(); }
+    };
+    overlay.querySelector("#pinManagementDefaults").onclick = async () => {
+        if (!(await recordActivity())) { message(authorizationExpiredMessage); return; }
+        const confirmed = await showNativeConfirm("Restore the approved default PIN permission matrix? Administrator, Manager, and Master credentials will not change.", overlay.querySelector("#pinManagementDefaults"));
+        if (!confirmed) { await recordActivity(); return; }
+        if (!(await recordActivity())) { message(authorizationExpiredMessage); return; }
+        try {
+            const result = await window.electronAPI.administratorSecurity.restoreDefaultPinPermissions(session.sessionToken);
+            for (const [key] of visibleRows) for (const role of ["administrator","manager"]) {
+                overlay.querySelector(`[data-permission="${key}"][data-role="${role}"]`).checked = Boolean(result.permissions[key]?.[role]);
+            }
+            saved = JSON.stringify(readDraft());
+            message(`Approved default PIN settings restored. PIN credentials are unchanged.${result.activityWarning ? ` ${result.activityWarning}` : ""}`, true);
+            updateSaveAvailability();
+        } catch (error) {
+            if (!(await handleExpiredAction(error))) message(error.message || "Default PIN settings could not be restored.");
+        }
+    };
+    updateSaveAvailability();
+    drawer.open({ opener, initialFocus: overlay.querySelector("#pinManagementSave") });
+    inactivityTimer = window.setTimeout(() => { void invalidateSession(); }, Math.max(0, inactivityDeadline - Date.now()));
+}
+
 async function requireAdminAuthorization(purpose, callback){
 
     if (typeof purpose === "function") {
@@ -1371,7 +1575,7 @@ async function requireAdminAuthorization(purpose, callback){
     }
     adminAuthorizationPendingLookup = false;
     if (requestId !== adminAuthorizationRequestId) return;
-    if (role !== "ADMINISTRATOR" && role !== "MANAGER") {
+    if (role !== "ADMINISTRATOR" && role !== "MANAGER" && role !== "MASTER") {
         adminSuccessCallback = null;
         adminAuthorizationPurpose = null;
         adminAuthorizationPreviousFocus = null;
@@ -1383,11 +1587,14 @@ async function requireAdminAuthorization(purpose, callback){
     }
 
     const managerPurpose = role === "MANAGER";
+    const pinLength = role === "MASTER" ? 6 : 4;
     const title = document.getElementById("authorizationDialogTitle");
-    const roleLabel = managerPurpose ? "Manager" : "Administrator";
+    const roleLabel = managerPurpose ? "Manager" : role === "MASTER" ? "Master" : "Administrator";
     if (title) title.textContent = `${roleLabel} Access`;
-    adminPin.placeholder = `Enter 4-digit ${roleLabel} PIN`;
-    adminPin.setAttribute("aria-label", `Enter 4-digit ${roleLabel} PIN`);
+    adminPin.placeholder = `Enter ${pinLength}-digit ${roleLabel} PIN`;
+    adminPin.maxLength = pinLength;
+    adminPin.pattern = `[0-9]{${pinLength}}`;
+    adminPin.setAttribute("aria-label", `Enter ${pinLength}-digit ${roleLabel} PIN`);
 
     adminPin.value = "";
 
@@ -1817,6 +2024,7 @@ if (reportsBtn) {
 
     }
 
+        closeProtectedWorkspaceSessions();
         hideAllScreens();
 
         businessScreen.style.display = "block";
@@ -1908,6 +2116,7 @@ newBillBtn.addEventListener("click", async () => {
 
     const newBillWasVisible = newBillScreen.style.display === "block";
     const paymentWasVisible = paymentScreen.style.display === "block";
+    closeProtectedWorkspaceSessions();
     hideAllScreens();
 
         if (billItems.length > 0 && (newBillWasVisible || paymentWasVisible)) {
@@ -1952,6 +2161,7 @@ if (settingsBtn){
 
     }
 
+    closeProtectedWorkspaceSessions();
     hideAllScreens();
 
     settingsScreen.style.display = "block";
@@ -1967,6 +2177,7 @@ if (settingsDashboardBtn){
 
     settingsDashboardBtn.addEventListener("click", async () => {
 
+        closeProtectedWorkspaceSessions();
         hideAllScreens();
         dashboardScreen.style.display = "block";
 
@@ -1991,9 +2202,22 @@ if (reportsDashboardBtn){
 let reportsParentScreen = businessScreen;
 
 function showBusinessWorkspace() {
+    closeProtectedWorkspaceSessions();
     hideAllScreens();
     businessScreen.style.display = "block";
 }
+function closeProtectedWorkspaceSessions() {
+    window.electronAPI.administratorSecurity.closeProtectedWorkspace("customers");
+    window.electronAPI.administratorSecurity.closeProtectedWorkspace("suppliers");
+    window.electronAPI.administratorSecurity.closeProtectedWorkspace("accountingData");
+}
+async function authorizeWorkspaceEntry(purpose) {
+    const grant = await requestAdminAuthorization(purpose);
+    if (!grant) return false;
+    try { await window.electronAPI.administratorSecurity.openProtectedWorkspace(grant, purpose); return true; }
+    catch (error) { await showNativeAlert(error.message || "Manager authorization could not be established."); return false; }
+}
+window.authorizeKlbsWorkspaceEntry = authorizeWorkspaceEntry;
 window.returnToAccountingDataWorkspace = () => {
     hideAllScreens();
     accountingDataScreen.style.display = "block";
@@ -2013,6 +2237,7 @@ function returnFromReports() {
 }
 
 async function returnToDashboard() {
+    closeProtectedWorkspaceSessions();
     hideAllScreens();
     dashboardScreen.style.display = "block";
     resetScrollPosition();
@@ -2021,13 +2246,15 @@ async function returnToDashboard() {
 
 document.getElementById("businessDashboardBtn")?.addEventListener("click", returnToDashboard);
 document.getElementById("businessReportsBtn")?.addEventListener("click", openExistingReportsFromBusiness);
-document.getElementById("businessCustomersBtn")?.addEventListener("click", () => {
+document.getElementById("businessCustomersBtn")?.addEventListener("click", async () => {
+    if (!(await authorizeWorkspaceEntry("CUSTOMERS_MODULE_ACCESS"))) return;
     hideAllScreens();
     customersScreen.style.display = "block";
     window.showCustomerDirectory?.();
 });
 document.getElementById("businessSuppliersBtn")?.addEventListener("click", () => window.openSupplierDirectory?.());
-document.getElementById("businessAccountingBtn")?.addEventListener("click", () => {
+document.getElementById("businessAccountingBtn")?.addEventListener("click", async () => {
+    if (!(await authorizeWorkspaceEntry("ACCOUNTING_DATA_MODULE_ACCESS"))) return;
     hideAllScreens();
     accountingDataScreen.style.display = "block";
 });

@@ -94,10 +94,8 @@
                 `Post this management accounting entry?\n\n${dateLabel(entry.accountingDate)} · ${selectedHead}\n${entry.businessSegment} · ${money(entry.amountPaise)}${effect}\n\nPosted entries are immutable. Corrections require a separate reversal.`, button
             );
             if (!confirmed) return;
-            const grant = await window.requestAdminAuthorization("P_AND_L_ENTRY_POST");
-            if (!grant) return;
             announce("managementAccountingFormMessage", "Posting entry…");
-            const response = await window.electronAPI.managementAccountingEntries.post(entry, grant);
+            const response = await window.electronAPI.managementAccountingEntries.post(entry);
             if (!response?.success || !response.entry) throw new Error(response?.error || "Accounting entry was not posted.");
             const posted = response.entry;
             resetForm();
@@ -218,13 +216,11 @@
             `Reverse this posted entry?\n\n${entry.entry_code}\n${dateLabel(entry.accounting_date)} · ${headLabel(entry.accounting_head)}\n${entry.business_segment} · ${money(entry.amount_paise)}\n\nThe original remains unchanged. The reversal is dated the current business date and negates its accounting effect. Any replacement must be entered separately.`, $("managementAccountingReverseBtn")
         );
         if (!confirmed) return;
-        const grant = await window.requestAdminAuthorization("P_AND_L_ENTRY_REVERSE");
-        if (!grant) return;
         const button = $("managementAccountingReverseBtn");
         button.disabled = true;
         announce("managementAccountingDetailMessage", "Recording reversal…");
         try {
-            const response = await window.electronAPI.managementAccountingEntries.reverse(entry.entry_code, { reason }, grant);
+            const response = await window.electronAPI.managementAccountingEntries.reverse(entry.entry_code, { reason });
             if (!response?.success || !response.entry) throw new Error(response?.error || "Entry reversal was not recorded.");
             announce("managementAccountingDetailMessage", `Reversal ${response.entry.entry_code} posted on ${dateLabel(response.entry.accounting_date)}. The original remains in history.`);
             button.hidden = true;

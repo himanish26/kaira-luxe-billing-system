@@ -93,8 +93,14 @@ contextBridge.exposeInMainWorld(
         createCustomerProfile: (data) =>
             ipcRenderer.invoke("customers:create-profile", data),
 
+        createCustomerProfileForManagement: data =>
+            ipcRenderer.invoke("customers:create-management-profile", data),
+
         updateCustomerProfile: (customerId, data) =>
             ipcRenderer.invoke("customers:update-profile", customerId, data),
+
+        updateCustomerProfileForManagement: (customerId, data) =>
+            ipcRenderer.invoke("customers:update-management-profile", customerId, data),
 
         getCustomerPurchaseHistory: (customerId) =>
             ipcRenderer.invoke("customers:purchase-history", customerId),
@@ -488,9 +494,10 @@ testPrinter: (printerName) =>
         printerName
     ),
 
-createBackup: () =>
+createBackup: grant =>
     ipcRenderer.invoke(
-        "backup:create"
+        "backup:create",
+        grant
     ),
 
 getBackupHistory: () =>
@@ -680,7 +687,23 @@ administratorSecurity: {
     recover: data => ipcRenderer.invoke("security:recover", data),
     recoverManagerPin: data => ipcRenderer.invoke("security:recover-manager-pin", data),
     configureManagerPin: (data, grant) =>
-        ipcRenderer.invoke("security:configure-manager-pin", data, grant)
+        ipcRenderer.invoke("security:configure-manager-pin", data, grant),
+    openPinManagement: (administratorGrant, masterGrant) =>
+        ipcRenderer.invoke("security:pin-management-open", administratorGrant, masterGrant),
+    savePinPermissions: (sessionToken, permissions) =>
+        ipcRenderer.invoke("security:pin-permissions-save", sessionToken, permissions),
+    closePinManagement: sessionToken =>
+        ipcRenderer.invoke("security:pin-management-close", sessionToken),
+    recordPinManagementActivity: sessionToken =>
+        ipcRenderer.invoke("security:pin-management-activity", sessionToken),
+    restoreDefaultPinPermissions: sessionToken =>
+        ipcRenderer.invoke("security:pin-permissions-restore-defaults", sessionToken),
+    openProtectedWorkspace: (grant, purpose) =>
+        ipcRenderer.invoke("security:workspace-open", grant, purpose),
+    hasProtectedWorkspace: feature =>
+        ipcRenderer.invoke("security:workspace-has", feature),
+    closeProtectedWorkspace: feature =>
+        ipcRenderer.invoke("security:workspace-close", feature)
 },
 
 }

@@ -97,9 +97,9 @@ async function enterIntegration(kind) {
         generation: ++integrationConfigureGeneration
     };
     activeIntegrationConfigureRequest = request;
-    const purpose = kind === "email" ? "INTEGRATION_EMAIL_SETTINGS" : kind === "dsr" ? "INTEGRATION_DSR_SETTINGS" : "INTEGRATION_REMOTE_DASHBOARD_SETTINGS";
-    const grant = kind === "customerCrm" ? null : await requestAdminAuthorization(purpose);
-    if (kind !== "customerCrm" && !grant) return;
+    const purpose = kind === "email" ? "INTEGRATION_EMAIL_SETTINGS" : kind === "dsr" ? "INTEGRATION_DSR_SETTINGS" : kind === "customerCrm" ? "INTEGRATION_CUSTOMER_CRM_SETTINGS" : "INTEGRATION_REMOTE_DASHBOARD_SETTINGS";
+    const grant = await requestAdminAuthorization(purpose);
+    if (!grant) return;
     if (activeIntegrationConfigureRequest !== request || request.generation !== integrationConfigureGeneration) return;
     try {
         const details = await window.electronAPI.getIntegrationDetails(kind, grant);

@@ -317,6 +317,9 @@
     }
 
     async function open() {
+        let authorized = await window.electronAPI.administratorSecurity.hasProtectedWorkspace("accountingData");
+        if (!authorized) authorized = Boolean(await window.authorizeKlbsWorkspaceEntry?.("ACCOUNTING_DATA_MODULE_ACCESS"));
+        if (!authorized) return;
         window.hideAllScreens();
         screen.style.display = "block";
         resetScreenSession();

@@ -607,7 +607,10 @@
         const data = { name: byId("profileName").value, mobile: byId("profileMobile").value, birthday_ddmm: byId("profileBirthday").value, marriage_anniversary_ddmm: byId("profileAnniversary").value, email, notes: byId("profileNotes").value };
         const id = Number(drawer.dataset.profileId); const save = byId("customerProfileSave"); save.disabled = true;
         try {
-            const profile = id ? await window.electronAPI.updateCustomerProfile(id, data) : await window.electronAPI.createCustomerProfile(data);
+            const managementContext = drawerContext === "management";
+            const profile = id
+                ? await (managementContext ? window.electronAPI.updateCustomerProfileForManagement(id, data) : window.electronAPI.updateCustomerProfile(id, data))
+                : await (managementContext ? window.electronAPI.createCustomerProfileForManagement(data) : window.electronAPI.createCustomerProfile(data));
             if (drawerContext === "management") { const done = managementSaveHandler; managementSaveHandler = null; closeDrawer(); if (done) await done(profile); return; }
             setSelected(profile);
             if (!id) { nameInput.value = profile.name; mobileInput.value = profile.mobile; }

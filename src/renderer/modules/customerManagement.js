@@ -332,7 +332,7 @@
     byId("customerProfileEdit").addEventListener("click", async () => {
         if (!activeCustomerId) return;
         try {
-            const profile = await window.electronAPI.getCustomerProfile(activeCustomerId);
+            const profile = await window.electronAPI.getCustomerManagementProfile(activeCustomerId);
             if (!profile) throw new Error("This customer profile is no longer available.");
             const currentScroll = window.scrollY || 0;
             window.openCustomerDetailsForManagement(profile, async () => {

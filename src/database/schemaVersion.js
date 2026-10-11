@@ -1,4 +1,4 @@
-const CURRENT_DB_SCHEMA_VERSION = 17;
+const CURRENT_DB_SCHEMA_VERSION = 18;
 const SCHEMA_METADATA_TABLE = "klbs_schema_metadata";
 const { migrateV5Foundation } = require("./v5FoundationMigration");
 const { migrateStoreIdentity } = require("./storeIdentityMigration");
@@ -129,6 +129,13 @@ function migrateCustomerCrmOutbox(database) {
         attempt_count INTEGER NOT NULL DEFAULT 0, next_retry_at TEXT, last_error TEXT,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL, synced_at TEXT,
         PRIMARY KEY(store_code, customer_id))`);
+}
+
+async function migratePinPermissionSettings(database) {
+    const columns = await all(database, "PRAGMA table_info(settings)");
+    if (!columns.some(column => column.name === "pin_permissions_json")) {
+        await run(database, "ALTER TABLE settings ADD COLUMN pin_permissions_json TEXT");
+    }
 }
 
 async function migrateVariableValueBillingFoundation(database) {
@@ -287,7 +294,8 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
         { from: 13, to: 14, name: "v2_1_multi_item_stock_inward", up: migrateStockInwardV14, foreignKeysOff: true },
         { from: 14, to: 15, name: "v2_1_stock_inward_cancelled_archive", up: migrateStockInwardArchiveV15 },
         { from: 15, to: 16, name: "v2_1_stock_outward_document_lifecycle", up: migrateStockOutwardCompletionV16 },
-        { from: 16, to: 17, name: "v2_1_customer_crm_outbox", up: migrateCustomerCrmOutbox }
+        { from: 16, to: 17, name: "v2_1_customer_crm_outbox", up: migrateCustomerCrmOutbox },
+        { from: 17, to: 18, name: "v2_1_pin_permission_settings", up: migratePinPermissionSettings }
     ];
     if (detectedVersion === null) {
         logger?.info("DATABASE", "Legacy KLBS database detected; schema metadata is absent");
@@ -371,5 +379,6 @@ module.exports = {
     migrateV5Foundation,
     migrateStockInwardArchiveV15,
     migrateStockOutwardCompletionV16,
+    migratePinPermissionSettings,
     _test: { run, get, all }
 };

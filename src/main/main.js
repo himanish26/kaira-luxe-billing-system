@@ -267,6 +267,13 @@ function requireIntegrationSession(grant, purpose) {
     }
 }
 
+function requireProtectedWorkspace(event, feature) {
+    if (!mainWindow || event.sender !== mainWindow.webContents ||
+        !administratorSecurity.hasWorkspaceSession(event.sender.id, feature)) {
+        throw new Error("Manager authorization is required to access this workspace.");
+    }
+}
+
 const {
 
     saveBill,
@@ -872,6 +879,7 @@ app.whenReady().then(async () => {
     try {
 
         await databaseReady;
+        await administratorSecurity.initializePermissions();
         customerCrmSync.start();
         technicalLogger.info("DATABASE", "Database readiness checkpoint completed");
 
@@ -1321,6 +1329,43 @@ ipcMain.handle("security:get-authorization-role", (event, purpose) =>
         : null);
 ipcMain.handle("security:authorize-pin", (event, pin, purpose) =>
     administratorSecurity.authorizePin(pin, purpose));
+ipcMain.handle("security:pin-management-open", (event, administratorGrant, masterGrant) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("PIN Management request rejected.");
+    return administratorSecurity.openPinManagementSession(administratorGrant, masterGrant, event.sender.id);
+});
+ipcMain.handle("security:pin-permissions-save", async (event, sessionToken, permissions) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("PIN Management request rejected.");
+    return administratorSecurity.savePinPermissions(sessionToken, permissions, event.sender.id);
+});
+ipcMain.handle("security:pin-management-close", (event, sessionToken) =>
+    mainWindow && event.sender === mainWindow.webContents
+        ? administratorSecurity.closePinManagementSession(sessionToken, event.sender.id)
+        : false);
+ipcMain.handle("security:pin-management-activity", (event, sessionToken) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return { active: false };
+    return administratorSecurity.recordPinManagementActivity(sessionToken, event.sender.id);
+});
+ipcMain.handle("security:pin-permissions-restore-defaults", async (event, sessionToken) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("PIN Management request rejected.");
+    return administratorSecurity.restoreDefaultPermissionMatrix(sessionToken, event.sender.id);
+});
+ipcMain.handle("security:workspace-open", (event, grant, purpose) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Protected workspace request rejected.");
+    if (!["CUSTOMERS_MODULE_ACCESS", "SUPPLIERS_MODULE_ACCESS", "ACCOUNTING_DATA_MODULE_ACCESS"].includes(purpose)) {
+        throw new Error("Unsupported protected workspace.");
+    }
+    return administratorSecurity.openWorkspaceSession(grant, purpose, event.sender.id);
+});
+ipcMain.handle("security:workspace-has", (event, feature) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return false;
+    if (!["customers", "suppliers", "accountingData"].includes(feature)) return false;
+    return administratorSecurity.hasWorkspaceSession(event.sender.id, feature);
+});
+ipcMain.handle("security:workspace-close", (event, feature) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return false;
+    if (!["customers", "suppliers", "accountingData"].includes(feature)) return false;
+    return administratorSecurity.closeWorkspaceSession(event.sender.id, feature);
+});
 ipcMain.handle("security:discard-grant", (event, grant, purpose) =>
     mainWindow && event.sender === mainWindow.webContents
         ? administratorSecurity.discardGrant(grant, purpose)
@@ -1399,6 +1444,10 @@ function requireCustomerProfileRenderer(event) {
         throw new Error("Customer profile request rejected.");
     }
 }
+function requireCustomersWorkspace(event) {
+    requireCustomerProfileRenderer(event);
+    requireProtectedWorkspace(event, "customers");
+}
 
 ipcMain.handle("customers:find-by-mobile", async (event, mobile) => {
     requireCustomerProfileRenderer(event);
@@ -1412,37 +1461,53 @@ ipcMain.handle("customers:create-profile", async (event, data) => {
     requireCustomerProfileRenderer(event);
     return customerProfileService.createCustomerProfile(data || {});
 });
+ipcMain.handle("customers:create-management-profile", async (event, data) => {
+    requireCustomersWorkspace(event);
+    return customerProfileService.createCustomerProfile(data || {});
+});
 ipcMain.handle("customers:update-profile", async (event, customerId, data) => {
     requireCustomerProfileRenderer(event);
     return customerProfileService.updateCustomerProfile(customerId, data || {});
 });
+ipcMain.handle("customers:update-management-profile", async (event, customerId, data) => {
+    requireCustomersWorkspace(event);
+    return customerProfileService.updateCustomerProfile(customerId, data || {});
+});
 ipcMain.handle("customers:purchase-history", async (event, customerId) => {
-    requireCustomerProfileRenderer(event);
+    requireCustomersWorkspace(event);
     return customerProfileService.getCustomerPurchaseHistory(customerId);
 });
 ipcMain.handle("customers:purchase-history-page", async (event, customerId, options) => {
-    requireCustomerProfileRenderer(event);
+    requireCustomersWorkspace(event);
     return customerProfileService.getCustomerPurchaseHistoryPage(customerId, options || {});
 });
 ipcMain.handle("customers:list-directory", async (event, search) => {
-    requireCustomerProfileRenderer(event);
+    requireCustomersWorkspace(event);
     return customerProfileService.listCustomerDirectory(search);
 });
 ipcMain.handle("customers:get-management-profile", async (event, customerId) => {
-    requireCustomerProfileRenderer(event);
+    requireCustomersWorkspace(event);
     return customerProfileService.getCustomerManagementProfile(customerId);
 });
 
 function requireSupplierRenderer(event) {
     if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Supplier request rejected.");
+    if (!administratorSecurity.hasWorkspaceSession(event.sender.id, "suppliers") &&
+        !administratorSecurity.hasWorkspaceSession(event.sender.id, "accountingData")) {
+        throw new Error("Manager authorization is required to access Suppliers.");
+    }
+}
+function requireSupplierAccountingRenderer(event) {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Supplier Accounts request rejected.");
+    requireProtectedWorkspace(event, "accountingData");
 }
 ipcMain.handle("suppliers:options", async event => { requireSupplierRenderer(event); return supplierDistributorService.getOptions(); });
 ipcMain.handle("suppliers:brand-create", async (event, value) => { requireSupplierRenderer(event); return supplierDistributorService.createSupplierBrand(value); });
 ipcMain.handle("suppliers:product-segment-create", async (event, value) => { requireSupplierRenderer(event); return supplierDistributorService.createSupplierProductSegment(value); });
 ipcMain.handle("suppliers:list", async (event, options) => { requireSupplierRenderer(event); return supplierDistributorService.listSuppliers(options || {}); });
-ipcMain.handle("suppliers:accounts-list", async (event, options) => { requireSupplierRenderer(event); return supplierDistributorService.listSupplierAccounts(options || {}); });
+ipcMain.handle("suppliers:accounts-list", async (event, options) => { requireSupplierAccountingRenderer(event); return supplierDistributorService.listSupplierAccounts(options || {}); });
 ipcMain.handle("suppliers:get", async (event, code) => { requireSupplierRenderer(event); return supplierDistributorService.getSupplierByCode(code); });
-ipcMain.handle("suppliers:payment-context", async (event, code, amountPaise) => { requireSupplierRenderer(event); return supplierDistributorService.getSupplierPaymentContext(code, amountPaise); });
+ipcMain.handle("suppliers:payment-context", async (event, code, amountPaise) => { requireSupplierAccountingRenderer(event); return supplierDistributorService.getSupplierPaymentContext(code, amountPaise); });
 ipcMain.handle("suppliers:create", async (event, input) => { requireSupplierRenderer(event); return supplierDistributorService.createSupplier(input || {}); });
 ipcMain.handle("suppliers:update", async (event, code, input) => { requireSupplierRenderer(event); return supplierDistributorService.updateSupplier(code, input || {}); });
 ipcMain.handle("suppliers:relationship-add", async (event, code, input) => { requireSupplierRenderer(event); return supplierDistributorService.addSupplierRelationship(code, input || {}); });
@@ -1450,28 +1515,28 @@ ipcMain.handle("suppliers:relationship-update", async (event, code, previous, in
 ipcMain.handle("suppliers:relationship-remove", async (event, code, input) => { requireSupplierRenderer(event); return supplierDistributorService.removeSupplierRelationship(code, input || {}); });
 ipcMain.handle("suppliers:relationship-end", async (event, code, relationshipCode, effectiveTo) => { requireSupplierRenderer(event); return supplierDistributorService.endSupplierRelationship(code, relationshipCode, effectiveTo); });
 ipcMain.handle("suppliers:brand-search", async (event, value) => { requireSupplierRenderer(event); return supplierDistributorService.searchSuppliersByBrand(value); });
-ipcMain.handle("suppliers:post-invoice", async (event, input, grant) => { requireSupplierRenderer(event); return supplierDistributorService.postInvoice(input || {}, grant); });
+ipcMain.handle("suppliers:post-invoice", async (event, input) => { requireSupplierAccountingRenderer(event); return supplierDistributorService.postInvoice(input || {}, administratorSecurity.issueWorkspaceGrant(event.sender.id, "SUPPLIER_INVOICE_POST")); });
 ipcMain.handle("suppliers:post-payment", async (event, input, grant) => {
-    requireSupplierRenderer(event);
-    try { return await supplierDistributorService.postPayment(input || {}, grant); }
+    requireSupplierAccountingRenderer(event);
+    try { return await supplierDistributorService.postPayment(input || {}, administratorSecurity.issueWorkspaceGrant(event.sender.id, "SUPPLIER_PAYMENT_POST")); }
     catch (error) {
         if (error.code === "SUPPLIER_PAYMENT_EXCEEDS_OUTSTANDING") return { success: false, error: error.message, code: error.code };
         throw error;
     }
 });
-ipcMain.handle("suppliers:post-opening", async (event, input, grant) => { requireSupplierRenderer(event); return supplierDistributorService.postOpeningBalance(input || {}, grant); });
-ipcMain.handle("suppliers:openings", async (event, supplierCode) => { requireSupplierRenderer(event); return supplierDistributorService.listOpeningBalances(supplierCode); });
-ipcMain.handle("suppliers:post-credit-note", async (event, input, grant) => { requireSupplierRenderer(event); return supplierDistributorService.postCreditNote(input || {}, grant); });
-ipcMain.handle("suppliers:credit-notes", async (event, supplierCode) => { requireSupplierRenderer(event); return supplierDistributorService.listCreditNotes(supplierCode); });
-ipcMain.handle("suppliers:liabilities", async (event, supplierCode) => { requireSupplierRenderer(event); return supplierDistributorService.listOpenLiabilities(supplierCode); });
-ipcMain.handle("suppliers:statement", async (event, supplierCode) => { requireSupplierRenderer(event); return supplierDistributorService.listSupplierStatement(supplierCode); });
-ipcMain.handle("suppliers:invoices", async (event, supplierId) => { requireSupplierRenderer(event); return supplierDistributorService.listInvoices(supplierId); });
-ipcMain.handle("suppliers:invoice", async (event, code) => { requireSupplierRenderer(event); const invoice=await supplierDistributorService.getInvoice(code);return invoice?{...invoice,lines:await supplierDistributorService.listInvoiceLines(code)}:null; });
-ipcMain.handle("suppliers:payments", async (event, supplierId) => { requireSupplierRenderer(event); return supplierDistributorService.listPayments(supplierId); });
-ipcMain.handle("suppliers:history", async (event, supplierId) => { requireSupplierRenderer(event); return supplierDistributorService.listAccountHistory(supplierId); });
-ipcMain.handle("suppliers:invoice-lines", async (event, code) => { requireSupplierRenderer(event); return supplierDistributorService.listInvoiceLines(code); });
+ipcMain.handle("suppliers:post-opening", async (event, input) => { requireSupplierAccountingRenderer(event); return supplierDistributorService.postOpeningBalance(input || {}, administratorSecurity.issueWorkspaceGrant(event.sender.id, "SUPPLIER_OPENING_BALANCE_POST")); });
+ipcMain.handle("suppliers:openings", async (event, supplierCode) => { requireSupplierAccountingRenderer(event); return supplierDistributorService.listOpeningBalances(supplierCode); });
+ipcMain.handle("suppliers:post-credit-note", async (event, input) => { requireSupplierAccountingRenderer(event); return supplierDistributorService.postCreditNote(input || {}, administratorSecurity.issueWorkspaceGrant(event.sender.id, "SUPPLIER_CREDIT_NOTE_POST")); });
+ipcMain.handle("suppliers:credit-notes", async (event, supplierCode) => { requireSupplierAccountingRenderer(event); return supplierDistributorService.listCreditNotes(supplierCode); });
+ipcMain.handle("suppliers:liabilities", async (event, supplierCode) => { requireSupplierAccountingRenderer(event); return supplierDistributorService.listOpenLiabilities(supplierCode); });
+ipcMain.handle("suppliers:statement", async (event, supplierCode) => { requireSupplierAccountingRenderer(event); return supplierDistributorService.listSupplierStatement(supplierCode); });
+ipcMain.handle("suppliers:invoices", async (event, supplierId) => { requireSupplierAccountingRenderer(event); return supplierDistributorService.listInvoices(supplierId); });
+ipcMain.handle("suppliers:invoice", async (event, code) => { requireSupplierAccountingRenderer(event); const invoice=await supplierDistributorService.getInvoice(code);return invoice?{...invoice,lines:await supplierDistributorService.listInvoiceLines(code)}:null; });
+ipcMain.handle("suppliers:payments", async (event, supplierId) => { requireSupplierAccountingRenderer(event); return supplierDistributorService.listPayments(supplierId); });
+ipcMain.handle("suppliers:history", async (event, supplierId) => { requireSupplierAccountingRenderer(event); return supplierDistributorService.listAccountHistory(supplierId); });
+ipcMain.handle("suppliers:invoice-lines", async (event, code) => { requireSupplierAccountingRenderer(event); return supplierDistributorService.listInvoiceLines(code); });
 ipcMain.handle("suppliers:export-account", async (event, supplierId) => {
-    requireSupplierRenderer(event);
+    requireSupplierAccountingRenderer(event);
     try {
         const data = await supplierDistributorService.getSupplierExportData(supplierId);
         const { filePath, canceled } = await dialog.showSaveDialog(mainWindow, {
@@ -2589,6 +2654,7 @@ function requireManagementPnlRenderer(event) {
     if (!mainWindow || event.sender !== mainWindow.webContents) {
         throw new Error("Management P&L request rejected.");
     }
+    requireProtectedWorkspace(event, "accountingData");
 }
 
 ipcMain.handle("management-pnl:resolve-period", (event, options) => {
@@ -2698,9 +2764,9 @@ ipcMain.handle("management-accounting-entries:options", event => {
     return { success: true, ...managementAccountingEntryService.getOptions() };
 });
 
-ipcMain.handle("management-accounting-entries:post", async (event, input, grant) => {
+ipcMain.handle("management-accounting-entries:post", async (event, input) => {
     requireManagementPnlRenderer(event);
-    try { return { success: true, entry: await managementAccountingEntryService.postEntry(input, grant) }; }
+    try { return { success: true, entry: await managementAccountingEntryService.postEntry(input, administratorSecurity.issueWorkspaceGrant(event.sender.id, "P_AND_L_ENTRY_POST")) }; }
     catch (error) { return { success: false, error: error.message, code: error.code || null }; }
 });
 
@@ -2716,9 +2782,9 @@ ipcMain.handle("management-accounting-entries:list", async (event, filters) => {
     catch (error) { return { success: false, error: error.message, code: error.code || null }; }
 });
 
-ipcMain.handle("management-accounting-entries:reverse", async (event, entryCode, details, grant) => {
+ipcMain.handle("management-accounting-entries:reverse", async (event, entryCode, details) => {
     requireManagementPnlRenderer(event);
-    try { return { success: true, entry: await managementAccountingEntryService.reverseEntry(entryCode, details || {}, grant) }; }
+    try { return { success: true, entry: await managementAccountingEntryService.reverseEntry(entryCode, details || {}, administratorSecurity.issueWorkspaceGrant(event.sender.id, "P_AND_L_ENTRY_REVERSE")) }; }
     catch (error) { return { success: false, error: error.message, code: error.code || null }; }
 });
 
@@ -3057,15 +3123,16 @@ ipcMain.handle(
 
     "expenses:get-options",
 
-    async () => ({ success: true, ...expenseTrackerService.getExpenseTrackerOptions() })
+    async event => { requireProtectedWorkspace(event, "accountingData"); return { success: true, ...expenseTrackerService.getExpenseTrackerOptions() }; }
 );
 
 ipcMain.handle(
 
     "expenses:validate-entry",
 
-    async (_event, entry) => {
+    async (event, entry) => {
         try {
+            requireProtectedWorkspace(event, "accountingData");
             return { success: true, entry: await expenseTrackerService.validateEntry(entry || {}) };
         }
         catch (error) {
@@ -3074,8 +3141,9 @@ ipcMain.handle(
     }
 );
 
-ipcMain.handle("expenses:find-duplicates", async (_event, entries) => {
+ipcMain.handle("expenses:find-duplicates", async (event, entries) => {
     try {
+        requireProtectedWorkspace(event, "accountingData");
         if (!Array.isArray(entries)) throw new Error("Expense entries must be a list.");
         return { success: true, duplicates: await expenseTrackerService.findPostedDuplicates(entries) };
     }
@@ -3084,9 +3152,9 @@ ipcMain.handle("expenses:find-duplicates", async (_event, entries) => {
     }
 });
 
-ipcMain.handle("expenses:post-batch", async (_event, entries, duplicateAcknowledged, grant) => {
+ipcMain.handle("expenses:post-batch", async (event, entries, duplicateAcknowledged) => {
     try {
-        requireSecurityGrant(grant, "EXPENSE_POST");
+        requireProtectedWorkspace(event, "accountingData");
         const batch = await expenseTrackerService.postExpenseBatch(entries, { duplicateAcknowledged: duplicateAcknowledged === true });
         return { success: true, batch };
     }
@@ -3095,8 +3163,9 @@ ipcMain.handle("expenses:post-batch", async (_event, entries, duplicateAcknowled
     }
 });
 
-ipcMain.handle("expenses:history", async (_event, options) => {
+ipcMain.handle("expenses:history", async (event, options) => {
     try {
+        requireProtectedWorkspace(event, "accountingData");
         return { success: true, ...(await expenseTrackerService.listPostedExpenses(options || {})) };
     }
     catch (error) {
@@ -3104,8 +3173,9 @@ ipcMain.handle("expenses:history", async (_event, options) => {
     }
 });
 
-ipcMain.handle("expenses:summary-by-header", async (_event, options) => {
+ipcMain.handle("expenses:summary-by-header", async (event, options) => {
     try {
+        requireProtectedWorkspace(event, "accountingData");
         return { success: true, rows: await expenseTrackerService.getExpenseSummaryByHeader(options || {}) };
     }
     catch (error) {
@@ -3113,8 +3183,9 @@ ipcMain.handle("expenses:summary-by-header", async (_event, options) => {
     }
 });
 
-ipcMain.handle("expenses:details", async (_event, expenseCode) => {
+ipcMain.handle("expenses:details", async (event, expenseCode) => {
     try {
+        requireProtectedWorkspace(event, "accountingData");
         const expense = await expenseTrackerService.getPostedExpenseDetails(expenseCode);
         return expense ? { success: true, expense } : { success: false, error: "Posted expense was not found." };
     }
@@ -3123,8 +3194,9 @@ ipcMain.handle("expenses:details", async (_event, expenseCode) => {
     }
 });
 
-ipcMain.handle("expenses:export-batch", async (_event, batchCode) => {
+ipcMain.handle("expenses:export-batch", async (event, batchCode) => {
     try {
+        requireProtectedWorkspace(event, "accountingData");
         const batch = await expenseTrackerService.getPostedExpenseBatch(batchCode);
         if (!batch) throw new Error("Posted expense batch was not found.");
         const result = await dialog.showSaveDialog(mainWindow, {
@@ -3147,8 +3219,9 @@ ipcMain.handle("expenses:export-batch", async (_event, batchCode) => {
     }
 });
 
-ipcMain.handle("expenses:export-history", async (_event, options) => {
+ipcMain.handle("expenses:export-history", async (event, options) => {
     try {
+        requireProtectedWorkspace(event, "accountingData");
         const filters = options || {};
         const [data, store] = await Promise.all([
             expenseTrackerService.getPostedExpensesForExport(filters),
@@ -3487,9 +3560,11 @@ ipcMain.handle(
 
     "backup:create",
 
-    async () => {
+    async (_event, grant) => {
 
         try {
+
+            requireSecurityGrant(grant, "BACKUP_CREATE");
 
             return await createBackup();
 
