@@ -1,4 +1,4 @@
-const CURRENT_DB_SCHEMA_VERSION = 16;
+const CURRENT_DB_SCHEMA_VERSION = 17;
 const SCHEMA_METADATA_TABLE = "klbs_schema_metadata";
 const { migrateV5Foundation } = require("./v5FoundationMigration");
 const { migrateStoreIdentity } = require("./storeIdentityMigration");
@@ -120,6 +120,15 @@ function migrateBusinessSegmentColumns(database) {
             throw new Error("Business Segment schema migration verification failed.");
         }
     });
+}
+
+function migrateCustomerCrmOutbox(database) {
+    return run(database, `CREATE TABLE IF NOT EXISTS customer_crm_outbox (
+        store_code TEXT NOT NULL, customer_id TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','SYNCED','FAILED')),
+        attempt_count INTEGER NOT NULL DEFAULT 0, next_retry_at TEXT, last_error TEXT,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL, synced_at TEXT,
+        PRIMARY KEY(store_code, customer_id))`);
 }
 
 async function migrateVariableValueBillingFoundation(database) {
@@ -248,6 +257,7 @@ async function validateCurrentSchema(database, currentVersion = CURRENT_DB_SCHEM
             throw new Error("KLBS V16 readiness validation failed: guarded Stock Outward document deletion is missing.");
         }
     }
+    if (currentVersion >= 17) requiredTables.push("customer_crm_outbox");
     const rows = await all(database, `
         SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${requiredTables.map(() => "?").join(",")})
     `, requiredTables);
@@ -276,7 +286,8 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
         { from: 12, to: 13, name: "v2_1_supplier_invoice_capture_modes", up: migrateSupplierInvoiceCapture, foreignKeysOff: true },
         { from: 13, to: 14, name: "v2_1_multi_item_stock_inward", up: migrateStockInwardV14, foreignKeysOff: true },
         { from: 14, to: 15, name: "v2_1_stock_inward_cancelled_archive", up: migrateStockInwardArchiveV15 },
-        { from: 15, to: 16, name: "v2_1_stock_outward_document_lifecycle", up: migrateStockOutwardCompletionV16 }
+        { from: 15, to: 16, name: "v2_1_stock_outward_document_lifecycle", up: migrateStockOutwardCompletionV16 },
+        { from: 16, to: 17, name: "v2_1_customer_crm_outbox", up: migrateCustomerCrmOutbox }
     ];
     if (detectedVersion === null) {
         logger?.info("DATABASE", "Legacy KLBS database detected; schema metadata is absent");

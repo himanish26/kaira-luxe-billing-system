@@ -1,4 +1,7 @@
 const db = require("./database");
+let crmSyncWake = () => {};
+function setCrmSyncWake(callback) { crmSyncWake = typeof callback === "function" ? callback : () => {}; }
+function notifyCrmSyncAfterCommit() { queueMicrotask(() => crmSyncWake()); }
 
 const EMAIL_PATTERN = /^[A-Z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?\.)+[A-Z]{2,}$/i;
 
@@ -81,7 +84,7 @@ const CUSTOMER_CODE_SEQUENCE = `COALESCE(MAX(CASE
     ELSE NULL
 END), 0)`;
 
-async function createCustomerProfileWithCode(data) {
+async function createCustomerProfileWithCode(data, options = {}) {
     const name = requiredName(data && data.name);
     const mobile = normalizeOptionalMobile(data && data.mobile);
     const email = normalizeOptionalEmail(data.email);
@@ -100,8 +103,11 @@ async function createCustomerProfileWithCode(data) {
     if (inserted.changes !== 1) {
         throw new Error("Customer ID sequence exhausted at KLCUS999999.");
     }
-    return get("SELECT * FROM customers WHERE id = ?", [inserted.lastID]).then(publicProfile);
+    const row = await get("SELECT * FROM customers WHERE id = ?", [inserted.lastID]);
+    if (!options.deferCrmWake) queueMicrotask(() => crmSyncWake());
+    return publicProfile(row);
 }
+
 
 async function createCustomerProfile(data) {
     return createCustomerProfileWithCode(data);
@@ -122,7 +128,9 @@ async function updateCustomerProfile(id, data) {
         WHERE id = ? AND active = 1
     `, [name, mobile, email, notes, birthday, anniversary, new Date().toISOString(), customerId]);
     if (!result.changes) throw new Error("Customer profile was not found or is inactive.");
-    return get("SELECT * FROM customers WHERE id = ?", [customerId]).then(publicProfile);
+    const row = await get("SELECT * FROM customers WHERE id = ?", [customerId]);
+    queueMicrotask(() => crmSyncWake());
+    return publicProfile(row);
 }
 
 async function getCustomerProfile(id) {
@@ -243,6 +251,8 @@ module.exports = {
     normalizeOptionalMobile,
     normalizeDdMm,
     normalizeOptionalEmail,
+    setCrmSyncWake,
+    notifyCrmSyncAfterCommit,
     createCustomerProfile,
     createCustomerProfileWithCode,
     updateCustomerProfile,

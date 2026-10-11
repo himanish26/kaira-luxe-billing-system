@@ -3050,6 +3050,28 @@ try {
 
         await runNamedMigration("consolidated_reporting_jobs", () => migrateConsolidatedReportingJobs(db));
         await runNamedMigration("remote_dashboard_outbox", () => migrateRemoteDashboardOutbox(db));
+        await runNamedMigration("customer_crm_outbox", async () => {
+            await new Promise((resolve, reject) => db.run(`CREATE TABLE IF NOT EXISTS customer_crm_outbox (
+                store_code TEXT NOT NULL, customer_id TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','SYNCED','FAILED')),
+                attempt_count INTEGER NOT NULL DEFAULT 0, next_retry_at TEXT, last_error TEXT,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL, synced_at TEXT,
+                PRIMARY KEY(store_code, customer_id))`, error => error ? reject(error) : resolve()));
+            await new Promise((resolve, reject) => db.run(`CREATE TRIGGER IF NOT EXISTS trg_customer_crm_insert AFTER INSERT ON customers
+                WHEN NEW.customer_code IS NOT NULL BEGIN
+                INSERT INTO customer_crm_outbox(store_code,customer_id,revision,status,attempt_count,created_at,updated_at)
+                SELECT s.store_code,NEW.customer_code,1,'PENDING',0,datetime('now'),datetime('now')
+                FROM store_context c JOIN stores s ON s.id=c.current_store_id WHERE c.id=1 AND s.status='ACTIVE'
+                ON CONFLICT(store_code,customer_id) DO UPDATE SET revision=customer_crm_outbox.revision+1,status='PENDING',attempt_count=0,next_retry_at=NULL,last_error=NULL,updated_at=datetime('now');
+                END`, error => error ? reject(error) : resolve()));
+            await new Promise((resolve, reject) => db.run(`CREATE TRIGGER IF NOT EXISTS trg_customer_crm_update AFTER UPDATE OF name,mobile,email,birthday_ddmm,marriage_anniversary_ddmm,updated_at ON customers
+                WHEN NEW.customer_code IS NOT NULL BEGIN
+                INSERT INTO customer_crm_outbox(store_code,customer_id,revision,status,attempt_count,created_at,updated_at)
+                SELECT s.store_code,NEW.customer_code,1,'PENDING',0,datetime('now'),datetime('now')
+                FROM store_context c JOIN stores s ON s.id=c.current_store_id WHERE c.id=1 AND s.status='ACTIVE'
+                ON CONFLICT(store_code,customer_id) DO UPDATE SET revision=customer_crm_outbox.revision+1,status='PENDING',attempt_count=0,next_retry_at=NULL,last_error=NULL,updated_at=datetime('now');
+                END`, error => error ? reject(error) : resolve()));
+        });
             }
         });
 

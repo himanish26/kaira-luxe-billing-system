@@ -472,6 +472,10 @@ sendIntegrationTestEmail: (recipient, grant) => ipcRenderer.invoke("integrations
 testDsrIntegration: grant => ipcRenderer.invoke("integrations:test-dsr", grant),
 testRemoteDashboardIntegration: grant => ipcRenderer.invoke("integrations:test-remote-dashboard", grant),
 clearRemoteDashboardIntegration: grant => ipcRenderer.invoke("integrations:clear-remote-dashboard", grant),
+saveCustomerCrmIntegration: data => ipcRenderer.invoke("integrations:save-customer-crm", data),
+testCustomerCrmIntegration: () => ipcRenderer.invoke("integrations:test-customer-crm"),
+syncCustomerCrm: () => ipcRenderer.invoke("integrations:sync-customer-crm"),
+syncExistingCustomersCrm: () => ipcRenderer.invoke("integrations:sync-existing-customer-crm"),
 
 getPrinters: () =>
     ipcRenderer.invoke(

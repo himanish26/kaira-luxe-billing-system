@@ -5,6 +5,13 @@ function integrationLabel(value) {
     const labels = { NOT_ATTEMPTED:"Not Attempted", NEVER_TESTED:"Not Attempted", UNKNOWN:"Status Unavailable", NEVER:"Never", FAILED:"Failed", SUCCESS:"Successful", PENDING:"Pending", SYNCED:"Synced" };
     return labels[String(value || "").toUpperCase()] || String(value || "Status Unavailable").replace(/_/g, " ");
 }
+function integrationStatusClass(value) {
+    const status = String(value || "").trim().toUpperCase();
+    if (["SUCCESS", "ENABLED", "CONFIGURED", "CONNECTED", "DELIVERED", "SYNCED"].includes(status)) return "integration-status-success";
+    if (["FAILED", "FAILURE", "CONNECTION ERROR"].includes(status)) return "integration-status-failed";
+    if (["PENDING", "RETRYING", "QUEUED"].includes(status)) return "integration-status-pending";
+    return "integration-status-muted";
+}
 function integrationTime(value) {
     if (!value || !Number.isFinite(Date.parse(value))) return "Never";
     const parts = new Intl.DateTimeFormat("en-GB", { timeZone:"Asia/Kolkata", day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit", hour12:true }).formatToParts(new Date(value));
@@ -12,6 +19,13 @@ function integrationTime(value) {
     return `${get("day")} ${get("month")}, ${get("year")}, ${get("hour").padStart(2, "0")}:${get("minute")} ${get("dayPeriod").toUpperCase()}`;
 }
 function integrationEvent(event) { return event ? `${integrationTime(event.at)} · ${integrationLabel(event.status)}` : "Never"; }
+async function loadCustomerCrmForm() {
+    const [crm, config] = await Promise.all([
+        window.electronAPI.getIntegrationDetails("customerCrm"),
+        window.electronAPI.getIntegrationConfig()
+    ]);
+    showCustomerCrmForm(crm, config.customerCrmStatus || {});
+}
 
 let integrationConfigureGeneration = 0;
 let activeIntegrationConfigureRequest = null;
@@ -49,10 +63,7 @@ async function showSystemHealthPage() {
     const outbox = await window.electronAPI.getIntegrationOutboxStatus();
     if (requestGeneration !== systemHealthGeneration) return;
     const source = item => item.source === "ENVIRONMENT" ? '<p class="integration-source">Using Windows system configuration</p>' : "";
-    const remoteStatus = config.remoteDashboard.configured
-        ? config.remoteDashboard.lastTestResult === "FAILED" ? "CONNECTION ERROR" : "CONFIGURED"
-        : "NOT CONFIGURED";
-    const remoteStatusClass = remoteStatus === "CONNECTION ERROR" ? "integration-error" : config.remoteDashboard.configured ? "integration-enabled" : "";
+    const remoteConfigurationStatus = config.remoteDashboard.configured ? "CONFIGURED" : "NOT CONFIGURED";
     const displayDate = value => { const parts = String(value || "").split("-"); return parts.length === 3 ? `${parts[2]} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][Number(parts[1]) - 1]}, ${parts[0]}` : value; };
     const state = value => value === "SUCCESS" ? "SENT" : "PENDING";
     const checkedAt = integrationTime(new Date().toISOString());
@@ -65,17 +76,19 @@ async function showSystemHealthPage() {
     const outboxSection = `<section class="integration-section integration-outbox"><div class="integration-outbox-header"><div><h2>INTEGRATION OUTBOX</h2><p>Automatic delivery of Day Closing reports</p></div><button id="refreshIntegrationStatus" class="integration-button integration-button-secondary">REFRESH STATUS</button></div><div class="integration-outbox-summary"><div><span>INTERNET</span><strong style="color:${outbox.online ? "#198754" : "#c62828"}; background:transparent;">${outbox.online ? "ONLINE" : "OFFLINE"}</strong></div><div><span>PENDING DELIVERIES</span><strong>${outbox.pendingCount}</strong></div><div><span>FAILED DELIVERIES</span><strong>${outbox.failedCount || 0}</strong></div><div><span>LAST CHECKED</span><strong>${checkedAt}</strong></div></div>${outbox.upToDate ? `<div class="integration-outbox-empty"><strong>${reportStatus}</strong><span>${reportStatusDetail}</span></div>` : `<div class="integration-outbox-list"><strong class="integration-outbox-status ${reportStatusClass}">${reportStatus}</strong>${outboxRows}</div>`}</section>`;
     renderSettingsPage({ title:"SYSTEM HEALTH", icon:"&#129658;", subtitle:"Application integrations and operational status.", backText:"← System", backAction:() => { invalidateSystemHealthRequests(); showSystemPage(); },
         content:`${outboxSection}<section class="integration-section"><h2>INTEGRATIONS</h2><div class="integration-summary-grid">
-        <article class="integration-card"><h3>EMAIL &amp; BACKUP</h3><strong>${config.email.configured ? "CONFIGURED" : "NOT CONFIGURED"}</strong>${source(config.email)}
-        <dl><div><dt>SMTP Email Service</dt><dd>${config.email.configured ? "Configured" : "Not Configured"}</dd></div><div><dt>Email After Day Closing</dt><dd class="integration-enabled">ENABLED</dd></div><div><dt>Last Email Backup</dt><dd>${integrationEscape(integrationEvent(config.email.lastEmailBackup))}</dd></div><div><dt>Last Connection Test</dt><dd>${integrationEscape(config.email.lastTestAt ? integrationTime(config.email.lastTestAt) + " · " + integrationLabel(config.email.lastTestResult) : "Never")}</dd></div></dl><button id="configureEmailIntegration" class="dashboard-btn">CONFIGURE</button></article>
-        <article class="integration-card"><h3>DAILY SALES REPORT</h3><strong>${config.dsr.configured ? "CONFIGURED" : "NOT CONFIGURED"}</strong>${source(config.dsr)}
-        <dl><div><dt>Google Sheets</dt><dd>${integrationEscape(config.dsr.tabName || "KLBS_Daily_Data")}</dd></div><div><dt>Daily Sales Report Sync</dt><dd class="integration-enabled">ENABLED</dd></div><div><dt>Last DSR Sync</dt><dd>${integrationEscape(integrationEvent(config.dsr.lastSync))}</dd></div><div><dt>Last Connection Test</dt><dd>${integrationEscape(config.dsr.lastTestAt ? integrationTime(config.dsr.lastTestAt) + " · " + integrationLabel(config.dsr.lastTestResult) : "Never")}</dd></div></dl><button id="configureDsrIntegration" class="dashboard-btn">CONFIGURE</button></article>
-        <article class="integration-card"><h3>REMOTE DASHBOARD</h3><strong class="${remoteStatusClass}">${remoteStatus}</strong>
-        <dl><div><dt>Remote Dashboard</dt><dd>${config.remoteDashboard.configured ? "Configured" : "Not Configured"}</dd></div><div><dt>Installation</dt><dd>KL001 · POS01</dd></div><div><dt>Last Connection Test</dt><dd>${integrationEscape(config.remoteDashboard.lastTestAt ? integrationTime(config.remoteDashboard.lastTestAt) + " · " + integrationLabel(config.remoteDashboard.lastTestResult) : "Never")}</dd></div></dl><button id="configureRemoteDashboardIntegration" class="dashboard-btn">CONFIGURE</button></article>
+        <article class="integration-card"><h3>EMAIL &amp; BACKUP</h3><strong class="${integrationStatusClass(config.email.configured ? "CONFIGURED" : "NOT CONFIGURED")}">${config.email.configured ? "CONFIGURED" : "NOT CONFIGURED"}</strong>${source(config.email)}
+        <dl><div><dt>SMTP Email Service</dt><dd>${config.email.configured ? "Configured" : "Not Configured"}</dd></div><div><dt>Email After Day Closing</dt><dd class="${integrationStatusClass("ENABLED")}">ENABLED</dd></div><div><dt>Last Email Backup</dt><dd class="${integrationStatusClass(config.email.lastEmailBackup?.status)}">${integrationEscape(integrationEvent(config.email.lastEmailBackup))}</dd></div><div><dt>Last Connection Test</dt><dd class="${integrationStatusClass(config.email.lastTestResult)}">${integrationEscape(config.email.lastTestAt ? integrationTime(config.email.lastTestAt) + " · " + integrationLabel(config.email.lastTestResult) : "Never")}</dd></div></dl><button id="configureEmailIntegration" class="dashboard-btn">CONFIGURE</button></article>
+        <article class="integration-card"><h3>DAILY SALES REPORT</h3><strong class="${integrationStatusClass(config.dsr.configured ? "CONFIGURED" : "NOT CONFIGURED")}">${config.dsr.configured ? "CONFIGURED" : "NOT CONFIGURED"}</strong>${source(config.dsr)}
+        <dl><div><dt>Google Sheets</dt><dd>${integrationEscape(config.dsr.tabName || "KLBS_Daily_Data")}</dd></div><div><dt>Daily Sales Report Sync</dt><dd class="${integrationStatusClass("ENABLED")}">ENABLED</dd></div><div><dt>Last DSR Sync</dt><dd class="${integrationStatusClass(config.dsr.lastSync?.status)}">${integrationEscape(integrationEvent(config.dsr.lastSync))}</dd></div><div><dt>Last Connection Test</dt><dd class="${integrationStatusClass(config.dsr.lastTestResult)}">${integrationEscape(config.dsr.lastTestAt ? integrationTime(config.dsr.lastTestAt) + " · " + integrationLabel(config.dsr.lastTestResult) : "Never")}</dd></div></dl><button id="configureDsrIntegration" class="dashboard-btn">CONFIGURE</button></article>
+        <article class="integration-card"><h3>REMOTE DASHBOARD</h3><strong class="${integrationStatusClass(config.remoteDashboard.configured ? "CONFIGURED" : "NOT CONFIGURED")}">${remoteConfigurationStatus}</strong>
+        <dl><div><dt>Operational Status</dt><dd class="${integrationStatusClass(config.remoteDashboard.enabled ? "ENABLED" : "DISABLED")}">${config.remoteDashboard.enabled ? "ENABLED" : "DISABLED"}</dd></div><div><dt>Installation</dt><dd>KL001 · POS01</dd></div><div><dt>Connection Test</dt><dd class="${integrationStatusClass(config.remoteDashboard.lastTestResult)}">${integrationEscape(config.remoteDashboard.lastTestAt ? integrationTime(config.remoteDashboard.lastTestAt) + " · " + integrationLabel(config.remoteDashboard.lastTestResult) : "Never")}</dd></div></dl><button id="configureRemoteDashboardIntegration" class="dashboard-btn">CONFIGURE</button></article>
+        <article class="integration-card"><h3>CUSTOMER CRM</h3><strong class="${integrationStatusClass(config.customerCrm.configured ? "CONFIGURED" : "NOT CONFIGURED")}">${config.customerCrm.configured ? "CONFIGURED" : "NOT CONFIGURED"}</strong><dl><div><dt>Google Sheets</dt><dd>Customer_Master</dd></div><div><dt>Customer Sync</dt><dd class="${integrationStatusClass(config.customerCrm.enabled ? "ENABLED" : "DISABLED")}">${config.customerCrm.enabled ? "ENABLED" : "DISABLED"}</dd></div><div><dt>Pending Customers</dt><dd class="${integrationStatusClass(Number(config.customerCrmStatus?.pendingCount || 0) > 0 ? "PENDING" : "")}">${Number(config.customerCrmStatus?.pendingCount || 0)}</dd></div><div><dt>Last Successful Sync</dt><dd class="${integrationStatusClass(config.customerCrmStatus?.lastSuccessAt ? "SUCCESS" : "")}">${integrationEscape(config.customerCrmStatus?.lastSuccessAt ? integrationTime(config.customerCrmStatus.lastSuccessAt) : "Never")}</dd></div><div><dt>Last Connection Test</dt><dd class="${integrationStatusClass(config.customerCrm.lastTestResult)}">${integrationEscape(config.customerCrm.lastTestAt ? integrationTime(config.customerCrm.lastTestAt) + " · " + integrationLabel(config.customerCrm.lastTestResult) : "Never")}</dd></div></dl><button id="configureCustomerCrmIntegration" class="dashboard-btn">CONFIGURE</button></article>
         </div></section>` });
     delete settingsPage.dataset.integrationConfigure;
     document.getElementById("configureEmailIntegration").onclick = () => enterIntegration("email");
     document.getElementById("configureDsrIntegration").onclick = () => enterIntegration("dsr");
     document.getElementById("configureRemoteDashboardIntegration").onclick = () => enterIntegration("remoteDashboard");
+    document.getElementById("configureCustomerCrmIntegration").onclick = () => enterIntegration("customerCrm");
     document.getElementById("refreshIntegrationStatus").onclick = showSystemHealthPage;
 }
 async function enterIntegration(kind) {
@@ -85,11 +98,18 @@ async function enterIntegration(kind) {
     };
     activeIntegrationConfigureRequest = request;
     const purpose = kind === "email" ? "INTEGRATION_EMAIL_SETTINGS" : kind === "dsr" ? "INTEGRATION_DSR_SETTINGS" : "INTEGRATION_REMOTE_DASHBOARD_SETTINGS";
-    const grant = await requestAdminAuthorization(purpose); if (!grant) return;
+    const grant = kind === "customerCrm" ? null : await requestAdminAuthorization(purpose);
+    if (kind !== "customerCrm" && !grant) return;
     if (activeIntegrationConfigureRequest !== request || request.generation !== integrationConfigureGeneration) return;
     try {
         const details = await window.electronAPI.getIntegrationDetails(kind, grant);
         if (activeIntegrationConfigureRequest !== request || request.generation !== integrationConfigureGeneration) return;
+        if (kind === "customerCrm") {
+            const config = await window.electronAPI.getIntegrationConfig();
+            if (activeIntegrationConfigureRequest !== request || request.generation !== integrationConfigureGeneration) return;
+            showCustomerCrmForm(details, config.customerCrmStatus || {});
+            return;
+        }
         kind === "email" ? showEmailIntegrationForm(details, grant) : kind === "dsr" ? showDsrIntegrationForm(details, grant) : showRemoteDashboardForm(details, grant);
     }
     catch (error) {
@@ -123,7 +143,7 @@ function wireSecret() {
 }
 function showEmailIntegrationForm(email, grant) {
     renderSettingsPage({ title:"EMAIL & BACKUP", icon:"&#128231;", subtitle:"Configure the outgoing email service used for automated KLBS Day Closing backups.", backText:"← System Health", backAction:leaveIntegrationConfiguration,
-        content:`<div class="integration-form"><h2>EMAIL ACCOUNT</h2><div class="integration-form-grid"><label>Account Name<input id="accountName" value="${integrationEscape(email.accountName)}"></label><label>Sender<input id="senderEmail" type="email" value="${integrationEscape(email.senderEmail)}"></label><label>SMTP Server<input id="smtpHost" value="${integrationEscape(email.smtpHost)}"></label><label>SMTP Port<input id="smtpPort" type="number" min="1" max="65535" value="${email.smtpPort}"></label><label>Security Mode<select id="securityMode"><option>STARTTLS</option><option value="SSL_TLS">SSL/TLS</option></select></label><label>SMTP Username<input id="smtpUsername" value="${integrationEscape(email.smtpUsername)}"></label></div><h2>SECURITY</h2>${secretControl("email", email.passwordConfigured)}<fieldset><legend>Backup Recipients</legend><div id="recipients">${recipientRows(email.recipients)}</div><button id="addRecipient" type="button" class="integration-button integration-button-small integration-button-secondary">+ ADD RECIPIENT</button></fieldset><div class="integration-info-row"><span>Email After Day Closing</span><strong>ENABLED</strong></div><div id="message" class="security-message" aria-live="polite"></div><div class="integration-actions"><button id="testConnection" class="integration-button integration-button-secondary">TEST CONNECTION</button><button id="sendTest" class="integration-button integration-button-secondary">SEND TEST EMAIL</button><button id="cancel" class="integration-button integration-button-neutral">CANCEL</button><button id="save" class="integration-button integration-button-primary">SAVE CHANGES</button></div>${emailGuide()}</div>` });
+        content:`<div class="integration-form"><h2>EMAIL ACCOUNT</h2><div class="integration-form-grid"><label>Account Name<input id="accountName" value="${integrationEscape(email.accountName)}"></label><label>Sender<input id="senderEmail" type="email" value="${integrationEscape(email.senderEmail)}"></label><label>SMTP Server<input id="smtpHost" value="${integrationEscape(email.smtpHost)}"></label><label>SMTP Port<input id="smtpPort" type="number" min="1" max="65535" value="${email.smtpPort}"></label><label>Security Mode<select id="securityMode"><option>STARTTLS</option><option value="SSL_TLS">SSL/TLS</option></select></label><label>SMTP Username<input id="smtpUsername" value="${integrationEscape(email.smtpUsername)}"></label></div><h2>SECURITY</h2>${secretControl("email", email.passwordConfigured)}<fieldset><legend>Backup Recipients</legend><div id="recipients">${recipientRows(email.recipients)}</div><button id="addRecipient" type="button" class="integration-button integration-button-small integration-button-secondary">+ ADD RECIPIENT</button></fieldset><h2>SYNC STATUS</h2><div class="integration-info-row"><span class="integration-status-label">Email After Day Closing</span><strong class="${integrationStatusClass("ENABLED")}">ENABLED</strong></div><div class="integration-info-row"><span class="integration-status-label">Last Connection Test</span><strong class="${integrationStatusClass(email.lastTestResult)}">${integrationEscape(email.lastTestAt ? integrationTime(email.lastTestAt) + " · " + integrationLabel(email.lastTestResult) : "Never")}</strong></div><div id="message" class="security-message" aria-live="polite"></div><div class="integration-actions"><button id="testConnection" class="integration-button integration-button-secondary">TEST CONNECTION</button><button id="sendTest" class="integration-button integration-button-secondary">SEND TEST EMAIL</button><button id="cancel" class="integration-button integration-button-neutral">CANCEL</button><button id="save" class="integration-button integration-button-primary">SAVE CHANGES</button></div>${emailGuide()}</div>` });
     settingsPage.dataset.integrationConfigure = "true";
     document.getElementById("securityMode").value = email.securityMode; wireSecret();
     const wireRemove = () => document.querySelectorAll(".removeIntegrationRecipient").forEach(b => { b.onclick = () => b.closest(".integration-recipient-row").remove(); }); wireRemove();
@@ -195,7 +215,7 @@ function detectedSheetId(value) { const input=String(value||"").trim(); if(/^[A-
 function showDsrIntegrationForm(dsr, grant) {
     const banner=dsr.source==="ENVIRONMENT"?'<aside class="integration-banner"><strong>CURRENT CONFIGURATION</strong><p>Some DSR connection settings are currently supplied by Windows system configuration. Saving this form will create a KLBS-managed configuration.</p></aside>':"";
     renderSettingsPage({ title:"DAILY SALES REPORT", icon:"&#128202;", subtitle:"KLBS → Apps Script Web App → Google Sheet. No Google login is required.", backText:"← System Health", backAction:leaveIntegrationConfiguration,
-        content:`<div class="integration-form">${banner}<h2>GOOGLE SHEET</h2><label>Google Sheet URL or Sheet ID<input id="sheetInput" value="${integrationEscape(dsr.sheetId)}"></label><label>Detected Sheet ID<input id="detectedSheet" value="${integrationEscape(dsr.sheetId)}" readonly></label><label>Data Sheet / Tab Name<input id="tabName" value="${integrationEscape(dsr.tabName||"KLBS_Daily_Data")}"></label><h2>APPS SCRIPT CONNECTION</h2><label>Apps Script Web App URL<input id="webAppUrl" type="url" value="${integrationEscape(dsr.webAppUrl)}"></label>${secretControl("dsr",dsr.secretConfigured)}<h2>SYNC STATUS</h2><div class="integration-info-row"><span>Daily Sales Report Sync</span><strong>ENABLED</strong></div><p>Test Connection verifies the Apps Script and Google Sheet connection. A diagnostic entry will be written to KLBS_Test.</p><div id="message" class="security-message" aria-live="polite"></div><div class="integration-actions"><button id="testConnection" class="integration-button integration-button-secondary">TEST CONNECTION</button><button id="cancel" class="integration-button integration-button-neutral">CANCEL</button><button id="save" class="integration-button integration-button-primary">SAVE CHANGES</button></div>${dsrGuide()}</div>` });
+        content:`<div class="integration-form">${banner}<h2>GOOGLE SHEET</h2><label>Google Sheet URL or Sheet ID<input id="sheetInput" value="${integrationEscape(dsr.sheetId)}"></label><label>Detected Sheet ID<input id="detectedSheet" value="${integrationEscape(dsr.sheetId)}" readonly></label><label>Data Sheet / Tab Name<input id="tabName" value="${integrationEscape(dsr.tabName||"KLBS_Daily_Data")}"></label><h2>APPS SCRIPT CONNECTION</h2><label>Apps Script Web App URL<input id="webAppUrl" type="url" value="${integrationEscape(dsr.webAppUrl)}"></label>${secretControl("dsr",dsr.secretConfigured)}<h2>SYNC STATUS</h2><div class="integration-info-row"><span class="integration-status-label">Daily Sales Report Sync</span><strong class="${integrationStatusClass("ENABLED")}">ENABLED</strong></div><p>Test Connection verifies the Apps Script and Google Sheet connection. A diagnostic entry will be written to KLBS_Test.</p><div id="message" class="security-message" aria-live="polite"></div><div class="integration-actions"><button id="testConnection" class="integration-button integration-button-secondary">TEST CONNECTION</button><button id="cancel" class="integration-button integration-button-neutral">CANCEL</button><button id="save" class="integration-button integration-button-primary">SAVE CHANGES</button></div>${dsrGuide()}</div>` });
     settingsPage.dataset.integrationConfigure = "true";
     wireSecret(); sheetInput.oninput=()=>{detectedSheet.value=detectedSheetId(sheetInput.value);};
 save.onclick = async () => {
@@ -261,11 +281,13 @@ function showRemoteDashboardForm(remote, grant) {
             ${secretControl("remoteDashboard", remote.secretConfigured)}
             <p class="integration-security-note">The Installation Secret is protected using Windows secure storage and is never displayed by KLBS after it is saved.</p>
             <h2>CONNECTION STATUS</h2>
-            <div class="integration-info-row"><span>Last Connection Test</span><strong id="remoteConnectionStatus">${integrationEscape(remote.lastTestAt ? integrationTime(remote.lastTestAt) + " · " + integrationLabel(remote.lastTestResult) : "Never")}</strong></div>
+            <div class="integration-info-row"><span class="integration-status-label">Configuration</span><strong class="${integrationStatusClass(remote.configured ? "CONFIGURED" : "NOT CONFIGURED")}">${remote.configured ? "CONFIGURED" : "NOT CONFIGURED"}</strong></div>
+            <div class="integration-info-row"><span class="integration-status-label">Operational Status</span><strong class="${integrationStatusClass(remote.enabled ? "ENABLED" : "DISABLED")}">${remote.enabled ? "ENABLED" : "DISABLED"}</strong></div>
+            <div class="integration-info-row"><span class="integration-status-label">Last Connection Test</span><strong id="remoteConnectionStatus" class="${integrationStatusClass(remote.lastTestResult)}">${integrationEscape(remote.lastTestAt ? integrationTime(remote.lastTestAt) + " · " + integrationLabel(remote.lastTestResult) : "Never")}</strong></div>
             <div id="message" class="security-message" aria-live="polite"></div>
+            <section class="integration-advanced"><h2>ADVANCED</h2><button id="clearRemoteDashboard" class="integration-button integration-button-destructive">CLEAR REMOTE DASHBOARD CONFIGURATION</button></section>
             <div class="integration-actions"><button id="testConnection" class="integration-button integration-button-secondary">TEST CONNECTION</button><button id="cancel" class="integration-button integration-button-neutral">CANCEL</button><button id="save" class="integration-button integration-button-primary">SAVE CHANGES</button></div>
             <section class="integration-guide"><h2>SETUP GUIDE</h2><ol><li>Enter the Apps Script Web App URL.</li><li>Enter the Remote Dashboard Gateway URL.</li><li>Confirm the installation identity.</li><li>Enter the authorized Installation Secret.</li><li>Save the configuration.</li><li>Run Test Connection.</li><li>Confirm the connection succeeds.</li><li>KLBS will use the saved configuration for Remote Dashboard integration and notification events.</li></ol><p><strong>IMPORTANT:</strong> The Installation Secret is protected using the operating system's secure storage and is never displayed by KLBS after it is saved.</p></section>
-            <section class="integration-advanced"><h2>ADVANCED</h2><button id="clearRemoteDashboard" class="integration-button integration-button-destructive">CLEAR REMOTE DASHBOARD CONFIGURATION</button></section>
         </div>`
     });
     settingsPage.dataset.integrationConfigure = "true";
@@ -336,7 +358,15 @@ function showRemoteDashboardForm(remote, grant) {
         try {
             const result = await window.electronAPI.testRemoteDashboardIntegration(grant);
             showMessage(result.success ? "Successful" : "Connection failed. Check the configuration and try again.", result.success);
-            if (result.success) document.getElementById("remoteConnectionStatus").textContent = `${integrationTime(new Date().toISOString())} · Successful`;
+            if (result.success) {
+                const status = document.getElementById("remoteConnectionStatus");
+                status.textContent = `${integrationTime(new Date().toISOString())} · Successful`;
+                status.className = integrationStatusClass("SUCCESS");
+            } else {
+                const status = document.getElementById("remoteConnectionStatus");
+                status.textContent = integrationLabel(result.error || "FAILED");
+                status.className = integrationStatusClass("FAILED");
+            }
         }
         catch (error) { showMessage(error.message || "Connection failed. Check the configuration and try again."); }
         finally { testButton.disabled = false; saveButton.disabled = false; }
@@ -362,5 +392,83 @@ function showRemoteDashboardForm(remote, grant) {
         catch (error) { showMessage(error.message || "Remote Dashboard configuration could not be cleared."); }
     };
     document.getElementById("cancel").onclick = leaveIntegrationConfiguration;
+}
+function showCustomerCrmForm(crm, crmStatus = {}) {
+    renderSettingsPage({ title:"CUSTOMER CRM", icon:"&#128202;", subtitle:"KLBS customer profiles → authenticated Apps Script receiver → Customer_Master.", backText:"← System Health", backAction:leaveIntegrationConfiguration,
+        content:`<div class="integration-form customer-crm-form">
+            <h2>GOOGLE SHEET</h2>
+            <label>Spreadsheet Name<input value="KAIRA LUXE - CUSTOMER CRM" readonly></label>
+            <label>Google Spreadsheet ID<input id="crmSpreadsheetId" value="${integrationEscape(crm.spreadsheetId)}"></label>
+            <label>Worksheet / Tab Name<input value="${integrationEscape(crm.worksheet)}" readonly></label>
+            <h2>APPS SCRIPT CONNECTION</h2>
+            <label>Google Apps Script Web App URL<input id="crmEndpoint" type="url" value="${integrationEscape(crm.endpoint)}"></label>
+            ${secretControl("crm",crm.secretConfigured)}
+            <h2>SYNC STATUS</h2>
+            <div class="integration-info-row crm-sync-status"><span class="integration-status-label">Customer Sync</span><strong id="crmSyncStatus" class="${integrationStatusClass(crm.enabled ? "ENABLED" : "DISABLED")}">${crm.enabled ? "ENABLED" : "DISABLED"}</strong></div>
+            <div class="integration-info-row"><span class="integration-status-label">Pending Customers</span><strong class="${integrationStatusClass(Number(crmStatus.pendingCount || 0) > 0 ? "PENDING" : "")}">${Number(crmStatus.pendingCount || 0)}</strong></div>
+            <div class="integration-info-row"><span class="integration-status-label">Last Successful Sync</span><strong class="${integrationStatusClass(crmStatus.lastSuccessAt ? "SUCCESS" : "")}">${integrationEscape(crmStatus.lastSuccessAt ? integrationTime(crmStatus.lastSuccessAt) : "Never")}</strong></div>
+            <div class="integration-info-row"><span class="integration-status-label">Last Connection Test</span><strong class="${integrationStatusClass(crm.lastTestResult)}">${integrationEscape(crm.lastTestAt ? integrationTime(crm.lastTestAt) + " · " + integrationLabel(crm.lastTestResult) : "Never")}</strong></div>
+            <div class="crm-sync-actions"><button id="syncNow" class="integration-button integration-button-primary">SYNC NOW</button><button id="syncExisting" class="integration-button integration-button-secondary">SYNC EXISTING CUSTOMERS</button></div>
+            <p id="crmSyncDisabledReason" class="crm-sync-unavailable" aria-live="polite"></p>
+            <p id="message" class="security-message" aria-live="polite"></p>
+            <div class="integration-actions"><button id="testConnection" class="integration-button integration-button-secondary">TEST CONNECTION</button><button id="cancel" class="integration-button integration-button-neutral">CANCEL</button><button id="save" class="integration-button integration-button-primary">SAVE CHANGES</button></div>
+            ${crmGuide()}
+        </div>` });
+    settingsPage.dataset.integrationConfigure = "true"; wireSecret();
+    const msg = value => { document.getElementById("message").textContent = value; };
+    const syncNowButton = document.getElementById("syncNow");
+    const syncExistingButton = document.getElementById("syncExisting");
+    const disabledReason = document.getElementById("crmSyncDisabledReason");
+    const secretReplacement = document.getElementById("secretReplacement");
+    const secretInput = document.getElementById("integrationSecret");
+    const updateSyncAvailability = () => {
+        const endpoint = document.getElementById("crmEndpoint").value.trim();
+        const spreadsheetId = document.getElementById("crmSpreadsheetId").value.trim();
+        const hasReplacementSecret = !secretReplacement.hidden && Boolean(secretInput.value.trim());
+        const destinationEdited = endpoint !== String(crm.endpoint || "") || spreadsheetId !== String(crm.spreadsheetId || "");
+        let reason = "";
+        if (!endpoint) reason = "Enter and save the Apps Script Web App URL.";
+        else if (!spreadsheetId || !/^[A-Za-z0-9_-]{20,}$/.test(spreadsheetId)) reason = "Enter a valid Google Spreadsheet ID.";
+        else if (!crm.secretConfigured && !hasReplacementSecret) reason = "Configure the CRM Authentication Secret.";
+        else if (!crm.enabled) reason = "Enable Customer Sync to use these actions.";
+        else if (destinationEdited || hasReplacementSecret) reason = "Save configuration changes, then pass Test Connection for this destination.";
+        else if (crm.lastTestResult !== "SUCCESS") reason = "Pass Test Connection before synchronizing customers.";
+        const disabled = Boolean(reason);
+        syncNowButton.disabled = disabled;
+        syncExistingButton.disabled = disabled;
+        syncNowButton.title = reason;
+        syncExistingButton.title = reason;
+        disabledReason.textContent = reason;
+    };
+    ["crmEndpoint", "crmSpreadsheetId", "integrationSecret"].forEach(id =>
+        document.getElementById(id).addEventListener("input", updateSyncAvailability));
+    document.getElementById("replaceSecret").addEventListener("click", updateSyncAvailability);
+    document.getElementById("cancelSecret").addEventListener("click", updateSyncAvailability);
+    updateSyncAvailability();
+    document.getElementById("save").onclick = async () => {
+        try { await window.electronAPI.saveCustomerCrmIntegration({endpoint:crmEndpoint.value,spreadsheetId:crmSpreadsheetId.value,enabled:crm.enabled,secret:integrationSecret.value}); integrationSecret.value=""; await loadCustomerCrmForm(); msg("Configuration saved securely. Editing a destination requires a new successful connection test before sync."); }
+        catch (e) { integrationSecret.value=""; msg(e.message || "Configuration could not be saved."); }
+    };
+    document.getElementById("testConnection").onclick = async () => {
+        const button = document.getElementById("testConnection"); button.disabled = true; msg("Testing the saved CRM destination...");
+        try {
+            const r = await window.electronAPI.testCustomerCrmIntegration();
+            await loadCustomerCrmForm();
+            msg(r.success ? "Connection Successful. Customer synchronization is available." : "Connection test failed. Deploy the CRM receiver and verify its URL, secret, Spreadsheet ID, and worksheet.");
+        } catch (error) { msg(error.message || "Connection test failed."); }
+        finally { const current = document.getElementById("testConnection"); if (current) current.disabled = false; }
+    };
+    document.getElementById("syncNow").onclick = async () => { msg("Synchronizing eligible customers..."); try { const r=await window.electronAPI.syncCustomerCrm(); msg(r.success ? `Delivered ${r.successCount||0}; pending ${r.pendingCount||0}.` : `Sync not completed${r.errorCodes?.length ? `: ${r.errorCodes.join(", ")}` : r.error ? `: ${r.error}` : ": receiver failures"}. Pending ${r.pendingCount||0}.`); } catch (error) { msg(error.message || "Customer synchronization could not be started."); } };
+    document.getElementById("syncExisting").onclick = async () => {
+        const confirmed = await showNativeConfirm("Queue all existing customer profiles for synchronization to the configured Customer CRM destination?", syncExistingButton);
+        if (!confirmed) return;
+        msg("Queueing existing customer profiles...");
+        try { const r=await window.electronAPI.syncExistingCustomersCrm(); msg(`Queued ${r.queued||0}; delivered ${r.successCount||0}; pending ${r.pendingCount||0}${r.errorCodes?.length ? `; errors: ${r.errorCodes.join(", ")}` : ""}.`); }
+        catch (error) { msg(error.message || "Existing customer synchronization could not be started."); }
+    };
+    document.getElementById("cancel").onclick = leaveIntegrationConfiguration;
+}
+function crmGuide() {
+    return `<section class="integration-guide"><h2>SETUP GUIDE</h2><ol><li>Confirm the Customer CRM Google Spreadsheet ID.</li><li>Confirm the Customer_Master worksheet.</li><li>Enter the deployed CRM Apps Script Web App URL.</li><li>Configure the Customer CRM Sync Secret.</li><li>Save the configuration.</li><li>Click Test Connection and confirm success.</li><li>Create or update a customer in KLBS.</li><li>Verify the customer appears or updates in Customer_Master.</li><li>Use SYNC NOW to retry pending customer records.</li><li>Use SYNC EXISTING CUSTOMERS only when an authorized historical backfill is required.</li></ol><p><strong>IMPORTANT:</strong> Customer profiles created through Billing and Customer Management synchronize automatically after successful database persistence, including when optional mobile, email, birthday, or anniversary fields are blank. Customer updates change the existing Google Sheets row. Customer identity is Store Code + Customer ID. SYNC NOW is for retrying pending records; it is not required for normal operation.</p></section>`;
 }
 function showIntegrationsPage(){return showSystemHealthPage();}

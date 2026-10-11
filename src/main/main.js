@@ -220,6 +220,8 @@ const integrationConfig = createIntegrationConfigService({
     storagePath: path.join(app.getPath("userData"), "integration-config.json")
 });
 setIntegrationConfigService(integrationConfig);
+const { createCustomerCrmSyncService } = require("../services/customerCrmSyncService");
+const customerCrmSync = createCustomerCrmSyncService({ database, configProvider: () => integrationConfig.resolveCustomerCrmRuntime() });
 
 function requireSecurityGrant(grant, purpose) {
     if (!administratorSecurity.consumeGrant(grant, purpose)) {
@@ -246,6 +248,9 @@ function requireStockInwardWorkspace(event, token) {
 }
 function requireStockOutwardRenderer(event) {
     if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Unauthorized renderer for Stock Outward.");
+}
+function requireCustomerCrmRenderer(event) {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Unauthorized renderer for Customer CRM.");
 }
 function requireStockOutwardWorkspace(event, token) {
     requireStockOutwardRenderer(event);
@@ -285,6 +290,7 @@ const {
 
 } = require("../database/billService");
 const customerProfileService = require("../database/customerService");
+customerProfileService.setCrmSyncWake(() => customerCrmSync.syncNow().catch(() => {}));
 
 const {
     getBillForReturn,
@@ -612,6 +618,7 @@ function attachWindowDiagnostics(window, component) {
 }
 
 app.on("before-quit", () => {
+    customerCrmSync.stop();
     remoteDashboard.stop();
     stockInwardService.closeDefaultService().catch(error => technicalLogger.warn("DATABASE", "Stock Inward database connection close failed", { classification: String(error.message || "").slice(0, 200) }));
     stockOutwardService.closeDefaultService().catch(error => technicalLogger.warn("DATABASE", "Stock Outward database connection close failed", { classification: String(error.message || "").slice(0, 200) }));
@@ -865,6 +872,7 @@ app.whenReady().then(async () => {
     try {
 
         await databaseReady;
+        customerCrmSync.start();
         technicalLogger.info("DATABASE", "Database readiness checkpoint completed");
 
         const legacyDsrRetirement = await integrationOutbox.retireLegacyDsrBacklog();
@@ -2731,6 +2739,7 @@ ipcMain.handle(
 
 ipcMain.handle("integrations:get-config", async () => {
     const config = integrationConfig.getPublicConfig();
+    config.customerCrmStatus = await customerCrmSync.getStatus();
     technicalLogger.info("REMOTE_DASHBOARD", "Remote Dashboard configuration loaded", {
         configured: Boolean(config.remoteDashboard && config.remoteDashboard.configured),
         secretConfigured: Boolean(config.remoteDashboard && config.remoteDashboard.secretConfigured)
@@ -2756,6 +2765,10 @@ ipcMain.handle("integrations:get-outbox-status", async () => {
     return { online: Boolean(system.internet && system.internet.online), ...view };
 });
 ipcMain.handle("integrations:get-details", (event, kind, grant) => {
+    if (kind === "customerCrm") {
+        requireCustomerCrmRenderer(event);
+        return integrationConfig.getConfigurationDetails().customerCrm;
+    }
     const purpose = kind === "email" ? "INTEGRATION_EMAIL_SETTINGS" :
         kind === "dsr" ? "INTEGRATION_DSR_SETTINGS" :
         kind === "remoteDashboard" ? "INTEGRATION_REMOTE_DASHBOARD_SETTINGS" : null;
@@ -2772,6 +2785,30 @@ ipcMain.handle("integrations:get-details", (event, kind, grant) => {
             }
         }
         : details;
+});
+ipcMain.handle("integrations:save-customer-crm", async (event, data) => {
+    requireCustomerCrmRenderer(event);
+    const result = integrationConfig.saveCustomerCrm(data || {});
+    technicalLogger.info("CUSTOMER_CRM", "Customer CRM configuration saved", {
+        configured: result.configured,
+        enabled: result.enabled,
+        connectionTestRequired: result.lastTestResult !== "SUCCESS"
+    });
+    return result;
+});
+ipcMain.handle("integrations:test-customer-crm", async event => {
+    requireCustomerCrmRenderer(event);
+    const result = await customerCrmSync.testConnection();
+    integrationConfig.recordCustomerCrmTest(result.success);
+    return result;
+});
+ipcMain.handle("integrations:sync-customer-crm", async event => {
+    requireCustomerCrmRenderer(event);
+    return customerCrmSync.syncNow();
+});
+ipcMain.handle("integrations:sync-existing-customer-crm", async event => {
+    requireCustomerCrmRenderer(event);
+    return customerCrmSync.syncExisting();
 });
 ipcMain.handle("integrations:save-email", async (event, data, grant) => {
     requireIntegrationSession(grant, "INTEGRATION_EMAIL_SETTINGS");

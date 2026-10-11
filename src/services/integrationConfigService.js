@@ -5,6 +5,7 @@ const EMAIL_MODES = new Set(["SSL_TLS", "STARTTLS"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SENDER_PATTERN = /^(?:[^<>\r\n]{1,100}\s*)?<([^\s@<>]+@[^\s@<>]+\.[^\s@<>]+)>$/;
 const SHEET_ID_PATTERN = /^[A-Za-z0-9_-]{20,}$/;
+const CRM_DEFAULT_SHEET_ID = "1HMLsWV4MLxQ1oGKj-P4DD6KMgm44tvCLnx1VXWiE9lo";
 
 function extractSheetId(value) {
     const input = String(value || "").trim();
@@ -28,6 +29,16 @@ function validateWebAppUrl(value) {
     catch (_) { throw new Error("Enter a valid Apps Script Web App URL."); }
     if (url.protocol !== "https:" || !/(^|\.)script\.google\.com$/i.test(url.hostname)) {
         throw new Error("Apps Script Web App URL must use HTTPS on script.google.com.");
+    }
+    return url.toString();
+}
+
+function validateCustomerCrmWebAppUrl(value) {
+    const normalized = validateWebAppUrl(value);
+    const url = new URL(normalized);
+    if (url.hostname.toLowerCase() !== "script.google.com" ||
+        !/^\/macros\/s\/[A-Za-z0-9_-]+\/exec\/?$/.test(url.pathname) || url.username || url.password || url.hash) {
+        throw new Error("Customer CRM URL must be a deployed Google Apps Script Web App URL.");
     }
     return url.toString();
 }
@@ -132,6 +143,7 @@ function createIntegrationConfigService(options) {
         const email = store.email || null;
         const dsr = store.dsr || null;
         const remoteDashboard = store.remoteDashboard || null;
+        const crm = store.customerCrm || null;
         const diagnostics = store.diagnostics || {};
         const emailTest = diagnostics.email || email || {};
         const dsrTest = diagnostics.dsr || dsr || {};
@@ -163,6 +175,7 @@ function createIntegrationConfigService(options) {
                 lastTestResult: dsrTest.lastTestResult || "NEVER_TESTED"
             },
             remoteDashboard: remoteDashboardMetadata(remoteDashboard)
+            ,customerCrm: { configured: Boolean(crm && crm.endpoint && crm.secret), secretConfigured: Boolean(crm && crm.secret), endpoint: crm ? crm.endpoint : "", spreadsheetId: crm ? crm.spreadsheetId : CRM_DEFAULT_SHEET_ID, worksheet: "Customer_Master", enabled: crm ? crm.enabled !== false : true, lastTestAt: crm ? crm.lastTestAt || null : null, lastTestResult: crm ? crm.lastTestResult || "NEVER_TESTED" : "NEVER_TESTED" }
         };
     }
     function getRemoteDashboardConfiguration() {
@@ -193,7 +206,8 @@ function createIntegrationConfigService(options) {
                 enabled: details.remoteDashboard.enabled,
                 lastTestAt: details.remoteDashboard.lastTestAt,
                 lastTestResult: details.remoteDashboard.lastTestResult
-            }
+            },
+            customerCrm: details.customerCrm
         };
     }
     function saveEmail(input) {
@@ -273,6 +287,34 @@ function createIntegrationConfigService(options) {
         delete store.remoteDashboard;
         writeStore(store);
         return { cleared: existed, ...remoteDashboardMetadata(null) };
+    }
+    function saveCustomerCrm(input) {
+        const values = input || {}, store = readStore(), existing = store.customerCrm || null;
+        const endpoint = validateCustomerCrmWebAppUrl(values.endpoint);
+        const spreadsheetId = extractSheetId(values.spreadsheetId);
+        if (typeof values.enabled !== "boolean") throw new Error("Customer Sync enabled state must be boolean.");
+        const secret = String(values.secret || "");
+        if (!secret && !(existing && existing.secret)) throw new Error("CRM Authentication Secret is required for initial configuration.");
+        const secretChanged = Boolean(secret);
+        const destinationChanged = !existing || endpoint !== existing.endpoint || spreadsheetId !== existing.spreadsheetId || secretChanged;
+        store.customerCrm = { endpoint, spreadsheetId, worksheet: "Customer_Master", enabled: values.enabled,
+            secret: secret ? encrypt(secret) : existing.secret,
+            lastTestAt: destinationChanged ? null : existing.lastTestAt || null,
+            lastTestResult: destinationChanged ? "NEVER_TESTED" : existing.lastTestResult || "NEVER_TESTED",
+            destinationPendingApproval: destinationChanged,
+            updatedAt: now().toISOString() };
+        writeStore(store);
+        return getConfigurationDetails().customerCrm;
+    }
+    function resolveCustomerCrmRuntime() {
+        const crm = readStore().customerCrm;
+        return crm ? { endpoint: crm.endpoint, spreadsheetId: crm.spreadsheetId, worksheet: "Customer_Master", secret: crm.secret ? decrypt(crm.secret) : "", enabled: crm.enabled !== false, destinationPendingApproval: crm.destinationPendingApproval === true, lastTestAt: crm.lastTestAt || null, lastTestResult: crm.lastTestResult || "NEVER_TESTED" } : null;
+    }
+    function recordCustomerCrmTest(success) {
+        const store = readStore(); if (!store.customerCrm) return null;
+        const crm = store.customerCrm; crm.lastTestAt = now().toISOString(); crm.lastTestResult = success ? "SUCCESS" : "FAILED";
+        if (success) crm.destinationPendingApproval = false;
+        writeStore(store); return { lastTestAt: crm.lastTestAt, lastTestResult: crm.lastTestResult };
     }
     function resolveEmailRuntime() {
         const store = readStore();
@@ -357,7 +399,7 @@ function createIntegrationConfigService(options) {
     }
     return {
         getPublicConfig, getConfigurationDetails, getRemoteDashboardConfiguration, saveEmail, saveDsr, saveRemoteDashboard,
-        clearRemoteDashboard, resolveEmailRuntime, resolveDsrRuntime,
+        clearRemoteDashboard, saveCustomerCrm, resolveCustomerCrmRuntime, recordCustomerCrmTest, resolveEmailRuntime, resolveDsrRuntime,
         resolveRemoteDashboardRuntime,
         recordTest, migrateLegacyEmail
     };

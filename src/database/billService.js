@@ -508,7 +508,7 @@ function saveBill(billData) {
             if (matches.length > 1) return resolve(null);
             const name = String(billData.customer_name || "").trim().replace(/\s+/g, " ");
             if (!name || name.length > 120) return resolve(null);
-            createCustomerProfileWithCode({ name, mobile })
+            createCustomerProfileWithCode({ name, mobile }, { deferCrmWake: true })
                 .then(profile => resolve(profile.id))
                 .catch(reject);
         });
@@ -1116,6 +1116,10 @@ function redeemStoreCreditAndCommit(){
                 }
 
                 else{
+
+                    if (billData.customer_id) {
+                        try { require("./customerService").notifyCrmSyncAfterCommit(); } catch (_) {}
+                    }
 
                     try {
                         await logInvoiceGenerated(
