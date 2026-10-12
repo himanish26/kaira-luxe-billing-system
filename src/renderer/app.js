@@ -494,6 +494,28 @@ function bindSecurityEnterToButton(inputIds, button) {
 
 async function showAdministratorSecurityPage() {
     const status = await window.electronAPI.administratorSecurity.getStatus();
+    const savedPermissions = await window.electronAPI.administratorSecurity.getPermissions();
+    const managerPermissionLabels = [
+        ["familyFriendsDiscount", "Family & Friends Discount"], ["giftVoucher", "Gift Voucher"],
+        ["stockInwardOutward", "Stock Inward / Outward"], ["dayReopen", "Day Reopen"],
+        ["paymentCorrection", "Payment Correction"], ["productMasterImport", "Product Master Import"],
+        ["inventoryReset", "Inventory Reset"], ["backupRestore", "Backup & Restore"],
+        ["applicationUpdates", "Application Updates"], ["activityLogOperations", "Activity Log Protected Operations"],
+        ["integrations", "All Integrations Configuration"], ["customers", "Customers"], ["suppliers", "Suppliers"],
+        ["accountingData", "Accounting & Data"], ["customerReportExport", "Customer Report Export"],
+        ["billSummaryReportExport", "Bill Summary Report Export"], ["receiptSettings", "Receipt Settings Modification"],
+        ["backupLocation", "Backup Location Modification"], ["automaticBackupSettings", "Automatic Backup Settings Modification"],
+        ["administratorPinRecovery", "Administrator PIN Recovery"], ["pinManagement", "PIN Management"],
+        ["restoreDefaultPinSettings", "Restore Default PIN Settings"]
+    ];
+    const managerDescription = savedPermissions
+        ? (() => {
+            const assignments = managerPermissionLabels.filter(([key]) => savedPermissions[key]?.manager).map(([, label]) => label);
+            return assignments.length
+                ? `Manager authorization is required for ${assignments.slice(0, -1).join(", ")}${assignments.length > 1 ? `, and ${assignments[assignments.length - 1]}` : assignments[0]}.`
+                : "No store operations currently require Manager PIN authorization.";
+        })()
+        : "Manager authorization settings could not be loaded.";
     const startupMasterVerification = startupSecuritySetupActive && !startupSecuritySetupToken
         ? `<section class="security-card security-initialize-card">
                 <h2>VERIFY MASTER PIN</h2>
@@ -534,7 +556,7 @@ async function showAdministratorSecurityPage() {
             </section>
             <section class="security-card security-manager-card">
                 <h2>MANAGER PIN</h2>
-                <p>Manager authorization is used for operational approvals including Family & Friends Discount, Gift Voucher, Stock Inward, Stock Outward, Day Re-open, and Previous Business Day Closing.</p>
+                <p id="managerPinDescription">${managerDescription}</p>
                 <div class="security-status-card"><span>Status</span><strong class="security-status-value ${status.managerPinConfigured ? "security-status-success" : "security-status-pending"}">${status.managerPinConfigured ? "Configured" : "Not Configured"}</strong></div>
                 <button id="securityOpenManagerPinBtn" class="dashboard-btn security-action-btn">${status.managerPinConfigured ? "Change Manager PIN" : "Set Manager PIN"}</button>
                 <div id="securityManagerPinPanel" class="security-recovery-panel" hidden>
@@ -1368,7 +1390,8 @@ function showAuthorizationGranted({ button, modal, input, resetText, onComplete 
 }
 
 function openPinManagementDrawer(session, opener) {
-    const authorizationExpiredMessage = "Required authorization is missing, invalid, or has expired.";
+    const authorizationExpiredMessage = "PIN Management authorization is unavailable or expired.";
+    const confirmedSessionExpiredMessage = "Session expired. Reopen PIN Management.";
     const rows = [
         ["familyFriendsDiscount", "Family & Friends Discount"], ["giftVoucher", "Gift Voucher"],
         ["stockInwardOutward", "Stock Inward / Outward"], ["dayReopen", "Day Reopen"],
@@ -1385,6 +1408,7 @@ function openPinManagementDrawer(session, opener) {
         ["restoreDefaultPinSettings", "Restore Default PIN Settings", "ADMINISTRATOR ONLY"]
     ];
     const fixedRows = new Set(["pinManagement", "administratorPinRecovery", "restoreDefaultPinSettings"]);
+    const managerConfigurableRows = new Set(["familyFriendsDiscount", "giftVoucher", "stockInwardOutward", "dayReopen", "customers", "suppliers", "accountingData"]);
     const visibleRows = rows.filter(([key]) => !fixedRows.has(key));
     const overlay = document.createElement("div");
     overlay.id = "pinManagementOverlay";
@@ -1392,8 +1416,8 @@ function openPinManagementDrawer(session, opener) {
     overlay.hidden = true;
     overlay.innerHTML = `<aside class="klbs-drawer-panel pin-management-drawer" role="dialog" aria-modal="true" aria-labelledby="pinManagementTitle" tabindex="-1">
         <header class="klbs-drawer-header"><div><h2 id="pinManagementTitle" class="klbs-drawer-title">PIN MANAGEMENT</h2><p>Configure Administrator and Manager access permissions.</p></div><button type="button" class="klbs-drawer-exit" id="pinManagementExit">EXIT</button></header>
-        <div class="klbs-drawer-body"><div class="pin-management-table-wrap"><table class="pin-management-table"><thead><tr><th>FEATURE</th><th>ADMINISTRATOR</th><th>MANAGER</th></tr></thead><tbody>${visibleRows.map(([key,label,note]) => `<tr><th scope="row">${label}${note ? `<small class="pin-management-feature-note">${note}</small>` : ""}</th>${["administrator","manager"].map(role => `<td><input type="checkbox" data-permission="${key}" data-role="${role}" aria-label="${role} access: ${label}" ${session.permissions[key]?.[role] ? "checked" : ""} ${fixedRows.has(key) ? "disabled" : ""}></td>`).join("")}</tr>`).join("")}</tbody></table></div><p id="pinManagementMessage" class="security-message" role="status" aria-live="polite"></p></div>
-        <footer class="klbs-drawer-footer pin-management-footer"><button type="button" id="pinManagementSave" class="dashboard-btn">SAVE CHANGES</button><button type="button" id="pinManagementDefaults" class="security-secondary-btn">RESTORE DEFAULTS</button><button type="button" id="pinManagementClear" class="security-secondary-btn">CLEAR ALL</button><button type="button" id="pinManagementCancel" class="security-secondary-btn">CANCEL</button></footer>
+        <div class="klbs-drawer-body"><div class="pin-management-table-wrap"><table class="pin-management-table"><thead><tr><th>FEATURE</th><th>ADMINISTRATOR</th><th>MANAGER</th></tr></thead><tbody>${visibleRows.map(([key,label,note]) => `<tr><th scope="row">${label}${note ? `<small class="pin-management-feature-note">${note}</small>` : ""}</th>${["administrator","manager"].map(role => `<td><input type="checkbox" data-permission="${key}" data-role="${role}" aria-label="${role} access: ${label}" ${session.permissions[key]?.[role] ? "checked" : ""} ${role === "administrator" || !managerConfigurableRows.has(key) || session.permissions[key]?.administrator || fixedRows.has(key) ? "disabled" : ""}></td>`).join("")}</tr>`).join("")}</tbody></table></div><div class="pin-management-notification-region"><p id="pinManagementMessage" class="security-message" role="status" aria-live="polite"></p></div></div>
+        <footer class="klbs-drawer-footer pin-management-footer"><button type="button" id="pinManagementDefaults" class="security-secondary-btn">RESTORE DEFAULTS</button><button type="button" id="pinManagementClear" class="security-secondary-btn">CLEAR ALL</button><button type="button" id="pinManagementSave" class="dashboard-btn">SAVE CHANGES</button></footer>
     </aside>`;
     document.body.append(overlay);
     const readDraft = () => {
@@ -1408,21 +1432,38 @@ function openPinManagementDrawer(session, opener) {
         }
         return result;
     };
-    let saved = JSON.stringify(readDraft());
+    const managerDraftFromPermissions = permissions => JSON.stringify(Object.fromEntries(
+        [...managerConfigurableRows].map(key => [key, Boolean(permissions?.[key]?.manager)])
+    ));
+    const readManagerDraft = () => managerDraftFromPermissions(readDraft());
+    let savedManagerDraft = managerDraftFromPermissions(session.permissions);
     let inactivityTimer = null;
     let inactivityDeadline = Number(session.expiresAt) || (Date.now() + 60 * 1000);
     let sessionExpired = false;
     let invalidationPromise = null;
     let closeStarted = false;
+    const pageScrollRoot = document.documentElement;
+    const pageScrollPosition = { x: window.scrollX, y: window.scrollY };
+    const hadPinManagementScrollLock = pageScrollRoot.classList.contains("pin-management-scroll-locked");
+    const releaseBackgroundScrollLock = () => {
+        if (!hadPinManagementScrollLock) pageScrollRoot.classList.remove("pin-management-scroll-locked");
+        const anotherScrollLockRemains = [pageScrollRoot, document.body].some(element => {
+            const overflowY = window.getComputedStyle(element).overflowY;
+            return overflowY === "hidden" || overflowY === "clip";
+        });
+        if (!anotherScrollLockRemains) window.scrollTo(pageScrollPosition.x, pageScrollPosition.y);
+    };
     const editableRows = rows.filter(([key]) => !fixedRows.has(key)).map(([key]) => key);
-    const isDirty = () => JSON.stringify(readDraft()) !== saved;
+    const isDirty = () => readManagerDraft() !== savedManagerDraft;
     const isDraftValid = () => editableRows.every(key => {
         const administrator = overlay.querySelector(`[data-permission="${key}"][data-role="administrator"]`).checked;
         const manager = overlay.querySelector(`[data-permission="${key}"][data-role="manager"]`).checked;
-        return Number(administrator) + Number(manager) === 1;
+        if (administrator !== Boolean(session.permissions[key]?.administrator)) return false;
+        if (!managerConfigurableRows.has(key)) return manager === Boolean(session.permissions[key]?.manager);
+        return !(administrator && manager);
     });
     const updateSaveAvailability = () => {
-        overlay.querySelector("#pinManagementSave").disabled = !isDraftValid();
+        overlay.querySelector("#pinManagementSave").disabled = !isDraftValid() || !isDirty();
     };
     const message = (text, success = false) => {
         const target = overlay.querySelector("#pinManagementMessage");
@@ -1460,7 +1501,7 @@ function openPinManagementDrawer(session, opener) {
     const handleExpiredAction = async error => {
         if (/PIN Management authorization has expired|authorization.*expired|expired.*authorization/i.test(String(error?.message || ""))) {
             await invalidateSession();
-            message(authorizationExpiredMessage);
+            message(confirmedSessionExpiredMessage);
             return true;
         }
         return false;
@@ -1468,7 +1509,7 @@ function openPinManagementDrawer(session, opener) {
     const close = async () => {
         if (drawer.isClosing() || closeStarted) return;
         if (isDirty()) {
-            const confirmed = await showNativeConfirm("Discard unsaved PIN permission changes?", overlay.querySelector("#pinManagementCancel"));
+            const confirmed = await showNativeConfirm("Discard unsaved PIN permission changes?", overlay.querySelector("#pinManagementExit"));
             if (!confirmed) return;
         }
         closeStarted = true;
@@ -1484,24 +1525,19 @@ function openPinManagementDrawer(session, opener) {
         onExit: close,
         onEscape: () => { void close(); return true; },
         onClosed: () => {
+            releaseBackgroundScrollLock();
             void invalidateSession();
             overlay.remove(); opener?.focus();
         }
     });
     overlay.querySelectorAll("input[data-permission]").forEach(input => input.addEventListener("change", () => {
         void recordActivity();
-        if (!fixedRows.has(input.dataset.permission)) {
-            if (!input.checked) input.checked = true;
-            const otherRole = input.dataset.role === "administrator" ? "manager" : "administrator";
-            if (input.checked) overlay.querySelector(`[data-permission="${input.dataset.permission}"][data-role="${otherRole}"]`).checked = false;
+        if (input.dataset.role !== "manager" || !managerConfigurableRows.has(input.dataset.permission)) {
+            input.checked = Boolean(session.permissions[input.dataset.permission]?.[input.dataset.role]);
         }
-        message(isDraftValid() ? "" : "Assign Administrator or Manager to every feature before saving.");
+        message(isDraftValid() ? "" : "Invalid permission selection.");
         updateSaveAvailability();
     }));
-    overlay.querySelectorAll("input[data-permission]").forEach(input => input.addEventListener("click", event => {
-        if (input.checked && !fixedRows.has(input.dataset.permission)) event.preventDefault();
-    }));
-    overlay.querySelector("#pinManagementCancel").onclick = close;
     overlay.addEventListener("keydown", event => {
         if (event.target.matches(".pin-management-drawer input:not([disabled]), .pin-management-drawer button:not([disabled])") && event.key !== "Enter" && event.key !== " ") {
             void recordActivity();
@@ -1509,10 +1545,10 @@ function openPinManagementDrawer(session, opener) {
     }, true);
     overlay.querySelector("#pinManagementClear").onclick = () => {
         void recordActivity();
-        overlay.querySelectorAll("input[data-permission]").forEach(input => {
-            if (!fixedRows.has(input.dataset.permission)) input.checked = false;
+        overlay.querySelectorAll('input[data-role="manager"][data-permission]').forEach(input => {
+            if (managerConfigurableRows.has(input.dataset.permission)) input.checked = false;
         });
-        message("Assign Administrator or Manager to every feature before saving.");
+        message("");
         updateSaveAvailability();
     };
     overlay.querySelector("#pinManagementSave").onclick = async () => {
@@ -1522,10 +1558,15 @@ function openPinManagementDrawer(session, opener) {
         try {
             const proposed = readDraft();
             const result = await window.electronAPI.administratorSecurity.savePinPermissions(session.sessionToken, proposed);
-            saved = JSON.stringify(proposed);
-            message(`PIN permissions saved. Active authorization grants were invalidated.${result.activityWarning ? ` ${result.activityWarning}` : ""}`, true);
+            savedManagerDraft = managerDraftFromPermissions(result.permissions);
+            const labels = rows.filter(([key]) => result.permissions?.[key]?.manager).map(([, label]) => label);
+            const cardDescription = document.getElementById("managerPinDescription");
+            if (cardDescription) cardDescription.textContent = labels.length
+                ? `Manager authorization is required for ${labels.slice(0, -1).join(", ")}${labels.length > 1 ? `, and ${labels[labels.length - 1]}` : labels[0]}.`
+                : "No store operations currently require Manager PIN authorization.";
+            message(`PIN permissions saved successfully.${result.activityWarning ? ` ${result.activityWarning}` : ""}`, true);
         } catch (error) {
-            if (!(await handleExpiredAction(error))) message(error.message || "PIN permissions could not be saved.");
+            if (!(await handleExpiredAction(error))) message("Unable to save PIN permissions.");
         }
         finally { updateSaveAvailability(); }
     };
@@ -1539,14 +1580,20 @@ function openPinManagementDrawer(session, opener) {
             for (const [key] of visibleRows) for (const role of ["administrator","manager"]) {
                 overlay.querySelector(`[data-permission="${key}"][data-role="${role}"]`).checked = Boolean(result.permissions[key]?.[role]);
             }
-            saved = JSON.stringify(readDraft());
-            message(`Approved default PIN settings restored. PIN credentials are unchanged.${result.activityWarning ? ` ${result.activityWarning}` : ""}`, true);
+            savedManagerDraft = managerDraftFromPermissions(result.permissions);
+            const labels = rows.filter(([key]) => result.permissions?.[key]?.manager).map(([, label]) => label);
+            const cardDescription = document.getElementById("managerPinDescription");
+            if (cardDescription) cardDescription.textContent = labels.length
+                ? `Manager authorization is required for ${labels.slice(0, -1).join(", ")}${labels.length > 1 ? `, and ${labels[labels.length - 1]}` : labels[0]}.`
+                : "No store operations currently require Manager PIN authorization.";
+            message(`Default PIN permissions restored.${result.activityWarning ? ` ${result.activityWarning}` : ""}`, true);
             updateSaveAvailability();
         } catch (error) {
-            if (!(await handleExpiredAction(error))) message(error.message || "Default PIN settings could not be restored.");
+            if (!(await handleExpiredAction(error))) message("Unable to restore default permissions.");
         }
     };
     updateSaveAvailability();
+    pageScrollRoot.classList.add("pin-management-scroll-locked");
     drawer.open({ opener, initialFocus: overlay.querySelector("#pinManagementSave") });
     inactivityTimer = window.setTimeout(() => { void invalidateSession(); }, Math.max(0, inactivityDeadline - Date.now()));
 }
@@ -1621,6 +1668,13 @@ function requestAdminAuthorization(purpose) {
         adminCancelCallback = value => resolve(value ?? null);
     });
 }
+
+async function requestOptionalManagerAuthorization(purpose) {
+    const role = await window.electronAPI.administratorSecurity.getAuthorizationRole(purpose);
+    if (role === null) return "";
+    return requestAdminAuthorization(purpose);
+}
+window.requestOptionalManagerAuthorization = requestOptionalManagerAuthorization;
 
 function showProcessingDialog(title = "Processing...") {
 
@@ -2212,8 +2266,8 @@ function closeProtectedWorkspaceSessions() {
     window.electronAPI.administratorSecurity.closeProtectedWorkspace("accountingData");
 }
 async function authorizeWorkspaceEntry(purpose) {
-    const grant = await requestAdminAuthorization(purpose);
-    if (!grant) return false;
+    const grant = await requestOptionalManagerAuthorization(purpose);
+    if (grant === null) return false;
     try { await window.electronAPI.administratorSecurity.openProtectedWorkspace(grant, purpose); return true; }
     catch (error) { await showNativeAlert(error.message || "Manager authorization could not be established."); return false; }
 }
@@ -4550,8 +4604,8 @@ if (familyFriendsBtn) {
             if (managerAuthorizationPending) return;
             managerAuthorizationPending = true;
             try {
-                const grant = await requestAdminAuthorization("FF");
-                if (!grant) return;
+                const grant = await requestOptionalManagerAuthorization("FF");
+                if (grant === null) return;
                 ffAuthorizationGrant = grant;
                 ffPinVerified = true;
                 openFamilyFriendsDiscountDialog();
@@ -4616,8 +4670,8 @@ if (giftVoucherBtn) {
             if (managerAuthorizationPending) return;
             managerAuthorizationPending = true;
             try {
-                const grant = await requestAdminAuthorization("GIFT_VOUCHER");
-                if (!grant) return;
+                const grant = await requestOptionalManagerAuthorization("GIFT_VOUCHER");
+                if (grant === null) return;
                 giftVoucherAuthorizationGrant = grant;
                 openGiftVoucherDialog();
             } finally {

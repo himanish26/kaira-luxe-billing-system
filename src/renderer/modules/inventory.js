@@ -862,8 +862,8 @@ function initializeInventoryEvents() {
     if (stockInwardBtn) {
 
         stockInwardBtn.onclick = async () => {
-            const grant = await requestAdminAuthorization("INVENTORY_INWARD");
-            if (!grant) return;
+            const grant = await window.requestOptionalManagerAuthorization("INVENTORY_INWARD");
+            if (grant === null) return;
             try {
                 const authorized = await window.electronAPI.stockInwardEnter(grant);
                 if (authorized) await window.openStockInwardPage?.();
@@ -878,8 +878,8 @@ function initializeInventoryEvents() {
 
     if (stockOutwardV21Btn) {
         stockOutwardV21Btn.onclick = async () => {
-            const grant = await requestAdminAuthorization("INVENTORY_OUTWARD");
-            if (!grant) return;
+            const grant = await window.requestOptionalManagerAuthorization("INVENTORY_OUTWARD");
+            if (grant === null) return;
             try {
                 await window.openStockOutwardPage?.(grant);
             } catch (error) {

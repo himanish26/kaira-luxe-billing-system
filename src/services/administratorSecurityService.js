@@ -52,6 +52,11 @@ const PIN_PERMISSION_FEATURES = Object.freeze({
     SUPPLIER_CREDIT_NOTE_POST: "accountingData"
 });
 
+const MANAGER_CONFIGURABLE_PERMISSIONS = new Set([
+    "familyFriendsDiscount", "giftVoucher", "stockInwardOutward", "dayReopen",
+    "customers", "suppliers", "accountingData"
+]);
+
 const PIN_PERMISSION_LOCKED = new Set(["pinManagement", "administratorPinRecovery", "restoreDefaultPinSettings"]);
 const PIN_MANAGEMENT_INACTIVITY_TTL_MS = 60 * 1000;
 const PIN_PERMISSION_LABELS = Object.freeze({
@@ -72,7 +77,7 @@ function clonePermissionMatrix(value = PIN_PERMISSION_DEFAULTS) {
     return Object.fromEntries(Object.entries(value).map(([key, roles]) => [key, { ...roles }]));
 }
 
-function validatePermissionMatrix(input) {
+function validatePermissionMatrix(input, current = PIN_PERMISSION_DEFAULTS) {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("PIN permissions are invalid.");
     const keys = Object.keys(PIN_PERMISSION_DEFAULTS);
     if (Object.keys(input).length !== keys.length || keys.some(key => !Object.prototype.hasOwnProperty.call(input, key))) {
@@ -82,21 +87,26 @@ function validatePermissionMatrix(input) {
     for (const key of keys) {
         const roles = input[key];
         const label = PIN_PERMISSION_LABELS[key];
+        const proposedMaster = roles && Object.prototype.hasOwnProperty.call(roles, "master") ? roles.master : PIN_PERMISSION_DEFAULTS[key].master;
         if (!roles || typeof roles !== "object" || Array.isArray(roles) ||
             typeof roles.administrator !== "boolean" || typeof roles.manager !== "boolean" ||
             (Object.prototype.hasOwnProperty.call(roles, "master") && typeof roles.master !== "boolean") ||
             Object.keys(roles).some(role => !["administrator", "manager", "master"].includes(role))) {
             throw new Error(`${label}: Administrator and Manager selections are required.`);
         }
-        normalized[key] = { administrator: roles.administrator, manager: roles.manager, master: PIN_PERMISSION_DEFAULTS[key].master };
+        normalized[key] = { administrator: roles.administrator, manager: roles.manager, master: proposedMaster };
+        const fixedMaster = current[key]?.master ?? PIN_PERMISSION_DEFAULTS[key].master;
+        if (proposedMaster !== fixedMaster || roles.administrator !== current[key].administrator) {
+            throw new Error(`${label}: fixed Administrator and Master assignments cannot be changed.`);
+        }
         if (PIN_PERMISSION_LOCKED.has(key)) {
             const defaults = PIN_PERMISSION_DEFAULTS[key];
-            if (roles.administrator !== defaults.administrator || roles.manager !== defaults.manager ||
-                (Object.prototype.hasOwnProperty.call(roles, "master") && roles.master !== defaults.master)) {
-                throw new Error(`${label} is a mandatory security permission and cannot be changed.`);
-            }
-        } else if (roles.master === true || Number(roles.administrator) + Number(roles.manager) !== 1) {
-            throw new Error(`${label}: select exactly one role, Administrator or Manager. Neither or both selections are invalid.`);
+            if (roles.manager !== defaults.manager || roles.administrator !== defaults.administrator ||
+                proposedMaster !== defaults.master) throw new Error(`${label} is a mandatory security permission and cannot be changed.`);
+        } else if (MANAGER_CONFIGURABLE_PERMISSIONS.has(key)) {
+            if (roles.manager && roles.administrator) throw new Error(`${label}: Administrator and Manager cannot both be assigned.`);
+        } else if (roles.manager !== current[key].manager) {
+            throw new Error(`${label}: this permission cannot be reassigned.`);
         }
     }
     return normalized;
@@ -225,6 +235,13 @@ function createAdministratorSecurityService(database, options = {}) {
         return null;
     }
 
+    function managerAuthorizationDisabled(purpose) {
+        const feature = PIN_PERMISSION_FEATURES[purpose];
+        const roles = feature && permissionMatrix[feature];
+        return Boolean(feature && MANAGER_CONFIGURABLE_PERMISSIONS.has(feature) &&
+            roles && !roles.administrator && !roles.manager);
+    }
+
     async function initializePermissions() {
         const row = await get("SELECT pin_permissions_json FROM settings WHERE id = 1");
         if (!row) throw new Error("PIN permission settings are unavailable.");
@@ -232,7 +249,7 @@ function createAdministratorSecurityService(database, options = {}) {
             let parsed;
             try { parsed = JSON.parse(row.pin_permissions_json); }
             catch (_) { throw new Error("Saved PIN permission settings are invalid; startup was stopped for safety."); }
-            permissionMatrix = validatePermissionMatrix(parsed);
+            permissionMatrix = validatePermissionMatrix(parsed, parsed);
         }
         return getPermissionMatrix();
     }
@@ -240,7 +257,7 @@ function createAdministratorSecurityService(database, options = {}) {
     function getPermissionMatrix() { return clonePermissionMatrix(permissionMatrix); }
 
     async function persistPermissionMatrix(next, action) {
-        const validated = validatePermissionMatrix(next);
+        const validated = validatePermissionMatrix(next, permissionMatrix);
         await run("BEGIN IMMEDIATE TRANSACTION");
         try {
             await run("UPDATE settings SET pin_permissions_json = ? WHERE id = 1", [JSON.stringify(validated)]);
@@ -261,7 +278,11 @@ function createAdministratorSecurityService(database, options = {}) {
 
     async function restoreDefaultPermissionMatrix(token, rendererId) {
         if (!hasPinManagementSession(token, rendererId)) throw new Error("PIN Management authorization has expired. Reopen PIN Management.");
-        return persistPermissionMatrix(clonePermissionMatrix(), "PIN_SETTINGS_DEFAULTS_RESTORED");
+        const restored = getPermissionMatrix();
+        for (const feature of MANAGER_CONFIGURABLE_PERMISSIONS) {
+            restored[feature].manager = PIN_PERMISSION_DEFAULTS[feature].manager;
+        }
+        return persistPermissionMatrix(restored, "PIN_SETTINGS_DEFAULTS_RESTORED");
     }
 
     function openPinManagementSession(administratorGrant, masterGrant, rendererId) {
@@ -312,7 +333,7 @@ function createAdministratorSecurityService(database, options = {}) {
     function openWorkspaceSession(grant, purpose, rendererId) {
         const feature = PIN_PERMISSION_FEATURES[purpose];
         const level = authorizationLevelForPurpose(purpose);
-        if (!feature || !level || !consumeGrant(grant, purpose)) throw new Error("Manager authorization is missing, invalid, or expired.");
+        if (!feature || (!managerAuthorizationDisabled(purpose) && (!level || !consumeGrant(grant, purpose)))) throw new Error("Manager authorization is missing, invalid, or expired.");
         const token = crypto.randomBytes(32).toString("hex");
         workspaceSessions.set(`${rendererId}:${feature}`, { token, rendererId, feature, level, expiresAt: now() + 2 * 60 * 60 * 1000 });
         return { success: true, token, feature };
@@ -329,6 +350,7 @@ function createAdministratorSecurityService(database, options = {}) {
         const feature = PIN_PERMISSION_FEATURES[purpose];
         const session = feature && workspaceSessions.get(`${rendererId}:${feature}`);
         const level = authorizationLevelForPurpose(purpose);
+        if (managerAuthorizationDisabled(purpose) && session && session.expiresAt >= now()) return null;
         if (!session || session.expiresAt < now() || !level || session.level !== level) {
             if (session && session.expiresAt < now()) workspaceSessions.delete(`${rendererId}:${feature}`);
             throw new Error("A current authorized workspace session is required.");
@@ -424,6 +446,7 @@ function createAdministratorSecurityService(database, options = {}) {
     }
 
     function consumeGrant(token, purpose) {
+        if (managerAuthorizationDisabled(purpose)) return !token;
         const normalizedToken = String(token || "");
         const grant = grants.get(normalizedToken);
         if (!grant) return false;
@@ -434,6 +457,7 @@ function createAdministratorSecurityService(database, options = {}) {
     }
 
     function validateGrant(token, purpose) {
+        if (managerAuthorizationDisabled(purpose)) return !token;
         const grant = grants.get(String(token || ""));
         const expectedLevel = authorizationLevelForPurpose(purpose);
         return Boolean(expectedLevel && grant && grant.purpose === purpose &&
@@ -491,7 +515,7 @@ function createAdministratorSecurityService(database, options = {}) {
     // prevents concurrent reuse without consuming authorization before the
     // protected operation has committed.
     function reserveGrants(requirements) {
-        const resolved = resolveGrantRequirements(requirements);
+        const resolved = resolveGrantRequirements(requirements).filter(item => !managerAuthorizationDisabled(item.purpose));
         if (!areValidGrantRequirements(resolved)) return false;
         resolved.forEach(item => {
             grants.delete(item.token);
@@ -501,14 +525,15 @@ function createAdministratorSecurityService(database, options = {}) {
     }
 
     function commitGrants(requirements) {
-        const valid = requirements.every(requirement => {
+        const activeRequirements = requirements.filter(requirement => !managerAuthorizationDisabled(requirement.purpose));
+        const valid = activeRequirements.every(requirement => {
             const token = String(requirement.token || "");
             const grant = reservedGrants.get(token);
             return authorizationLevelForPurpose(requirement.purpose) && grant &&
                 grant.purpose === requirement.purpose &&
                 grant.level === authorizationLevelForPurpose(requirement.purpose);
         });
-        requirements.forEach(requirement => {
+        activeRequirements.forEach(requirement => {
             reservedGrants.delete(String(requirement.token || ""));
         });
         return valid;
@@ -516,6 +541,7 @@ function createAdministratorSecurityService(database, options = {}) {
 
     function releaseGrants(requirements) {
         requirements.forEach(requirement => {
+            if (managerAuthorizationDisabled(requirement.purpose)) return;
             const token = String(requirement.token || "");
             const grant = reservedGrants.get(token);
             if (!grant || grant.purpose !== requirement.purpose) return;
@@ -529,6 +555,7 @@ function createAdministratorSecurityService(database, options = {}) {
             return { success: false, error: "Unsupported authorization purpose." };
         }
         const level = authorizationLevelForPurpose(purpose);
+        if (!level && managerAuthorizationDisabled(purpose)) return { success: true, grant: null };
         if (!level) return { success: false, error: "This permission is not assigned to an authorized PIN." };
         const label = level === AUTHORIZATION_LEVELS.MANAGER ? "Manager" : level === AUTHORIZATION_LEVELS.MASTER ? "Master" : "Administrator";
         const pinLength = level === AUTHORIZATION_LEVELS.MASTER ? 6 : 4;
@@ -859,6 +886,7 @@ function createAdministratorSecurityService(database, options = {}) {
 
     return {
         getStatus, getAuthorizationRole, authorizePin, changePin, recoverPin, recoverManagerPin, configureManagerPin,
+        isManagerAuthorizationDisabled: managerAuthorizationDisabled,
         initializePermissions, getPermissionMatrix, openPinManagementSession, hasPinManagementSession, closePinManagementSession,
         recordPinManagementActivity,
         savePinPermissions, restoreDefaultPermissionMatrix,

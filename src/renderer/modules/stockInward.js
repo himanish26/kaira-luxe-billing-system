@@ -557,7 +557,7 @@
         const reason = prompt("Reason for discarding this unresolved barcode:");
         if (!reason) return;
         authInProgress = true;
-        try { const grant = await requestAdminAuthorization("INVENTORY_INWARD"); if (!grant) return; documentData = await api().stockInwardDiscardLine({movementId:documentData.document.id,lineId:Number(id),reason,authorizationGrant:grant}); render(); }
+        try { const grant = await window.requestOptionalManagerAuthorization("INVENTORY_INWARD"); if (grant === null) return; documentData = await api().stockInwardDiscardLine({movementId:documentData.document.id,lineId:Number(id),reason,authorizationGrant:grant}); render(); }
         catch(error){showMessage(error.message,true);} finally{authInProgress=false;el("siScanner")?.focus();}
     }
     async function handlePrimaryAction() { if(reviewOpen)await post(); else await showPostReview(); }

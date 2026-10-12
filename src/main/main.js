@@ -1042,7 +1042,8 @@ ipcMain.handle("startup:get-metadata", () => ({
     version: app.getVersion(),
     developer: "Himanish Patnaik",
     copyright: "© 2026 Himanish Patnaik",
-    developmentBusinessDayGateBypassActive
+    developmentBusinessDayGateBypassActive,
+    managerDayReopenAuthorizationRequired: !administratorSecurity.isManagerAuthorizationDisabled("DAY_REOPEN")
 }));
 
 ipcMain.handle("startup:fit-splash", async event => {
@@ -1106,7 +1107,8 @@ ipcMain.handle("startup:close-previous-day", async (event, data) => {
     }
     const targetDate = String(data && data.businessDate || "");
     const pin = String(data && data.pin || "");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate) || !/^\d{4}$/.test(pin)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate) ||
+        (!administratorSecurity.isManagerAuthorizationDisabled("DAY_REOPEN") && !/^\d{4}$/.test(pin))) {
         return { success: false, error: "Enter the pending business date and valid 4-digit Manager PIN." };
     }
     const state = await getBusinessDayState();
@@ -1323,6 +1325,10 @@ mainWindow.focus();
 });
 
 ipcMain.handle("security:get-status", () => administratorSecurity.getStatus());
+ipcMain.handle("security:get-permissions", (event) =>
+    mainWindow && event.sender === mainWindow.webContents
+        ? administratorSecurity.getPermissionMatrix()
+        : null);
 ipcMain.handle("security:get-authorization-role", (event, purpose) =>
     mainWindow && event.sender === mainWindow.webContents
         ? administratorSecurity.getAuthorizationRole(purpose)

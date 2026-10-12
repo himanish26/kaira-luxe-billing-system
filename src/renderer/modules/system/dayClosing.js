@@ -1015,8 +1015,8 @@ async function reopenBusinessDay(options = {}) {
 
     }
 
-    const grant = await requestAdminAuthorization("DAY_REOPEN");
-    if (!grant) {
+    const grant = await window.requestOptionalManagerAuthorization("DAY_REOPEN");
+    if (grant === null) {
         return { success: false, cancelled: true };
     }
 

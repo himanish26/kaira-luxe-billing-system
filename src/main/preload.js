@@ -680,6 +680,7 @@ connectGoogleDrive: () =>
 
 administratorSecurity: {
     getStatus: () => ipcRenderer.invoke("security:get-status"),
+    getPermissions: () => ipcRenderer.invoke("security:get-permissions"),
     getAuthorizationRole: purpose => ipcRenderer.invoke("security:get-authorization-role", purpose),
     authorizePin: (pin, purpose) => ipcRenderer.invoke("security:authorize-pin", pin, purpose),
     discardGrant: (grant, purpose) => ipcRenderer.invoke("security:discard-grant", grant, purpose),

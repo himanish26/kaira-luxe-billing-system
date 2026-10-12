@@ -490,11 +490,13 @@ transform:translateY(-2px);
 .security-pin-action-row .security-action-btn { margin-top:14px; }
 .security-pin-management-btn { min-height:50px; margin-top:14px; padding:10px 22px; border:1px solid #218838; border-radius:8px; background:#218838; color:#fff; font:inherit; font-size:17px; font-weight:700; cursor:pointer; }
 .security-pin-management-btn:hover,.security-pin-management-btn:focus-visible { border-color:#1e7e34; background:#1e7e34; }
+html.pin-management-scroll-locked { overflow:hidden !important; }
 .klbs-drawer-overlay.pin-management-overlay.klbs-drawer-open .pin-management-drawer,.klbs-drawer-overlay.pin-management-overlay.klbs-drawer-closing .pin-management-drawer { width:min(40vw,720px); max-width:100vw; }
 .pin-management-drawer .klbs-drawer-header { align-items:flex-start; }
 .pin-management-drawer .klbs-drawer-header p { margin:5px 0 0; color:var(--text-muted); font-size:14px; }
-.klbs-drawer-overlay.klbs-drawer-open .pin-management-drawer .klbs-drawer-body,.klbs-drawer-overlay.klbs-drawer-closing .pin-management-drawer .klbs-drawer-body { display:flex; min-height:0; flex:1 1 auto; flex-direction:column; overflow:hidden; }
-.pin-management-table-wrap { width:100%; min-height:0; flex:1 1 auto; overflow-x:hidden; overflow-y:auto; }
+.klbs-drawer-overlay.klbs-drawer-open .pin-management-drawer .klbs-drawer-body,.klbs-drawer-overlay.klbs-drawer-closing .pin-management-drawer .klbs-drawer-body { display:flex; min-height:0; flex:1 1 auto; flex-direction:column; overflow:hidden; padding-bottom:0; }
+.pin-management-table-wrap { width:100%; min-height:0; flex:1 1 0; overflow-x:hidden; overflow-y:auto; }
+.pin-management-notification-region { display:flex; width:100%; height:36px; min-height:36px; max-height:36px; box-sizing:border-box; flex:0 0 36px; align-items:center; border-top:1px solid var(--border); }
 .pin-management-table { width:100%; table-layout:fixed; border-collapse:collapse; }
 .pin-management-table th,.pin-management-table td { padding:8px 8px; border-bottom:1px solid var(--border); overflow-wrap:break-word; }
 .pin-management-table thead th { position:sticky; top:0; z-index:2; background:var(--primary); color:#fff; font-size:12px; font-weight:800; letter-spacing:.035em; line-height:1.25; text-align:center; }
@@ -507,17 +509,18 @@ transform:translateY(-2px);
 .pin-management-feature-note { display:block; margin-top:3px; color:var(--primary); font-size:10px; font-weight:800; letter-spacing:.04em; }
 .pin-management-table td { text-align:center; }
 .pin-management-table input[type="checkbox"] { width:18px; height:18px; margin:0; accent-color:var(--primary); vertical-align:middle; }
+.pin-management-table input[type="checkbox"][data-role="administrator"]:checked:disabled { -webkit-appearance:none; appearance:none; display:inline-grid; place-content:center; box-sizing:border-box; border:1px solid var(--primary); border-radius:3px; background:var(--primary); }
+.pin-management-table input[type="checkbox"][data-role="administrator"]:checked:disabled::after { content:""; width:8px; height:4px; margin-top:-2px; border:solid #fff; border-width:0 0 2px 2px; transform:rotate(-45deg); }
 .pin-management-table input[type="checkbox"]:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
-.klbs-drawer-overlay.pin-management-overlay.klbs-drawer-open .pin-management-footer,.klbs-drawer-overlay.pin-management-overlay.klbs-drawer-closing .pin-management-footer { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); justify-content:stretch; gap:12px; }
-.pin-management-footer button { width:80%; min-width:0; height:46px; min-height:46px; justify-self:center; box-sizing:border-box; margin:0; padding:9px 10px; border-radius:8px; font-size:13px; font-weight:700; line-height:1.2; white-space:nowrap; }
+.klbs-drawer-overlay.pin-management-overlay.klbs-drawer-open .pin-management-footer,.klbs-drawer-overlay.pin-management-overlay.klbs-drawer-closing .pin-management-footer { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); justify-content:stretch; gap:12px; }
+.pin-management-footer button { width:100%; min-width:0; height:46px; min-height:46px; justify-self:stretch; box-sizing:border-box; margin:0; padding:9px 10px; border-radius:8px; font-size:13px; font-weight:700; line-height:1.2; white-space:nowrap; }
 .pin-management-footer .dashboard-btn { border:1px solid var(--primary); background:var(--primary); }
 .pin-management-footer #pinManagementDefaults,.pin-management-footer #pinManagementClear { border:1px solid var(--primary); background:#fff; color:var(--primary); }
-.pin-management-footer #pinManagementCancel { border:2px solid var(--primary); border-radius:8px; background:#fff; color:var(--primary); transition:background-color .18s ease,color .18s ease,border-color .18s ease; }
-.pin-management-footer #pinManagementCancel:hover:not(:disabled) { transform:none; border-color:var(--primary); background:#F7E8EE; color:var(--primary); box-shadow:none; }
-.pin-management-footer #pinManagementCancel:focus-visible { outline:3px solid rgba(139,0,75,.28); outline-offset:3px; }
-.pin-management-drawer #pinManagementMessage { display:block; width:100%; box-sizing:border-box; min-height:0; flex:0 0 auto; margin:8px 0; padding:10px 12px; border:1px solid #e4aaaa; border-radius:6px; background:#fff1f1; color:#9b2424; font-size:13px; font-weight:600; line-height:1.4; overflow-wrap:anywhere; }
+.pin-management-footer #pinManagementSave:disabled,.pin-management-footer #pinManagementSave:disabled:hover,.pin-management-footer #pinManagementSave:disabled:active { border-color:#e3e3e3; background:#e3e3e3; color:#4d4d4d; cursor:not-allowed; box-shadow:none; transform:none; }
+.pin-management-drawer #pinManagementMessage { display:block; width:100%; box-sizing:border-box; min-height:0; flex:0 0 auto; margin:0; padding:0 !important; border:0 !important; border-radius:0 !important; background:transparent !important; box-shadow:none !important; color:#9b2424; font-size:13px; font-weight:600; line-height:1.15; text-align:left; overflow-wrap:anywhere; }
 .pin-management-drawer #pinManagementMessage:empty { display:none; }
-.pin-management-drawer #pinManagementMessage.success { min-height:0; margin:8px 0; padding:10px 12px; border-color:#b9dfc7; background:#edf8f1 !important; color:#147a3d !important; }
+.pin-management-drawer #pinManagementMessage.success { min-height:0; margin:0; padding:0 !important; border:0 !important; border-radius:0 !important; background:transparent !important; box-shadow:none !important; color:#147a3d !important; }
+.pin-management-drawer #pinManagementMessage.warning { color:#9a6a00 !important; }
 @media(max-width:700px) {
     .security-pin-action-row { align-items:stretch; flex-direction:column; }
     .security-pin-action-row>button { width:100%; }

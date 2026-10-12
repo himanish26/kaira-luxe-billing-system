@@ -21,6 +21,7 @@ const warningChecks = new Set(["backup", "printer", "internet"]);
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let checksRunning = false;
 let developmentBypassActive = false;
+let managerDayReopenAuthorizationRequired = true;
 let securitySetupOpening = false;
 let securitySetupOpened = false;
 let ellipsisTimer = null;
@@ -427,7 +428,7 @@ document.getElementById("confirmReopenBtn").addEventListener("click", async () =
     const reason = reopenReasonSelect.value.trim();
     const pin = document.getElementById("reopenPin").value;
     const error = document.getElementById("reopenError");
-    if (!window.KLBS_isValidDayReopenReason(reason) || !/^\d{4}$/.test(pin)) {
+    if (!window.KLBS_isValidDayReopenReason(reason) || (managerDayReopenAuthorizationRequired && !/^\d{4}$/.test(pin))) {
         error.textContent = "Enter a reason and valid 4-digit Manager PIN.";
         return;
     }
@@ -446,6 +447,9 @@ window.startupAPI.getMetadata().then(metadata => {
     document.getElementById("startupVersion").textContent = metadata.version;
     document.getElementById("terminalVersion").textContent = metadata.version;
     developmentBypassActive = metadata.developmentBusinessDayGateBypassActive === true;
+    managerDayReopenAuthorizationRequired = metadata.managerDayReopenAuthorizationRequired !== false;
+    document.getElementById("reopenPin").closest("label").hidden = !managerDayReopenAuthorizationRequired;
+    document.getElementById("previousDayPin").closest("label").hidden = !managerDayReopenAuthorizationRequired;
     document.getElementById("developmentBypassNotice").hidden = !developmentBypassActive;
 });
 
@@ -469,7 +473,7 @@ document.getElementById("cancelPreviousBtn").addEventListener("click", () => win
 async function closePreviousDay() {
     const pinInput = document.getElementById("previousDayPin");
     const error = document.getElementById("previousDayError");
-    if (!/^\d{4}$/.test(pinInput.value)) { error.textContent = "Enter a valid 4-digit Manager PIN."; return; }
+    if (managerDayReopenAuthorizationRequired && !/^\d{4}$/.test(pinInput.value)) { error.textContent = "Enter a valid 4-digit Manager PIN."; return; }
     const result = await window.startupAPI.closePreviousDay({ businessDate: document.getElementById("closePreviousBtn").dataset.businessDate, pin: pinInput.value });
     pinInput.value = "";
     if (!result.success) { error.textContent = result.error || result.message || "Previous business day could not be closed."; requestSplashFit(); return; }
