@@ -107,7 +107,7 @@ async function main() {
         for (const result of allResults) {
             assert.strictEqual(result.success, true);
             assert(fs.existsSync(result.backupFilePath));
-            assert(/^KL_Backup_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_\d+_\d+_[a-f0-9]{12}\.zip$/.test(result.backupFileName));
+            assert(/^KL_Backup_[a-f0-9]{6}\.zip$/.test(result.backupFileName));
             assert.strictEqual((await validateBackup(result.backupFilePath)).success, true);
         }
 
@@ -135,7 +135,8 @@ async function main() {
         const dayClosing = fs.readFileSync(path.join(root, "src/database/dayClosingService.js"), "utf8");
         assert(service.includes("backupQueueTail.then"));
         assert(service.includes("backupQueueTail = operation.catch"));
-        assert(service.includes("`${backupFilePath}.partial`"));
+        assert(service.includes(".zip.partial"));
+        assert(!fs.readdirSync(backupFolder).some(name => name.endsWith(".reserve")), "filename reservations are cleaned up");
         assert(service.indexOf("await writeBackupArchive") < service.indexOf("await validateBackup(backupFilePath)"));
         assert(service.indexOf("await validateBackup(backupFilePath)") < service.indexOf("success: true"));
         assert(/if\s*\([^;]*schedulerCheckInFlight[^;]*\)\s*return/.test(scheduler));

@@ -22,6 +22,11 @@
     let duplicateClear = true;
     let contextSaved = false;
     let unresolvedMovementId = null;
+    let selectedUnresolvedLineIds = new Set();
+    let unresolvedRetryInProgress = false;
+    let unresolvedBulkRemoveInProgress = false;
+    let unresolvedRetryAlertTimer = null;
+    let unresolvedRetryAlertGeneration = 0;
     let previousTopbarClass = "";
     let duplicateCheckSequence = 0;
     let messageTimeout = null;
@@ -86,18 +91,19 @@
               <aside id="siUnresolvedDrawer" class="klbs-drawer-panel si-unresolved-drawer" role="dialog" aria-modal="true" aria-labelledby="siUnresolvedTitle" tabindex="-1">
                 <header class="klbs-drawer-header"><h2 id="siUnresolvedTitle" class="klbs-drawer-title">UNRESOLVED BARCODES</h2><button id="siUnresolvedExit" class="klbs-drawer-exit" type="button" aria-label="Exit unresolved barcodes">EXIT</button></header>
                 <div class="klbs-drawer-body"><div id="siUnresolvedContext" class="si-unresolved-context"></div><div id="siUnknownLines"></div></div>
-                <footer class="klbs-drawer-footer"><button id="siExport" type="button" class="si-export-btn">EXPORT UNKNOWN BARCODES</button></footer>
+                <footer class="klbs-drawer-footer si-unresolved-footer"><div id="siRetryAlert" class="si-retry-alert" role="status" aria-live="polite" hidden></div><button id="siExport" type="button" class="si-export-btn">EXPORT UNKNOWN BARCODES</button></footer>
               </aside>
             </div>
           </section>`;
         content.insertAdjacentHTML("beforeend", `<div id="siDuplicateOverlay" class="modal si-duplicate-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="siDuplicateTitle"><section class="modal-content si-duplicate-dialog"><header><h2 id="siDuplicateTitle"></h2></header><div id="siDuplicateBody"></div><footer id="siDuplicateActions"></footer></section></div>`);
         content.insertAdjacentHTML("beforeend", `<div id="siArchiveOverlay" class="modal si-archive-overlay" hidden role="alertdialog" aria-modal="true" aria-labelledby="siArchiveTitle" aria-describedby="siArchiveDescription"><section class="modal-content si-archive-dialog"><h2 id="siArchiveTitle">REMOVE CANCELLED STOCK INWARD</h2><strong id="siArchiveMovementNo" class="si-archive-movement"></strong><p id="siArchiveDescription">Remove this cancelled Stock Inward from the list?</p><div class="modal-buttons si-archive-actions"><button id="siArchiveCancel" type="button" class="klbs-cancel-btn">CANCEL</button><button id="siArchiveConfirm" type="button" class="klbs-primary-btn">REMOVE</button></div></section></div>`);
-        content.insertAdjacentHTML("beforeend", `<div id="siSuccessOverlay" class="modal si-success-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="siSuccessTitle" aria-describedby="siSuccessMessage"><section class="modal-content si-success-dialog"><h2 id="siSuccessTitle">STOCK INWARD COMPLETE</h2><strong id="siSuccessCode"></strong><p id="siSuccessMessage"></p><p id="siSuccessUnresolved" class="si-success-unresolved" hidden></p><p id="siPrintMessage" class="si-print-message" role="status" aria-live="polite"></p><div class="modal-buttons si-success-actions"><button id="siSuccessDone" type="button" class="klbs-primary-btn">DONE</button></div></section></div>`);
+        content.insertAdjacentHTML("beforeend", `<div id="siSuccessOverlay" class="modal si-success-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="siSuccessTitle" aria-describedby="siSuccessMessage siPartialExplanation"><section class="modal-content si-success-dialog"><h2 id="siSuccessTitle">STOCK INWARD COMPLETE</h2><strong id="siSuccessCode"></strong><p id="siSuccessMessage"></p><p id="siSuccessUnresolved" class="si-success-unresolved" hidden></p><div id="siPartialSummary" class="si-partial-summary" hidden><div class="si-partial-posted"><small>POSTED SUCCESSFULLY</small><strong id="siPartialPostedCount"></strong></div><div class="si-partial-pending"><small>PENDING RESOLUTION</small><strong id="siPartialPendingCount"></strong></div></div><p id="siPartialExplanation" class="si-partial-explanation" hidden></p><p id="siPrintMessage" class="si-print-message" role="status" aria-live="polite"></p><div class="modal-buttons si-success-actions"><button id="siSuccessDone" type="button" class="klbs-primary-btn">DONE</button></div></section></div>`);
         unresolvedDrawer = window.KLBSDrawer.create({
             root: el("siUnresolvedOverlay"), panel: el("siUnresolvedDrawer"),
             labelledBy: "siUnresolvedTitle", exitButtons: [el("siUnresolvedExit")],
             initialFocus: () => el("siUnresolvedExit"), closeOnOverlay: true,
             restoreFocus: () => el("siScanner"),
+            onClosing: () => { selectedUnresolvedLineIds.clear(); clearUnresolvedRetryAlert(); },
             onExit: closeUnresolvedDrawer, onEscape: () => { closeUnresolvedDrawer(); return true; }
         });
         escHandler = event => {
@@ -123,12 +129,22 @@
     }
     async function showResumeList({ focusTarget = "settingsPageBackBtn" } = {}) {
         pageMode = "home";
+        selectedUnresolvedLineIds.clear();
+        clearUnresolvedRetryAlert();
         readOnly = false; documentData = null; reviewOpen = false;
         clearTimeout(messageTimeout);
         el("siPageMessage").textContent="";el("siMessage").textContent="";
         const request = ++historyRequestSequence;
         const [drafts, historyResult] = await Promise.all([api().stockInwardListDrafts(),api().stockInwardHistory({page:historyPage,pageSize:HISTORY_PAGE_SIZE,keyword:historyKeyword})]);
         if (!active || request !== historyRequestSequence) return;
+        const draftSummaries = await Promise.all(drafts.map(async row => {
+            try {
+                const detail = await api().stockInwardLoad(row.id);
+                return Number(detail?.document?.id) === Number(row.id) ? detail.summary : null;
+            } catch (_error) { return null; }
+        }));
+        if (!active || request !== historyRequestSequence) return;
+        const draftsWithSummaries = drafts.map((row, index) => ({ ...row, unresolved_units: draftSummaries[index]?.unresolvedUnits }));
         const history = historyResult?.rows || [];
         historyPage = Number(historyResult?.page) || 1;
         historyPageSize = Number(historyResult?.pageSize) || HISTORY_PAGE_SIZE;
@@ -139,7 +155,7 @@
         el("siReadOnlyBanner").hidden = true;
         el("siActions").hidden = true;
         workspace.hidden=true;resume.hidden=false;
-        const draftCard = row => `<article class="si-current-card"><div class="si-open-field si-open-number"><small>STOCK INWARD NO.</small><strong>${escapeHtml(row.movement_no)}</strong></div><div class="si-open-field"><small>BUSINESS DATE</small><span>${escapeHtml(formatBusinessDate(row.business_date))}</span></div><div class="si-open-field si-open-supplier"><small>SUPPLIER</small><span>${escapeHtml(row.supplier_name || "No Supplier")}</span></div><div class="si-open-field si-open-invoice"><small>INVOICE NO.</small><span>${escapeHtml(row.invoice_no || "—")}</span></div><div class="si-open-field si-open-count"><small>ITEMS</small><span>${Number(row.sku_count)||0}<small>${Number(row.unresolved_count)||0} unresolved</small></span></div><div class="si-open-field si-open-count"><small>RECEIVED QTY</small><span>${Number(row.units)||0}${Number(row.posted_units)>0?`<small>${Number(row.posted_units)} posted</small>`:""}</span></div><div class="si-open-field si-open-status"><span class="si-status-badge ${escapeHtml(row.status.toLowerCase())}">${escapeHtml(row.status.replaceAll("_"," "))}</span></div><div class="si-card-actions">${Number(row.posted_units)>0?`<button type="button" class="print-btn si-open-reprint" data-reprint="${Number(row.id)}">🖨 REPRINT RECEIPT</button>`:""}<button type="button" class="klbs-primary-btn" data-id="${row.id}">RESUME</button>${["DRAFT","PENDING_MASTER"].includes(row.status)?`<button type="button" class="klbs-cancel-btn si-delete-btn" data-delete-draft="${row.id}">DELETE</button>`:""}</div><small class="si-open-updated">Updated ${escapeHtml(formatUpdated(row.updated_at))}</small></article>`;
+        const draftCard = row => `<article class="si-current-card"><div class="si-open-group"><div class="si-open-field si-open-number"><small>STOCK INWARD</small><strong>${escapeHtml(row.movement_no)}</strong></div><div class="si-open-field"><small>DATE</small><span>${escapeHtml(formatBusinessDate(row.business_date))}</span></div></div><div class="si-open-group"><div class="si-open-field si-open-supplier"><small>SUPPLIER</small><span>${escapeHtml(row.supplier_name || "No Supplier")}</span></div><div class="si-open-field si-open-invoice"><small>INVOICE</small><span>${escapeHtml(row.invoice_no || "—")}</span></div></div><div class="si-open-group si-open-quantities"><div class="si-open-field si-open-count"><small>RECEIVED</small><span>${Number(row.units)||0}</span></div><div class="si-open-field si-open-count si-posted-count"><small>POSTED</small><span>${Number(row.posted_units)||0}</span></div><div class="si-open-field si-open-count si-unresolved-count"><small>UNRESOLVED</small><span>${Number.isFinite(Number(row.unresolved_units))?Number(row.unresolved_units):"—"}</span></div></div><div class="si-open-field si-open-status"><small>STATUS</small><span class="si-status-badge ${escapeHtml(row.status.toLowerCase())}">${escapeHtml(row.status.replaceAll("_"," "))}</span></div><div class="si-card-actions">${Number(row.posted_units)>0?`<button type="button" class="klbs-cancel-btn si-open-reprint" data-reprint="${Number(row.id)}">🖨 REPRINT RECEIPT</button>`:""}<button type="button" class="klbs-primary-btn" data-id="${row.id}">RESUME</button>${["DRAFT","PENDING_MASTER"].includes(row.status)?`<button type="button" class="klbs-cancel-btn si-delete-btn" data-delete-draft="${row.id}">DELETE</button>`:""}</div><small class="si-open-updated">Updated ${escapeHtml(formatUpdated(row.updated_at))}</small></article>`;
         const historyRows = history.map(row => `<tr>
           <td><span class="si-status-badge ${escapeHtml(String(row.status).toLowerCase())}">${escapeHtml(String(row.status).replaceAll("_"," "))}</span></td>
           <td class="si-history-number">${escapeHtml(row.movement_no)}</td>
@@ -153,7 +169,7 @@
         const historyEmpty = history.length ? "" : `<tr><td class="si-history-empty" colspan="8">${historyKeyword ? "No matching Stock Inwards found." : "No Stock Inward history found."}</td></tr>`;
         const rangeFirst = historyTotalCount ? ((historyPage-1)*historyPageSize)+1 : 0;
         const rangeLast = Math.min(historyPage*historyPageSize,historyTotalCount);
-        resume.innerHTML=`<button type="button" id="siNewDraft" class="klbs-primary-btn si-new-btn">+ NEW STOCK INWARD</button>${drafts.length?`<section class="si-current-draft"><h2>OPEN STOCK INWARDS</h2>${drafts.map(draftCard).join("")}</section>`:""}<section class="si-recent-history"><h2>RECENT STOCK INWARDS</h2><label class="si-history-search-label" for="siHistorySearch">Search Stock Inward history</label><input id="siHistorySearch" class="si-history-search" type="search" placeholder="Search Stock Inward / Supplier / Invoice..." value="${escapeHtml(historyKeyword)}"><div class="table-container si-history-table-wrap"><table class="si-history-table"><thead><tr><th>STATUS</th><th>STOCK INWARD NO</th><th>DATE</th><th>SUPPLIER</th><th>INVOICE NO</th><th>POSTED UNITS</th><th>VIEW</th><th>PRINT</th></tr></thead><tbody>${historyRows || historyEmpty}</tbody></table></div><div id="siHistoryPagination" class="history-pagination" ${historyTotalCount ? "" : "hidden"}><div class="pagination-controls"><button type="button" id="siHistoryPrevious" class="pagination-nav-btn" ${historyPage<=1?"disabled":""}>Previous</button><span id="siHistoryPageLabel">Page ${historyPage.toLocaleString("en-US")} of ${historyTotalPages.toLocaleString("en-US")}</span><label for="siHistoryPageJump">Jump to page:</label><input id="siHistoryPageJump" type="number" min="1" step="1" inputmode="numeric" value="${historyPage}" max="${historyTotalPages}" aria-label="Jump to Stock Inward history page"><button type="button" id="siHistoryNext" class="pagination-nav-btn" ${historyPage>=historyTotalPages?"disabled":""}>Next</button></div><span id="siHistoryRangeLabel">Showing ${rangeFirst.toLocaleString("en-US")}–${rangeLast.toLocaleString("en-US")} of ${historyTotalCount.toLocaleString("en-US")} Stock Inwards</span></div></section>`;
+        resume.innerHTML=`<button type="button" id="siNewDraft" class="klbs-primary-btn si-new-btn">+ NEW STOCK INWARD</button>${draftsWithSummaries.length?`<section class="si-current-draft"><h2>OPEN STOCK INWARDS</h2>${draftsWithSummaries.map(draftCard).join("")}</section>`:""}<section class="si-recent-history"><h2>RECENT STOCK INWARDS</h2><label class="si-history-search-label" for="siHistorySearch">Search Stock Inward history</label><input id="siHistorySearch" class="si-history-search" type="search" placeholder="Search Stock Inward / Supplier / Invoice..." value="${escapeHtml(historyKeyword)}"><div class="table-container si-history-table-wrap"><table class="si-history-table"><thead><tr><th>STATUS</th><th>STOCK INWARD NO</th><th>DATE</th><th>SUPPLIER</th><th>INVOICE NO</th><th>POSTED UNITS</th><th>VIEW</th><th>PRINT</th></tr></thead><tbody>${historyRows || historyEmpty}</tbody></table></div><div id="siHistoryPagination" class="history-pagination" ${historyTotalCount ? "" : "hidden"}><div class="pagination-controls"><button type="button" id="siHistoryPrevious" class="pagination-nav-btn" ${historyPage<=1?"disabled":""}>Previous</button><span id="siHistoryPageLabel">Page ${historyPage.toLocaleString("en-US")} of ${historyTotalPages.toLocaleString("en-US")}</span><label for="siHistoryPageJump">Jump to page:</label><input id="siHistoryPageJump" type="number" min="1" step="1" inputmode="numeric" value="${historyPage}" max="${historyTotalPages}" aria-label="Jump to Stock Inward history page"><button type="button" id="siHistoryNext" class="pagination-nav-btn" ${historyPage>=historyTotalPages?"disabled":""}>Next</button></div><span id="siHistoryRangeLabel">Showing ${rangeFirst.toLocaleString("en-US")}–${rangeLast.toLocaleString("en-US")} of ${historyTotalCount.toLocaleString("en-US")} Stock Inwards</span></div></section>`;
         resume.querySelectorAll("[data-id]").forEach(button=>button.onclick=()=>openDraft(Number(button.dataset.id)));
         resume.querySelectorAll("[data-delete-draft]").forEach(button=>button.onclick=()=>deleteDraft(Number(button.dataset.deleteDraft)));
         resume.querySelectorAll("[data-history]").forEach(button=>button.onclick=()=>openDraft(Number(button.dataset.history),{historical:true}));
@@ -194,6 +210,10 @@
         try {
             if (typeof options === "boolean") options = {historical:options};
             const historical = Boolean(options.historical);
+            if (Number(documentData?.document?.id) !== Number(id)) {
+                selectedUnresolvedLineIds.clear();
+                clearUnresolvedRetryAlert();
+            }
             documentData = await api().stockInwardLoad(id);
             contextSaved = true; duplicateClear = true; dismissedDuplicateInvoice = null; duplicateDialogInvoice = null; currentMasterResults = [];
             reviewOpen = false;
@@ -239,7 +259,7 @@
                     return;
                 }
                 const barcode = scannedBarcode.trim();
-                if (!barcode) { showMessage("Scan a product barcode."); return; }
+                if (!barcode) { showMessage("Scan a product barcode.", "warning"); return; }
                 el("siScanner").value = "";
                 scanQueue = scanQueue.then(() => scanBarcode(barcode)).catch(error => showMessage(error.message, true));
             };
@@ -289,7 +309,7 @@
             else contextSaved=true;
             render();
             if(documentData.invoiceDuplicate) return false;
-            if (documentData.splitDeliveryWarning) showMessage("THIS SUPPLIER INVOICE IS ALREADY LINKED TO ANOTHER STOCK INWARD. THIS MAY BE A SPLIT DELIVERY.");
+            if (documentData.splitDeliveryWarning) showMessage("THIS SUPPLIER INVOICE IS ALREADY LINKED TO ANOTHER STOCK INWARD. THIS MAY BE A SPLIT DELIVERY.", "warning");
             return true;
         } catch (error) { showMessage(error.message, true); return false; }
     }
@@ -363,7 +383,7 @@
     }
     async function scanBarcode(barcode) {
         barcode = String(barcode ?? "").trim();
-        if (!barcode) { showMessage("Scan a product barcode."); return; }
+        if (!barcode) { showMessage("Scan a product barcode.", "warning"); return; }
         if (/[\u0000-\u001F\u007F-\u009F]/.test(barcode)) { showMessage("Barcode contains unsupported control characters.",true); el("siScanner")?.focus(); el("siScanner")?.select(); return; }
         if (!await saveContext() || !scannerHeaderIsValid() || !duplicateClear) { updateScannerGate(); showMessage("Complete receiving details before scanning.",true); return; }
         try {
@@ -372,10 +392,12 @@
             if (resolution.resolution === "UNIQUE" && Number(resolution.product?.variable_value) === 1) {
                 quantity = await captureVvpQuantity(resolution.product, barcode);
             }
-            if (quantity == null) showMessage("Variable Value quantity entry cancelled.");
+            if (quantity == null) showMessage("Variable Value quantity entry cancelled.", "warning");
             else {
                 documentData = await api().stockInwardScan({ movementId:documentData.document.id,barcode,quantity });
-                showMessage(documentData.lastResolution === "AMBIGUOUS" ? "Barcode matches more than one Product. It is retained for review." : documentData.lastResolution === "NOT_FOUND" ? "Product not found. Barcode retained as unresolved." : "Product added to Stock Inward.");
+                if (documentData.lastResolution === "AMBIGUOUS") showMessage("Barcode matches more than one Product. It is retained for review.", "warning");
+                else if (documentData.lastResolution === "NOT_FOUND") showMessage("Product not found. Barcode retained as unresolved.", "warning");
+                else showMessage("Product added to Stock Inward.");
                 render();
             }
         } catch (error) { showMessage(error.message, true); }
@@ -421,6 +443,234 @@
             requestAnimationFrame(() => { input.focus(); input.select(); });
         });
     }
+    function renderUnresolvedRows(rows, options = {}) {
+        const historical = Boolean(options.historical);
+        const readOnlyRows = Boolean(options.readOnly);
+        const movementId = Number(options.movementId || documentData?.document?.id);
+        const masters = options.masters || new Map();
+        const selectable = !historical && !readOnlyRows;
+        const eligibleRows = selectable
+            ? rows.filter(line => line.product_state === "PENDING_MASTER" && line.posting_state === "UNPOSTED" && !line.discarded_at)
+            : [];
+        const eligibleIds = new Set(eligibleRows.map(line => Number(line.id)));
+        for (const id of selectedUnresolvedLineIds) if (!eligibleIds.has(id)) selectedUnresolvedLineIds.delete(id);
+        const selectedRows = eligibleRows.filter(line => selectedUnresolvedLineIds.has(Number(line.id)));
+        const selectedUnits = selectedRows.reduce((total, line) => total + (Number(line.scanned_quantity) || 0), 0);
+        const retryableRows = selectable ? rows.filter(line => line.product_state === "PENDING_MASTER" && !line.discarded_at) : [];
+        const busy = unresolvedRetryInProgress || unresolvedBulkRemoveInProgress;
+        const toolbar = selectable ? `<div class="si-unresolved-toolbar">
+            <div class="si-selection-controls">
+                <input id="siUnresolvedSelectAll" class="si-selection-checkbox" type="checkbox" aria-label="Select all eligible unresolved barcode entries" ${eligibleRows.length > 0 && selectedRows.length === eligibleRows.length ? "checked" : ""} ${!eligibleRows.length || busy ? "disabled" : ""}>
+                <details class="si-selection-menu">
+                    <summary aria-label="Selection options">▼</summary>
+                    <div class="si-selection-menu-options">
+                        <button type="button" data-selection-action="all" ${busy ? "disabled" : ""}>Select All</button>
+                        <button type="button" data-selection-action="none" ${busy ? "disabled" : ""}>Select None</button>
+                        <button type="button" data-selection-action="invert" ${busy ? "disabled" : ""}>Invert Selection</button>
+                    </div>
+                </details>
+            </div>
+            <span class="si-selection-summary" aria-live="polite">${selectedRows.length ? `${selectedRows.length} Selected · ${selectedUnits} Units` : ""}</span>
+            <div class="si-unresolved-toolbar-actions">
+                ${selectedRows.length ? `<button type="button" class="klbs-cancel-btn si-remove-selected" ${busy ? "disabled" : ""}>REMOVE SELECTED</button>` : ""}
+                <button type="button" class="klbs-primary-btn si-retry-all" ${!retryableRows.length || busy ? "disabled" : ""}>RETRY ALL</button>
+            </div>
+        </div>` : "";
+        const selectColumn = selectable ? `<span role="columnheader" aria-label="Select"></span>` : "";
+        const barcodeHeader = historical ? "BARCODE" : "BARCODE";
+        const actionHeader = historical ? "PRODUCT MASTER NOW" : "ACTIONS";
+        const table = rows.length ? `<div class="si-unresolved-table ${historical ? "is-historical" : ""}" role="table" aria-label="Unresolved barcode lines">
+            <div class="si-unresolved-row si-unresolved-heading ${selectable ? "has-select-checkbox" : ""} ${historical ? "is-historical" : ""}" role="row">${selectColumn}<span role="columnheader">${barcodeHeader}</span><span role="columnheader">QTY</span><span role="columnheader">${historical ? "ORIGINAL STATUS" : "STATUS"}</span><span role="columnheader">${actionHeader}</span></div>
+            ${rows.map(line => {
+                const lineId = Number(line.id);
+                const isEligible = eligibleIds.has(lineId);
+                const checkbox = selectable
+                    ? `<span class="si-unresolved-select-cell" role="cell">${isEligible ? `<input class="si-selection-checkbox si-line-selection" type="checkbox" data-line-select="${lineId}" aria-label="Select unresolved barcode ${escapeHtml(line.barcode)}" ${selectedUnresolvedLineIds.has(lineId) ? "checked" : ""} ${busy ? "disabled" : ""}>` : "—"}</span>`
+                    : "";
+                const status = line.discarded_at ? "DISCARDED" : escapeHtml(line.resolution_note || "PRODUCT NOT FOUND");
+                const detail = historical
+                    ? (() => {
+                        const master = masters.get(lineId);
+                        const state = master?.currentResolution;
+                        const stateText = state === "UNIQUE"
+                            ? `✓ NOW FOUND · ${[master.currentProduct?.sku,master.currentProduct?.product_name,master.currentProduct?.colour,master.currentProduct?.size].filter(Boolean).map(escapeHtml).join(" · ")}`
+                            : state === "AMBIGUOUS" ? "⚠ AMBIGUOUS" : "✕ STILL NOT FOUND";
+                        return `<span class="si-master-state ${state === "UNIQUE" ? "found" : state === "AMBIGUOUS" ? "ambiguous" : "missing"}">${stateText}</span>`;
+                    })()
+                    : `<div class="si-unresolved-actions" role="cell">${line.discarded_at || readOnlyRows ? "—" : `<button class="si-remove-btn" data-remove="${lineId}" ${busy ? "disabled" : ""}>REMOVE</button>`}</div>`;
+                return `<div class="si-unresolved-row ${selectable ? "has-select-checkbox" : ""} ${historical ? "is-historical" : ""} ${line.discarded_at ? "si-discarded" : ""}" role="row">${checkbox}<strong class="si-unresolved-barcode" role="cell">${escapeHtml(line.barcode)}</strong><strong class="si-unresolved-qty" role="cell">${line.scanned_quantity}</strong><span class="si-unresolved-status" role="cell">${status}</span>${detail}</div>`;
+            }).join("")}
+        </div>` : `<p class="si-empty si-unresolved-empty">NO UNRESOLVED BARCODES</p>`;
+        el("siUnknownLines").innerHTML = toolbar + table;
+
+        const refresh = () => renderUnresolvedRows(rows, options);
+        const selectAll = el("siUnresolvedSelectAll");
+        if (selectAll) {
+            selectAll.indeterminate = selectedRows.length > 0 && selectedRows.length < eligibleRows.length;
+            selectAll.onchange = () => {
+                if (selectAll.checked) eligibleRows.forEach(line => selectedUnresolvedLineIds.add(Number(line.id)));
+                else eligibleRows.forEach(line => selectedUnresolvedLineIds.delete(Number(line.id)));
+                refresh();
+            };
+        }
+        el("siUnknownLines").querySelectorAll("[data-selection-action]").forEach(button => {
+            button.onclick = () => {
+                if (button.dataset.selectionAction === "all") eligibleRows.forEach(line => selectedUnresolvedLineIds.add(Number(line.id)));
+                else if (button.dataset.selectionAction === "none") eligibleRows.forEach(line => selectedUnresolvedLineIds.delete(Number(line.id)));
+                else if (button.dataset.selectionAction === "invert") eligibleRows.forEach(line => {
+                    const id = Number(line.id);
+                    if (selectedUnresolvedLineIds.has(id)) selectedUnresolvedLineIds.delete(id);
+                    else selectedUnresolvedLineIds.add(id);
+                });
+                refresh();
+            };
+        });
+        el("siUnknownLines").querySelectorAll("[data-line-select]").forEach(checkbox => {
+            checkbox.onchange = () => {
+                const id = Number(checkbox.dataset.lineSelect);
+                if (checkbox.checked) selectedUnresolvedLineIds.add(id);
+                else selectedUnresolvedLineIds.delete(id);
+                refresh();
+            };
+        });
+        el("siUnknownLines").querySelector(".si-remove-selected")?.addEventListener("click", () => bulkRemoveSelected(eligibleRows, movementId));
+        el("siUnknownLines").querySelector(".si-retry-all")?.addEventListener("click", () => retryAllUnresolved(movementId));
+    }
+
+    async function bulkRemoveSelected(eligibleRows, movementId) {
+        if (unresolvedRetryInProgress || unresolvedBulkRemoveInProgress) return;
+        const selectedRows = eligibleRows.filter(line => selectedUnresolvedLineIds.has(Number(line.id)));
+        if (!selectedRows.length) return;
+        const lineIds = selectedRows.map(line => Number(line.id));
+        const unitCount = selectedRows.reduce((sum, line) => sum + (Number(line.scanned_quantity) || 0), 0);
+        unresolvedBulkRemoveInProgress = true;
+        const drawerRows = documentData?.lines?.filter(line => line.product_state === "PENDING_MASTER" && !line.discarded_at) || eligibleRows;
+        renderUnresolvedRows(drawerRows, { movementId });
+        try {
+            const confirmation = await api().showMessageBox({
+                type: "warning",
+                title: "Remove Unresolved Barcode Entries",
+                buttons: ["CANCEL", `REMOVE ${lineIds.length}`],
+                defaultId: 0,
+                cancelId: 0,
+                message: `Remove ${lineIds.length} unresolved barcode entries (${unitCount} units)?\n\nThese unposted entries will be removed from the current Stock Inward draft.\n\nRecognized products and posted inventory will remain unchanged.`
+            });
+            if (confirmation?.response !== 1) return;
+            const result = await api().stockInwardBulkRemoveLines({ movementId, lineIds });
+            if (!result?.success) throw new Error(result?.message || "Unable to remove the selected unresolved barcode entries.");
+            if (Number(documentData?.document?.id) === Number(movementId)) {
+                documentData = result.document;
+                selectedUnresolvedLineIds.clear();
+                render();
+                await openUnresolvedDrawer(el("siUnresolved"), movementId);
+            }
+        } catch (error) {
+            showMessage(error.message || "Unable to remove the selected unresolved barcode entries.", true);
+        } finally {
+            unresolvedBulkRemoveInProgress = false;
+            if (el("siUnresolvedOverlay")?.classList.contains("klbs-drawer-open") && Number(unresolvedMovementId) === Number(movementId)) {
+                await openUnresolvedDrawer(el("siUnresolved"), movementId);
+            }
+        }
+    }
+
+    function clearUnresolvedRetryAlert() {
+        unresolvedRetryAlertGeneration += 1;
+        clearTimeout(unresolvedRetryAlertTimer);
+        unresolvedRetryAlertTimer = null;
+        const alert = el("siRetryAlert");
+        if (!alert) return;
+        alert.textContent = "";
+        alert.className = "si-retry-alert";
+        alert.hidden = true;
+    }
+
+    function showUnresolvedRetryAlert(message, state, generation, movementId) {
+        if (generation !== unresolvedRetryAlertGeneration ||
+            Number(unresolvedMovementId) !== Number(movementId) ||
+            !el("siUnresolvedOverlay")?.classList.contains("klbs-drawer-open")) return;
+        const alert = el("siRetryAlert");
+        if (!alert) return;
+        alert.textContent = message;
+        alert.className = `si-retry-alert ${state}`;
+        alert.hidden = false;
+        unresolvedRetryAlertTimer = setTimeout(() => {
+            if (generation !== unresolvedRetryAlertGeneration) return;
+            alert.textContent = "";
+            alert.className = "si-retry-alert";
+            alert.hidden = true;
+            unresolvedRetryAlertTimer = null;
+        }, 5000);
+    }
+
+    function retryAlertFromResult(result) {
+        const { attemptedCount, matchedCount, remainingCount } = result || {};
+        if (![attemptedCount, matchedCount, remainingCount].every(Number.isSafeInteger) ||
+            attemptedCount < 0 || matchedCount < 0 || remainingCount < 0 || matchedCount > attemptedCount) return null;
+        if (attemptedCount > 0 && matchedCount === attemptedCount && remainingCount === 0) {
+            return { message: "All unresolved barcodes matched successfully.", state: "si-success" };
+        }
+        if (matchedCount > 0 && remainingCount > 0) {
+            const barcodeWord = attemptedCount === 1 ? "barcode" : "barcodes";
+            const remainingWord = remainingCount === 1 ? "remains" : "remain";
+            return { message: `${matchedCount} of ${attemptedCount} ${barcodeWord} matched. ${remainingCount} ${remainingWord} unresolved.`, state: "si-warning" };
+        }
+        if (matchedCount === 0 && remainingCount > 0) {
+            const remainingWord = remainingCount === 1 ? "barcode remains" : "barcodes remain";
+            return { message: `No new matches found. ${remainingCount} ${remainingWord} unresolved.`, state: "si-warning" };
+        }
+        return null;
+    }
+
+    async function retryAllUnresolved(movementId) {
+        if (unresolvedRetryInProgress || unresolvedBulkRemoveInProgress) return;
+        clearUnresolvedRetryAlert();
+        const alertGeneration = unresolvedRetryAlertGeneration;
+        const targetMovementId = Number(movementId);
+        unresolvedRetryInProgress = true;
+        const before = documentData?.lines
+            ?.filter(line => line.product_state === "PENDING_MASTER" && !line.discarded_at)
+            .map(line => `${line.id}:${line.product_state}:${line.posting_state}:${line.product_id}:${line.resolution_note}:${line.scanned_quantity}`)
+            .join("|");
+        renderUnresolvedRows(documentData?.lines?.filter(line => line.product_state === "PENDING_MASTER" && !line.discarded_at) || [], { movementId: targetMovementId });
+        let alertResult = null;
+        try {
+            let updated;
+            try { updated = await api().stockInwardRetryMatching(targetMovementId); }
+            catch (_error) {
+                if (Number(documentData?.document?.id) === targetMovementId) {
+                    alertResult = { message: "Unable to retry barcode matching. Please try again.", state: "si-error" };
+                }
+                return;
+            }
+            if (updated?.success === false || updated?.ok === false) {
+                if (Number(documentData?.document?.id) === targetMovementId) {
+                    alertResult = { message: "Unable to retry barcode matching. Please try again.", state: "si-error" };
+                }
+                return;
+            }
+            if (!updated?.document || !Array.isArray(updated.lines) || !updated.summary || !updated.retryResult ||
+                !Number.isSafeInteger(updated.retryResult.remainingCount) ||
+                updated.retryResult.remainingCount !== Number(updated.summary.unresolvedBarcodes)) return;
+            if (Number(documentData?.document?.id) === targetMovementId) {
+                const after = updated.lines
+                    .filter(line => line.product_state === "PENDING_MASTER" && !line.discarded_at)
+                    .map(line => `${line.id}:${line.product_state}:${line.posting_state}:${line.product_id}:${line.resolution_note}:${line.scanned_quantity}`)
+                    .join("|");
+                if (before !== after) selectedUnresolvedLineIds.clear();
+                documentData = updated;
+                render();
+                alertResult = retryAlertFromResult(updated.retryResult);
+            }
+        } finally {
+            unresolvedRetryInProgress = false;
+            if (el("siUnresolvedOverlay")?.classList.contains("klbs-drawer-open") && Number(unresolvedMovementId) === targetMovementId) {
+                try { await openUnresolvedDrawer(el("siUnresolved"), targetMovementId); } catch (_error) { /* Keep the retry result tied to its completed operation. */ }
+            }
+            if (alertResult) showUnresolvedRetryAlert(alertResult.message, alertResult.state, alertGeneration, targetMovementId);
+        }
+    }
+
     function render() {
         if (!documentData || !el("siCode")) return;
         const doc = documentData.document, lines = documentData.lines, summary = documentData.summary;
@@ -453,14 +703,14 @@
         const unknown = lines.filter(line => line.product_state === "PENDING_MASTER");
         el("siKnownLines").innerHTML = known.length ? `<div class="table-container si-received-table-container"><table class="si-table"><thead><tr><th>BARCODE</th><th>PRODUCT / SKU</th><th>COLOUR</th><th>SIZE</th><th>QTY</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${known.map(line => `<tr><td>${escapeHtml(line.barcode)}</td><td>${escapeHtml(line.product_name_snapshot)}<small>${escapeHtml(line.sku_snapshot)}</small>${line.resolution_note === "PRODUCT IS INACTIVE" ? `<b class="si-inactive">PRODUCT IS INACTIVE</b>` : ""}</td><td>${escapeHtml(line.colour_snapshot)}</td><td>${escapeHtml(line.size_snapshot)}</td><td>${line.posting_state === "POSTED" || readOnly ? line.posted_quantity || line.scanned_quantity : `<input class="si-qty" type="number" min="1" step="1" inputmode="numeric" value="${line.scanned_quantity}" data-edit="${line.id}" aria-label="Quantity for ${escapeHtml(line.sku_snapshot || line.barcode)}">`}</td><td>${line.posting_state}</td><td>${line.posting_state === "POSTED" || readOnly ? "—" : `<button data-remove="${line.id}">REMOVE</button>`}</td></tr>`).join("")}</tbody></table></div>` : `<p class="si-empty">No recognized products scanned yet.</p>`;
         el("siUnresolvedContext").textContent = `${doc.movement_no} · ${summary.unresolvedBarcodes} unresolved barcode${summary.unresolvedBarcodes === 1 ? "" : "s"} · ${summary.unresolvedUnits} unit${summary.unresolvedUnits === 1 ? "" : "s"}`;
-        el("siUnknownLines").innerHTML = unknown.length ? `<div class="si-unresolved-table" role="table" aria-label="Unresolved barcode lines"><div class="si-unresolved-row si-unresolved-heading" role="row"><span role="columnheader">BARCODE</span><span role="columnheader">QTY</span><span role="columnheader">STATUS</span><span role="columnheader">ACTIONS</span></div>${unknown.map(line => `<div class="si-unresolved-row ${line.discarded_at ? "si-discarded" : ""}" role="row"><strong class="si-unresolved-barcode" role="cell">${escapeHtml(line.barcode)}</strong><strong class="si-unresolved-qty" role="cell">${line.scanned_quantity}</strong><span class="si-unresolved-status" role="cell">${line.discarded_at ? "DISCARDED" : escapeHtml(line.resolution_note || "PRODUCT NOT FOUND")}</span><div class="si-unresolved-actions" role="cell">${line.discarded_at || readOnly ? "—" : `<button class="si-retry-btn" data-retry="${line.id}">RETRY MATCH</button><button class="si-remove-btn" data-remove="${line.id}">REMOVE</button><button class="si-discard-btn" data-discard="${line.id}">DISCARD</button>`}</div></div>`).join("")}</div>` : `<p class="si-empty si-unresolved-empty">NO UNRESOLVED BARCODES</p>`;
+        renderUnresolvedRows(unknown, { movementId: doc.id, readOnly });
         el("siSummary").innerHTML = `<span>KNOWN SKUs <b>${summary.knownSkus}</b></span><span>KNOWN UNITS <b>${summary.knownUnits}</b></span><span>UNRESOLVED BARCODES <b>${summary.unresolvedBarcodes}</b></span><span>UNRESOLVED UNITS <b>${summary.unresolvedUnits}</b></span><span>ELIGIBLE TO POST <b>${summary.eligibleToPost}</b></span><span>POSTED UNITS <b>${summary.postedUnits}</b></span>`;
         el("siKnownLines").querySelectorAll("[data-edit]").forEach(input => {
             const restore = () => { input.value = String(lines.find(line => Number(line.id) === Number(input.dataset.edit))?.scanned_quantity ?? ""); };
             input.addEventListener("input", () => {
                 if(input.value===""||(/^\d+$/.test(input.value)&&Number.isSafeInteger(Number(input.value)))) {
                     const message=el("siMessage");
-                    if(message.textContent==="Quantity must be a positive whole number."){message.textContent="";message.classList.remove("error");}
+                if(message.textContent==="Quantity must be a positive whole number."){message.textContent="";message.classList.remove("error", "warning");}
                 }
             });
             input.onkeydown = event => {
@@ -481,8 +731,6 @@
         });
         el("siKnownLines").querySelectorAll("[data-remove]").forEach(button => button.onclick = () => removeLine(button.dataset.remove));
         el("siUnknownLines").querySelectorAll("[data-remove]").forEach(button => button.onclick = () => removeLine(button.dataset.remove));
-        el("siUnknownLines").querySelectorAll("[data-retry]").forEach(button => button.onclick = async () => { documentData = await api().stockInwardRetryMatching(doc.id); render(); });
-        el("siUnknownLines").querySelectorAll("[data-discard]").forEach(button => button.onclick = () => discardLine(button.dataset.discard));
         updatePrimaryAction();
         if (reviewOpen) renderReviewCard();
         const unresolvedButton = el("siUnresolved");
@@ -530,19 +778,21 @@
         const target = historical ? await api().stockInwardLoad(movementId) : documentData;
         const alreadyOpen=el("siUnresolvedOverlay").classList.contains("klbs-drawer-open");
         if (!target || (!target.summary.unresolvedBarcodes && !alreadyOpen)) return;
+        if (!alreadyOpen || unresolvedMovementId !== Number(movementId)) {
+            selectedUnresolvedLineIds.clear();
+            clearUnresolvedRetryAlert();
+        }
         unresolvedMovementId=Number(movementId);
         currentMasterResults = await api().stockInwardCurrentMasterUnresolved(movementId);
         const doc=target.document, rows=target.lines.filter(line=>line.product_state==="PENDING_MASTER" && !line.discarded_at);
         const masters=new Map(currentMasterResults.map(row=>[Number(row.id),row]));
         el("siUnresolvedContext").textContent=`${doc.movement_no} · ${target.summary.unresolvedBarcodes} unresolved barcode${target.summary.unresolvedBarcodes===1?"":"s"} · ${target.summary.unresolvedUnits} unit${target.summary.unresolvedUnits===1?"":"s"}`;
-        el("siUnknownLines").innerHTML=rows.length?`<div class="si-unresolved-table ${historical?"is-historical":""}" role="table" aria-label="Unresolved barcode lines"><div class="si-unresolved-row si-unresolved-heading ${historical?"is-historical":""}" role="row"><span>BARCODE</span><span>QTY</span><span>${historical?"ORIGINAL STATUS":"STATUS"}</span><span>${historical?"PRODUCT MASTER NOW":"ACTIONS"}</span></div>${rows.map(line=>{const master=masters.get(Number(line.id));const state=master?.currentResolution;const stateText=state==="UNIQUE"?`✓ NOW FOUND · ${[master.currentProduct?.sku,master.currentProduct?.product_name,master.currentProduct?.colour,master.currentProduct?.size].filter(Boolean).map(escapeHtml).join(" · ")}`:state==="AMBIGUOUS"?"⚠ AMBIGUOUS":"✕ STILL NOT FOUND";return `<div class="si-unresolved-row ${historical?"is-historical":""}" role="row"><strong class="si-unresolved-barcode">${escapeHtml(line.barcode)}</strong><strong class="si-unresolved-qty">${line.scanned_quantity}</strong><span class="si-unresolved-status">${escapeHtml(line.resolution_note||"PRODUCT NOT FOUND")}</span>${historical?`<span class="si-master-state ${state===`UNIQUE`?"found":state===`AMBIGUOUS`?"ambiguous":"missing"}">${stateText}</span>`:`<div class="si-unresolved-actions">${line.discarded_at?"DISCARDED":`<button data-retry="${line.id}">RETRY MATCH</button><button data-remove="${line.id}">REMOVE</button><button class="si-discard-btn" data-discard="${line.id}">DISCARD</button>`}</div>`}</div>`;}).join("")}</div>`:`<p class="si-empty si-unresolved-empty">NO UNRESOLVED BARCODES</p>`;
+        renderUnresolvedRows(rows, { historical, readOnly: historical, movementId: doc.id, masters });
         el("siExport").disabled=rows.length===0;
-        el("siUnknownLines").querySelectorAll("[data-retry]").forEach(button=>button.onclick=async()=>{documentData=await api().stockInwardRetryMatching(doc.id);render();await openUnresolvedDrawer(el("siUnresolved"),doc.id);});
         el("siUnknownLines").querySelectorAll("[data-remove]").forEach(button=>button.onclick=()=>removeLine(button.dataset.remove));
-        el("siUnknownLines").querySelectorAll("[data-discard]").forEach(button=>button.onclick=()=>discardLine(button.dataset.discard));
         if(!alreadyOpen) unresolvedDrawer?.open({ opener });
     }
-    function closeUnresolvedDrawer() { unresolvedDrawer?.close(); }
+    function closeUnresolvedDrawer() { selectedUnresolvedLineIds.clear(); clearUnresolvedRetryAlert(); unresolvedDrawer?.close(); }
     function updateLiveReconciliation() {
         if (!documentData || !el("siReconciliation")) return;
         const invoiceQty=el("siInvoiceQty").value;
@@ -552,14 +802,7 @@
         updatePrimaryAction();
         if(reviewOpen)renderReviewCard();
     }
-    async function removeLine(id) { if (!confirm("Remove this unposted line?")) return; try { documentData = await api().stockInwardRemoveLine({movementId:documentData.document.id,lineId:Number(id)}); render(); } catch(error){showMessage(error.message,true);} }
-    async function discardLine(id) {
-        const reason = prompt("Reason for discarding this unresolved barcode:");
-        if (!reason) return;
-        authInProgress = true;
-        try { const grant = await window.requestOptionalManagerAuthorization("INVENTORY_INWARD"); if (grant === null) return; documentData = await api().stockInwardDiscardLine({movementId:documentData.document.id,lineId:Number(id),reason,authorizationGrant:grant}); render(); }
-        catch(error){showMessage(error.message,true);} finally{authInProgress=false;el("siScanner")?.focus();}
-    }
+    async function removeLine(id) { if (unresolvedRetryInProgress || unresolvedBulkRemoveInProgress || !confirm("Remove this unposted line?")) return; try { documentData = await api().stockInwardRemoveLine({movementId:documentData.document.id,lineId:Number(id)}); selectedUnresolvedLineIds.delete(Number(id)); render(); if (el("siUnresolvedOverlay")?.classList.contains("klbs-drawer-open")) await openUnresolvedDrawer(el("siUnresolved"), unresolvedMovementId); } catch(error){showMessage(error.message,true);} }
     async function handlePrimaryAction() { if(reviewOpen)await post(); else await showPostReview(); }
     async function showPostReview() {
         if (!await saveContext()) return;
@@ -610,15 +853,29 @@
             documentData = await api().stockInwardPost({movementId});
             render();
             if (documentData.pendingMaster) {
-                showMessage("No recognized units were posted. Unresolved barcodes remain saved.");
+                showMessage("No recognized units were posted. Unresolved barcodes remain saved.", "warning");
             } else if (documentData.posted) {
                 const added=Math.max(0,Number(documentData.summary.postedUnits)-postedBefore);
                 el("siSuccessTitle").textContent=documentData.document.status==="COMPLETE"?"STOCK INWARD COMPLETE":"STOCK INWARD PARTIALLY POSTED";
                 el("siSuccessCode").textContent=documentData.document.movement_no;
-                el("siSuccessMessage").textContent=`${added} ${added===1?"unit":"units"} posted to inventory`;
+                const partiallyPosted=documentData.document.status==="PARTIALLY_POSTED";
                 const unresolvedUnits=Number(documentData.summary.unresolvedUnits)||0;
-                el("siSuccessUnresolved").hidden=documentData.document.status==="COMPLETE";
-                el("siSuccessUnresolved").textContent=`⚠ ${unresolvedUnits} unresolved ${unresolvedUnits===1?"unit":"units"} remain`;
+                if(partiallyPosted){
+                    const unresolvedBarcodes=Number(documentData.summary.unresolvedBarcodes);
+                    el("siSuccessMessage").hidden=true;
+                    el("siSuccessUnresolved").hidden=true;
+                    el("siPartialSummary").hidden=false;
+                    el("siPartialPostedCount").textContent=`${added} ${added===1?"Unit":"Units"}`;
+                    el("siPartialPendingCount").textContent=`${unresolvedUnits} ${unresolvedUnits===1?"Unit":"Units"}`;
+                    el("siPartialExplanation").hidden=false;
+                    el("siPartialExplanation").textContent=`${unresolvedBarcodes} ${unresolvedBarcodes===1?"barcode remains":"barcodes remain"} unresolved. You can resume this stock inward after updating Product Master.`;
+                } else {
+                    el("siSuccessMessage").hidden=false;
+                    el("siSuccessMessage").textContent=`${added} ${added===1?"unit":"units"} posted to inventory`;
+                    el("siSuccessUnresolved").hidden=true;
+                    el("siPartialSummary").hidden=true;
+                    el("siPartialExplanation").hidden=true;
+                }
                 const printSucceeded=await printReceipt(movementId,"immediate",documentData.postedLineIds||[]);
                 el("siPrintMessage").textContent=printSucceeded?"":"⚠ Receipt could not be printed";
                 el("siPrintMessage").classList.toggle("is-warning",!printSucceeded);
@@ -639,7 +896,7 @@
         }
         finally { authInProgress=false;if(duplicateDialog)el("siDuplicateClose")?.focus();else if(el("siSuccessOverlay")?.hidden&&!el("siScanner")?.disabled)el("siScanner")?.focus(); }
     }
-    async function exportUnknown(movementId = documentData?.document.id) { try { const result=await api().stockInwardExportUnknown(movementId); if(result.cancelled)return; if(result.success)showMessage("Unknown barcode workbook saved."); else if(result.empty)showMessage("There are no unresolved barcodes to export."); else showMessage(result.error || "Export could not be completed.",true); } catch(error){showMessage(error.message,true);} }
+    async function exportUnknown(movementId = documentData?.document.id) { try { const result=await api().stockInwardExportUnknown(movementId); if(result.cancelled)return; if(result.success)showMessage("Unknown barcode workbook saved."); else if(result.empty)showMessage("There are no unresolved barcodes to export.", "warning"); else showMessage(result.error || "Export could not be completed.",true); } catch(error){showMessage(error.message,true);} }
     async function printReceipt(movementId,mode,postedLineIds=[]) {
         if(!movementId||printInProgress)return false;
         printInProgress=true;
@@ -653,7 +910,7 @@
         }
     }
     async function printHistoricalReceipt(movementId) {
-        if(!await printReceipt(movementId,"history"))showMessage("Receipt could not be printed. Check the printer and retry.",true);
+        if(!await printReceipt(movementId,"history"))showMessage("Receipt could not be printed. Check the printer and retry.", "warning");
         else showMessage("Receipt printed.");
     }
     async function finishPostingSuccess() {
@@ -703,13 +960,14 @@
             closeArchiveConfirmation();
         } finally { el("siArchiveConfirm").disabled = false; }
     }
-    function showMessage(text, error = false) {
+    function showMessage(text, stateOption = false) {
         const workspace=el("stockInwardWorkspace"),target=workspace&&!workspace.hidden?el("siMessage"):el("siPageMessage");
         if(!target)return;
         clearTimeout(messageTimeout);
-        for(const other of [el("siPageMessage"),el("siMessage")])if(other&&other!==target){other.textContent="";other.classList.remove("error");}
-        target.textContent=text;target.classList.toggle("error",error);
-        if(text)messageTimeout=setTimeout(()=>{if(target.textContent===text){target.textContent="";target.classList.remove("error");}},error?6500:4000);
+        for(const other of [el("siPageMessage"),el("siMessage")])if(other&&other!==target){other.textContent="";other.classList.remove("error", "warning");}
+        const state = stateOption === true ? "error" : stateOption === "warning" ? "warning" : "";
+        target.textContent=text;target.classList.remove("error", "warning");if(state)target.classList.add(state);
+        if(text)messageTimeout=setTimeout(()=>{if(target.textContent===text){target.textContent="";target.classList.remove("error", "warning");}},stateOption===true?6500:4000);
     }
     async function returnToHome() {
         if (pageMode === "active" && documentData) {

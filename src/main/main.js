@@ -1715,6 +1715,7 @@ const stockInwardCalls = {
     "stock-inward:scan": (_e, input) => stockInwardService.scan(input || {}),
     "stock-inward:edit-line": (_e, input) => stockInwardService.editLine(input || {}),
     "stock-inward:remove-line": (_e, input) => stockInwardService.removeLine(input || {}),
+    "stock-inward:bulk-remove-lines": (_e, input) => stockInwardService.removeUnresolvedLines(input || {}),
     "stock-inward:retry-matching": (_e, id) => stockInwardService.retryMatching(id),
     "stock-inward:cancel": (_e, input) => stockInwardService.cancelDraft(input?.movementId, "USER"),
     "stock-inward:abandon-empty": (_e, id) => stockInwardService.abandonEmptyDraft(id),
@@ -3566,11 +3567,9 @@ ipcMain.handle(
 
     "backup:create",
 
-    async (_event, grant) => {
+    async () => {
 
         try {
-
-            requireSecurityGrant(grant, "BACKUP_CREATE");
 
             return await createBackup();
 
@@ -3705,6 +3704,30 @@ ipcMain.handle(
     }
 
 );
+
+ipcMain.handle("restore:getLastCompleted", async (event) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return null;
+    try {
+        await databaseReady;
+        return await new Promise((resolve, reject) => {
+            database.get(
+                `SELECT activity_date, activity_time
+                 FROM activities
+                 WHERE category = 'RESTORE'
+                   AND action = 'RESTORE_COMPLETED'
+                   AND status = 'SUCCESS'
+                 ORDER BY id DESC
+                 LIMIT 1`,
+                [],
+                (error, row) => error ? reject(error) : resolve(row || null)
+            );
+        });
+    }
+    catch (error) {
+        console.error("Unable to retrieve last restore record:", error);
+        return null;
+    }
+});
 
 ipcMain.handle(
     "app:restart",

@@ -101,6 +101,42 @@ margin-bottom:50px;
 
 }
 
+.restore-page-sections {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 50px;
+}
+
+.restore-page-sections .restore-primary-card {
+    width: min(420px, 100%);
+}
+
+.restore-last-panel,
+.restore-page-sections .restore-danger-zone {
+    width: min(900px, 100%);
+    box-sizing: border-box;
+}
+
+.restore-last-panel {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 64px;
+    padding: 18px 24px;
+    background: #fff;
+    border: 1px solid #eadde2;
+    border-radius: 16px;
+    box-shadow: 0 6px 20px rgba(70,20,40,.08);
+    color: #444;
+    font-size: 16px;
+}
+
+.restore-page-sections .restore-danger-zone {
+    margin-top: 0;
+}
+
 .settings-layout:has(.integration-form) { padding-top:12px; }
 .settings-layout:has(.integration-form) .settings-header { max-width:900px; margin:0 auto 22px; padding:0 8px; text-align:center; }
 .settings-layout:has(.integration-form) .settings-header h1 { margin:0 0 8px; color:var(--primary); font-size:clamp(26px,3vw,38px); font-weight:800; line-height:1.2; text-align:center; }

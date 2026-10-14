@@ -333,7 +333,7 @@ async function v5MovementTables(db) {
         const ui = fs.readFileSync(path.join(__dirname,"../src/renderer/modules/stockInward.js"),"utf8");
         const main = fs.readFileSync(path.join(__dirname,"../src/main/main.js"),"utf8");
         const inventoryUi = fs.readFileSync(path.join(__dirname,"../src/renderer/modules/inventory.js"),"utf8");
-        assert.match(inventoryUi,/requestAdminAuthorization\("INVENTORY_INWARD"\)[\s\S]*?stockInwardEnter\(grant\)[\s\S]*?openStockInwardPage/,"Inventory requires Manager authorization before opening Home");
+        assert.match(inventoryUi,/requestOptionalManagerAuthorization\("INVENTORY_INWARD"\)[\s\S]*?stockInwardEnter\(grant\)[\s\S]*?openStockInwardPage/,"Inventory applies the configured Manager authorization before opening Home");
         const archiveHandler=main.match(/ipcMain\.handle\("stock-inward:archive-cancelled"[\s\S]*?\n\}\);/);
         assert(archiveHandler&&archiveHandler[0].includes("requireStockInwardWorkspace(event, token)"),"archive remains protected by the Manager-authorized workspace capability");
         assert(!archiveHandler[0].includes("requireSecurityGrant"),"cancelled archive does not ask for a second Manager PIN grant");
@@ -347,7 +347,7 @@ async function v5MovementTables(db) {
         assert.match(main,/stock-inward:exit[\s\S]*?requireStockInwardWorkspace\(event, token\)[\s\S]*?stockInwardWorkspaceSessions.delete/,"leaving Home invalidates its workspace authorization");
         assert.match(main,/did-start-navigation[\s\S]*?stockInwardWorkspaceSessions.delete/,"renderer navigation clears the Manager-authorized workspace session");
         assert.match(migration,/invoice_total_quantity INTEGER CHECK/); assert.match(ui,/REVIEW STOCK INWARD/);
-        assert.match(ui,/INVENTORY_INWARD/); assert.match(main,/requireSecurityGrant\(input\?\.authorizationGrant, "INVENTORY_INWARD"\)/);
+        assert.match(inventoryUi,/INVENTORY_INWARD/); assert.match(main,/requireSecurityGrant\(input\?\.authorizationGrant, "INVENTORY_INWARD"\)/);
         assert.match(ui,/stockInwardExportUnknown/); assert.match(ui,/Escape/);
         assert.match(ui,/stockInwardHistory/); assert.match(ui,/RECENT STOCK INWARDS/);
         assert.doesNotMatch(ui,/if\(!drafts\.length&&!history\.length\)await createDraft\(\)/,"opening Stock Inward Home does not create an empty document");
@@ -371,7 +371,7 @@ async function v5MovementTables(db) {
         assert.doesNotMatch(ui,/stockInwardBack|si-back-btn/,"no Stock-Inward-specific Back button or style is introduced");
         assert.match(ui,/el\("siPageTitle"\)\.textContent = activeIsNew \? "NEW STOCK INWARD" : readOnly \? "STOCK INWARD DETAILS" : "EDIT STOCK INWARD"/,"each document render preserves its lifecycle-specific Stock Inward heading");
         assert.match(ui,/globalBack\.insertAdjacentHTML\("afterend", '<h1 id="siPageTitle">STOCK INWARD<\/h1>'\)/,"title uses the established page top bar beside canonical Back control");
-        assert.match(ui,/OPEN STOCK INWARDS[\s\S]*?drafts\.map\(draftCard\)/,"Home renders every open Stock Inward independently");
+        assert.match(ui,/OPEN STOCK INWARDS[\s\S]*?draftsWithSummaries\.map\(draftCard\)/,"Home renders every open Stock Inward independently");
         assert.match(ui,/id="siNewDraft" class="klbs-primary-btn si-new-btn"/,"New remains available with open documents");
         assert.doesNotMatch(ui,/Finish the partially posted Stock Inward before starting another|Complete or delete the current Stock Inward before starting another/,"Home has no global open-document lock message");
         assert.match(ui,/>RESUME<\/button>/,"meaningful drafts expose a Resume action in the aligned row");
@@ -397,7 +397,7 @@ async function v5MovementTables(db) {
         assert.match(ui,/LINK KLBS INVOICE[\s\S]*?Select Supplier first/,"optional linked invoice control is clearly identified and disabled until a Supplier is selected");
         assert.match(ui,/async function populateInvoices\(\)[\s\S]*?select\.disabled = true[\s\S]*?No open KLBS invoices[\s\S]*?stockInwardInvoices\(Number\(supplierId\)\)[\s\S]*?select\.dataset\.hasInvoices = "true"/,"linked Supplier Invoice choices stay disabled until Supplier context and valid invoices exist");
         assert.match(ui,/siInvoiceNumber[\s\S]*?invoiceNumber:el\("siInvoiceNumber"\)\.value/,"manual Invoice Number remains a separate context value");
-        assert.match(ui,/si-unresolved-table[\s\S]*?BARCODE[\s\S]*?QTY[\s\S]*?STATUS[\s\S]*?ACTIONS/,"exception drawer uses a compact four-column list");
+        assert.match(ui,/si-unresolved-table[\s\S]*?barcodeHeader[\s\S]*?QTY[\s\S]*?STATUS[\s\S]*?actionHeader/,"exception drawer uses a compact four-column list");
         assert.match(ui,/NO UNRESOLVED BARCODES/,"exception drawer has an explicit empty state");
         assert.match(ui,/siExport[\s\S]*summary\.unresolvedBarcodes <= 0/,"unknown export disables when active unresolved lines are empty");
         assert.match(ui,/globalBack\.parentElement\.classList\.add\("si-page-topbar",\s*"management-pnl-topbar"\)/,"Stock Inward title shares established KLBS full-page top bar and canonical Back control");
@@ -406,7 +406,7 @@ async function v5MovementTables(db) {
         assert.match(stockCss,/\.si-actions\s*\{[^}]*position:\s*sticky[^}]*bottom:\s*0/,"inward actions retain their established behavior");
         assert.doesNotMatch(stockCss,/^\.back-btn\s*\{|\.stock-inward-page-header/,"shared Back styling is reused without redefining it");
         assert.match(stockCss,/\.si-unresolved-row\s*\{[^}]*display:\s*grid/,"unresolved content uses compact aligned rows");
-        assert.match(stockCss,/\.si-unresolved-actions \.si-discard-btn/,"discard is visually distinct from retry/remove");
+        assert.match(stockCss,/\.si-unresolved-actions/,"unresolved actions retain scoped styling");
         assert.match(stockCss,/\.si-actions #siUnresolved\s*\{\s*margin-right:\s*auto/,"primary post action remains at the right of the action row");
         assert.match(stockCss,/\.si-post-btn:hover:not\(:disabled\)/,"Stock Inward uses scoped post action state");
         assert.match(stockCss,/\.si-duplicate-dialog[\s\S]*?border-radius: 18px/,"duplicate prompt reuses the accepted KLBS modal surface styling");
@@ -464,7 +464,7 @@ async function v5MovementTables(db) {
         assert.equal(normalSku.modalCount,0,"normal Product never opens quantity modal");
         assert.equal(normalSku.calls[0].quantity,1,"normal Product scan remains one unit");
         const schemaAuthority=fs.readFileSync(path.join(__dirname,"../src/database/schemaVersion.js"),"utf8");
-        assert.equal(schemaAuthority.includes("CURRENT_DB_SCHEMA_VERSION = 16"),true,"V16 adds guarded outward document deletion while preserving V14/V15 inward contracts");
+        assert.ok(Number(schemaAuthority.match(/CURRENT_DB_SCHEMA_VERSION = (\d+)/)?.[1]) >= 16,"V16 adds guarded outward document deletion while preserving V14/V15 inward contracts");
         console.log("PASS V13/V5 preservation, V14 integrity, V16 outward-only deletion guard, persistent draft, repeated scanning, invoice reconciliation, unknown partial post, retry, idempotency, no Supplier liability, UI/authorization contracts.");
     } finally { db.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

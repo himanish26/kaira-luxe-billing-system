@@ -277,14 +277,73 @@ function createStockInwardService(database, options = {}) {
             return readDocument(doc.id);
         }));
     }
+    async function removeUnresolvedLines(input = {}) {
+        try {
+            const movementId = Number(input.movementId);
+            if (!Number.isSafeInteger(movementId) || movementId <= 0) {
+                throw new StockInwardError("A valid Stock Inward document is required.", "STOCK_INWARD_NOT_FOUND");
+            }
+            if (!Array.isArray(input.lineIds) || input.lineIds.length === 0) {
+                throw new StockInwardError("Select at least one unresolved barcode entry.", "STOCK_INWARD_BULK_REMOVE_SELECTION_INVALID");
+            }
+            const lineIds = input.lineIds.map(Number);
+            if (lineIds.some(id => !Number.isSafeInteger(id) || id <= 0) ||
+                new Set(lineIds).size !== lineIds.length) {
+                throw new StockInwardError("The selected unresolved barcode entries are invalid.", "STOCK_INWARD_BULK_REMOVE_SELECTION_INVALID");
+            }
+
+            const document = await serialize(() => transaction(async () => {
+                const doc = await assertDraft(movementId);
+                const lines = await all(
+                    "SELECT id,product_state,posting_state,discarded_at FROM stock_movement_lines WHERE movement_id=?",
+                    [doc.id]
+                );
+                const byId = new Map(lines.map(line => [Number(line.id), line]));
+                for (const id of lineIds) {
+                    const line = byId.get(id);
+                    if (!line) {
+                        throw new StockInwardError("One or more selected entries do not belong to this Stock Inward.", "STOCK_INWARD_BULK_REMOVE_LINE_INVALID");
+                    }
+                    if (line.product_state !== "PENDING_MASTER" || line.posting_state !== "UNPOSTED" || line.discarded_at) {
+                        throw new StockInwardError("Only unresolved, unposted barcode entries can be removed in bulk.", "STOCK_INWARD_BULK_REMOVE_LINE_INVALID");
+                    }
+                }
+                for (const id of lineIds) {
+                    const deletion = await run(
+                        `DELETE FROM stock_movement_lines
+                         WHERE id=? AND movement_id=? AND product_state='PENDING_MASTER'
+                           AND posting_state='UNPOSTED' AND discarded_at IS NULL`,
+                        [id, doc.id]
+                    );
+                    if (deletion.changes !== 1) {
+                        throw new StockInwardError("A selected unresolved barcode entry changed before removal.", "STOCK_INWARD_BULK_REMOVE_LINE_INVALID");
+                    }
+                }
+                return readDocument(doc.id);
+            }));
+            return { success: true, document };
+        }
+        catch (error) {
+            return {
+                success: false,
+                code: error.code || "STOCK_INWARD_BULK_REMOVE_FAILED",
+                message: error.message || "Unable to remove the selected unresolved barcode entries."
+            };
+        }
+    }
     async function retryMatching(movementId) {
         return serialize(() => transaction(async () => {
             const doc = await assertDraft(movementId);
             const lines = await all("SELECT * FROM stock_movement_lines WHERE movement_id=? AND product_state='PENDING_MASTER' AND discarded_at IS NULL ORDER BY id", [doc.id]);
+            const attemptedCount = lines.length;
+            let matchedCount = 0;
             for (const line of lines) {
                 const found = await productForBarcode(line.barcode);
-                if (found.product) await run(`UPDATE stock_movement_lines SET product_id=?,product_state='READY',recognized_quantity=scanned_quantity,sku_snapshot=?,product_name_snapshot=?,colour_snapshot=?,size_snapshot=?,resolution_note=NULL,updated_at=? WHERE id=?`,
-                    [found.product.id,found.product.sku || null,found.product.product_name || null,found.product.colour || null,found.product.size || null,now().toISOString(),line.id]);
+                if (found.product) {
+                    const updated = await run(`UPDATE stock_movement_lines SET product_id=?,product_state='READY',recognized_quantity=scanned_quantity,sku_snapshot=?,product_name_snapshot=?,colour_snapshot=?,size_snapshot=?,resolution_note=NULL,updated_at=? WHERE id=?`,
+                        [found.product.id,found.product.sku || null,found.product.product_name || null,found.product.colour || null,found.product.size || null,now().toISOString(),line.id]);
+                    if (updated.changes === 1) matchedCount += 1;
+                }
                 else await run("UPDATE stock_movement_lines SET resolution_note=?,updated_at=? WHERE id=?", [found.resolution === "AMBIGUOUS" ? "AMBIGUOUS BARCODE" : "PRODUCT NOT FOUND",now().toISOString(),line.id]);
             }
             const remaining = await get("SELECT COUNT(*) AS count FROM stock_movement_lines WHERE movement_id=? AND product_state='PENDING_MASTER' AND discarded_at IS NULL", [doc.id]);
@@ -293,7 +352,15 @@ function createStockInwardService(database, options = {}) {
             const hasPending = Number(remaining?.count) + Number(unpostedReady?.count) > 0;
             const status = hasPending ? (Number(posted?.count) ? "PARTIALLY_POSTED" : "PENDING_MASTER") : (Number(posted?.count) ? "COMPLETE" : "DRAFT");
             await run("UPDATE stock_movements SET status=?,updated_at=? WHERE id=?", [status,now().toISOString(),doc.id]);
-            return readDocument(doc.id);
+            const document = await readDocument(doc.id);
+            return {
+                ...document,
+                retryResult: {
+                    attemptedCount,
+                    matchedCount,
+                    remainingCount: Number(remaining?.count) || 0
+                }
+            };
         }));
     }
     async function discardLine(input = {}) {
@@ -482,7 +549,7 @@ function createStockInwardService(database, options = {}) {
     }
     async function getSuppliers() { return all("SELECT id,supplier_code,name,status FROM supplier_master ORDER BY name COLLATE NOCASE"); }
     async function getSupplierInvoices(supplierId) { const activeStore = await store(); return all("SELECT id,invoice_code,supplier_invoice_number,supplier_invoice_date,store_id,supplier_id FROM supplier_invoices WHERE status='POSTED' AND supplier_id=? AND store_id=? ORDER BY posting_date DESC LIMIT 100", [supplierId,activeStore.id]); }
-    return { createDraft,updateContext,scan,resolveBarcode,editLine,removeLine,retryMatching,discardLine,cancelDraft,listResumable,listRecentHistory,abandonEmptyDraft,load,post,getUnknownExportRows,getSuppliers,getSupplierInvoices,productForBarcode,findDuplicateInvoice,currentMasterForUnresolved,archiveCancelled };
+    return { createDraft,updateContext,scan,resolveBarcode,editLine,removeLine,removeUnresolvedLines,retryMatching,discardLine,cancelDraft,listResumable,listRecentHistory,abandonEmptyDraft,load,post,getUnknownExportRows,getSuppliers,getSupplierInvoices,productForBarcode,findDuplicateInvoice,currentMasterForUnresolved,archiveCancelled };
 }
 
 let singletonServicePromise = null;
@@ -508,4 +575,4 @@ async function closeDefaultService() {
     await new Promise((resolve, reject) => connection.close(error => error ? reject(error) : resolve()));
 }
 module.exports = { StockInwardError, createStockInwardService, closeDefaultService,
-    ...Object.fromEntries(["createDraft","updateContext","scan","resolveBarcode","editLine","removeLine","retryMatching","discardLine","cancelDraft","listResumable","listRecentHistory","abandonEmptyDraft","load","post","getUnknownExportRows","getSuppliers","getSupplierInvoices","findDuplicateInvoice","currentMasterForUnresolved","archiveCancelled"].map(name => [name,async (...args)=>(await defaultService())[name](...args)])) };
+    ...Object.fromEntries(["createDraft","updateContext","scan","resolveBarcode","editLine","removeLine","removeUnresolvedLines","retryMatching","discardLine","cancelDraft","listResumable","listRecentHistory","abandonEmptyDraft","load","post","getUnknownExportRows","getSuppliers","getSupplierInvoices","findDuplicateInvoice","currentMasterForUnresolved","archiveCancelled"].map(name => [name,async (...args)=>(await defaultService())[name](...args)])) };

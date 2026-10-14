@@ -389,6 +389,7 @@ reprintStoreCredit: (storeCreditNo) =>
         stockInwardScan: (data) => stockInwardInvoke("stock-inward:scan", data),
         stockInwardEditLine: (data) => stockInwardInvoke("stock-inward:edit-line", data),
         stockInwardRemoveLine: (data) => stockInwardInvoke("stock-inward:remove-line", data),
+        stockInwardBulkRemoveLines: (data) => stockInwardInvoke("stock-inward:bulk-remove-lines", data),
         stockInwardRetryMatching: (id) => stockInwardInvoke("stock-inward:retry-matching", id),
         stockInwardDiscardLine: (data) => stockInwardInvoke("stock-inward:discard-line", data),
         stockInwardPost: (data) => stockInwardInvoke("stock-inward:post", data),
@@ -494,10 +495,9 @@ testPrinter: (printerName) =>
         printerName
     ),
 
-createBackup: grant =>
+createBackup: () =>
     ipcRenderer.invoke(
-        "backup:create",
-        grant
+        "backup:create"
     ),
 
 getBackupHistory: () =>
@@ -613,6 +613,8 @@ restoreBackup: (
     grant
 
 ),
+
+getLastRestore: () => ipcRenderer.invoke("restore:getLastCompleted"),
 
 restartApp: (
     restoreFileName

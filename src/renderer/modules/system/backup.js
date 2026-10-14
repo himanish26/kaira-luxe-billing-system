@@ -158,11 +158,8 @@ async function showBackupPage() {
             "click",
             async () => {
 
-                const grant = await window.requestAdminAuthorization("BACKUP_CREATE");
-                if (!grant) return;
-
                 const result =
-                    await window.electronAPI.createBackup(grant);
+                    await window.electronAPI.createBackup();
 
                 if (result.success) {
 

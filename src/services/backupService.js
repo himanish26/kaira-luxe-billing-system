@@ -279,10 +279,92 @@ async function getBackupFolder() {
 
 let backupQueueTail = Promise.resolve();
 let backupOperationSequence = 0;
+const MAX_BACKUP_FILENAME_ATTEMPTS = 10;
 
 function getBackupOperationId() {
     backupOperationSequence += 1;
     return `${process.pid}_${backupOperationSequence}_${crypto.randomBytes(6).toString("hex")}`;
+}
+
+function tryReserveBackupFilename(backupFolder, identifier) {
+    const backupFileName = `KL_Backup_${identifier}.zip`;
+    const backupFilePath = path.join(backupFolder, backupFileName);
+    const reservationPath = `${backupFilePath}.reserve`;
+    let reservationFd;
+
+    try {
+        reservationFd = fs.openSync(reservationPath, "wx");
+    }
+    catch (error) {
+        if (error.code === "EEXIST") return null;
+        throw error;
+    }
+
+    if (fs.existsSync(backupFilePath)) {
+        fs.closeSync(reservationFd);
+        fs.unlinkSync(reservationPath);
+        return null;
+    }
+
+    return { backupFileName, backupFilePath, reservationFd, reservationPath };
+}
+
+function releaseBackupFilenameReservation(reservation) {
+    if (!reservation) return;
+    try { fs.closeSync(reservation.reservationFd); } catch (_) {}
+    removeOwnArtifact(reservation.reservationPath);
+}
+
+function publishBackupArchive(inProgressPath, backupFolder, operationId) {
+    let reservation = null;
+
+    try {
+        for (let attempt = 0; attempt < MAX_BACKUP_FILENAME_ATTEMPTS; attempt += 1) {
+            const identifier = attempt === 0
+                ? operationId.slice(-6).toLowerCase()
+                : crypto.randomBytes(3).toString("hex");
+            reservation = tryReserveBackupFilename(backupFolder, identifier);
+            if (!reservation) continue;
+
+            try {
+                // linkSync atomically publishes the completed archive only if
+                // the destination does not already exist on this filesystem.
+                fs.linkSync(inProgressPath, reservation.backupFilePath);
+                try {
+                    fs.unlinkSync(inProgressPath);
+                }
+                catch (error) {
+                    removeOwnArtifact(reservation.backupFilePath);
+                    throw error;
+                }
+                try {
+                    releaseBackupFilenameReservation(reservation);
+                }
+                catch (error) {
+                    removeOwnArtifact(reservation.backupFilePath);
+                    throw error;
+                }
+                const published = {
+                    backupFileName: reservation.backupFileName,
+                    backupFilePath: reservation.backupFilePath
+                };
+                reservation = null;
+                return published;
+            }
+            catch (error) {
+                if (error.code !== "EEXIST") {
+                    throw new Error(`Unable to publish backup without overwriting an existing file: ${error.message}`);
+                }
+                releaseBackupFilenameReservation(reservation);
+                reservation = null;
+            }
+        }
+
+        throw new Error(`Unable to allocate a unique backup filename after ${MAX_BACKUP_FILENAME_ATTEMPTS} attempts.`);
+    }
+    finally {
+        releaseBackupFilenameReservation(reservation);
+    }
 }
 
 function readRestoredSchemaVersion(databasePath) {
@@ -408,26 +490,19 @@ async function createBackupInternal(options = {}) {
     const timestamp = getTimestamp();
     const operationId = getBackupOperationId();
 
-    const backupFileName = options.purpose === "PRE_UPGRADE"
-        ? `KL_PreUpgrade_${timestamp}_${operationId}.zip`
-        : `KL_Backup_${timestamp}_${operationId}.zip`;
-
-    const backupFilePath = path.join(
-    backupFolder,
-    backupFileName
-);
-
     const snapshotPath = path.join(
         app.getPath("temp"),
         `klbs_backup_${timestamp}_${operationId}.db`
     );
-    const inProgressPath = `${backupFilePath}.partial`;
+    const inProgressPath = path.join(
+        backupFolder,
+        `KL_Backup_${timestamp}_${operationId}.zip.partial`
+    );
+    let backupFileName = null;
+    let backupFilePath = null;
     let finalArtifactCreated = false;
 
     try {
-        if (fs.existsSync(backupFilePath)) {
-            throw new Error("Backup destination already exists; refusing to overwrite it.");
-        }
         let schemaVersion = null;
         if (options.purpose === "PRE_UPGRADE") {
             schemaVersion = await readSchemaVersion(database);
@@ -445,7 +520,9 @@ async function createBackupInternal(options = {}) {
         if (!fs.existsSync(inProgressPath) || fs.statSync(inProgressPath).size <= 0) {
             throw new Error("Backup archive was not written successfully.");
         }
-        fs.renameSync(inProgressPath, backupFilePath);
+        const published = publishBackupArchive(inProgressPath, backupFolder, operationId);
+        backupFileName = published.backupFileName;
+        backupFilePath = published.backupFilePath;
         finalArtifactCreated = true;
 
         const verification = await validateBackup(backupFilePath);

@@ -18,6 +18,7 @@
 .si-main-scroll > [hidden], .si-actions[hidden] { display: none !important; }
 .si-message { min-height: 20px; margin: 0 0 8px; color: #235723; font-size: 14px; font-weight: 600; }
 .si-message.error { color: #a32222; }
+.si-message.warning { color: #694900; }
 
 .stock-inward-resume { width: 100%; margin: 0 auto; }
 .stock-inward-resume h2, .si-received-items h2 {
@@ -27,18 +28,25 @@
     font-weight: 800;
 }
 .si-current-draft, .si-recent-history { margin: 0 0 22px; }
-.si-current-card { display: grid; grid-template-columns: minmax(150px,1.15fr) minmax(110px,.8fr) minmax(145px,1.15fr) minmax(125px,1fr) minmax(65px,.5fr) minmax(85px,.6fr) minmax(110px,.8fr) auto; min-width: 0; align-items: center; gap: 10px; margin: 0 0 9px; padding: 12px 16px; border: 1px solid #eadfe4; border-left: 4px solid var(--primary); border-radius: 9px; background: #fff; box-shadow: 0 3px 12px rgba(54,26,42,.045); }
+.si-current-card { display: grid; grid-template-columns: minmax(170px,1.1fr) minmax(150px,1fr) minmax(210px,1.25fr) minmax(130px,.8fr) minmax(270px,auto); min-width: 0; align-items: center; gap: 10px; margin: 0 0 9px; padding: 12px 16px; border: 1px solid #eadfe4; border-left: 4px solid var(--primary); border-radius: 9px; background: #fff; box-shadow: 0 3px 12px rgba(54,26,42,.045); }
+.si-open-group { display: grid; min-width: 0; gap: 8px; }
+.si-open-quantities { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; }
 .si-open-field { display: grid; min-width: 0; gap: 4px; color: #332c31; font-size: 14px; font-weight: 700; }
 .si-open-field > small { color: #665a60; font-size: 10px; font-weight: 800; letter-spacing: .025em; }
 .si-open-field > span { min-width: 0; overflow-wrap: anywhere; }
 .si-open-field > span > small { display: block; margin-top: 3px; font-weight: 500; }
 .si-open-number strong { color: var(--primary); font-size: 16px; white-space: nowrap; }
 .si-open-count { text-align: center; font-variant-numeric: tabular-nums; }
+.si-open-count > span { font-size: 17px; font-weight: 800; }
+.si-posted-count > span { color: #147a3d; }
+.si-unresolved-count > span { color: #9a6a00; }
 .si-open-status { justify-items: start; }
 .si-card-actions { display: flex; min-width: max-content; align-items: center; justify-content: flex-end; gap: 7px; }
 .si-open-updated { grid-column: 1/-1; color: #665a60; font-size: 11px; }
 .si-history-actions { white-space: nowrap; text-align: center; vertical-align: middle; }
 .si-card-actions button { min-height: 38px; padding-inline: 14px; font-size: 13px; }
+.si-card-actions .si-open-reprint { border-color: var(--primary); background: #fff; color: var(--primary); }
+.si-card-actions .si-open-reprint:hover:not(:disabled) { background: #f7e8ee; }
 .si-new-btn { min-height: 50px; margin: 0 0 12px; padding: 0 24px; font-size: 17px; }
 .si-new-draft-guidance { margin: 4px 0 22px; color: #665a60; font-size: 14px; }
 .si-other-drafts { margin-top: 14px; }
@@ -161,14 +169,29 @@
 .si-unresolved-context { margin: 0 0 12px; color: #51464c; font-size: 14px; font-weight: 700; }
 .si-unresolved-table { width: 100%; border: 1px solid #eadfe4; border-radius: 8px; background: #fff; overflow: hidden; }
 .si-unresolved-row { display: grid; grid-template-columns: minmax(120px,1.1fr) 56px minmax(150px,1fr) minmax(230px,auto); gap: 12px; align-items: center; padding: 10px 12px; border-bottom: 1px solid #eadfe4; }
+.si-unresolved-row.has-select-checkbox { grid-template-columns: 28px minmax(120px,1.1fr) 56px minmax(150px,1fr) minmax(110px,auto); }
 .si-unresolved-row:last-child { border-bottom: 0; }
 .si-unresolved-heading { background: #f7f3f5; color: #51464c; font-size: 12px; font-weight: 800; }
+.si-unresolved-toolbar { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 12px; margin: 0 0 10px; padding: 2px 0; }
+.si-selection-controls { display: flex; align-items: center; gap: 5px; }
+.si-selection-checkbox { width: 17px; height: 17px; margin: 0; accent-color: var(--primary); cursor: pointer; }
+.si-selection-checkbox:disabled { cursor: not-allowed; }
+.si-selection-menu { position: relative; }
+.si-selection-menu > summary { display: grid; min-width: 24px; min-height: 28px; place-items: center; color: #51464c; font-size: 12px; cursor: pointer; list-style: none; }
+.si-selection-menu > summary::-webkit-details-marker { display: none; }
+.si-selection-menu-options { position: absolute; z-index: 4; top: calc(100% + 3px); left: 0; display: grid; min-width: 150px; padding: 4px; border: 1px solid #d8cbd0; border-radius: 6px; background: #fff; box-shadow: 0 3px 10px rgba(54,26,42,.12); }
+.si-selection-menu-options button { padding: 7px 9px; border: 0; background: #fff; color: #332c31; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.si-selection-menu-options button:hover { background: #f7f3f5; }
+.si-selection-summary { min-width: 0; color: #51464c; font-size: 13px; font-weight: 700; }
+.si-unresolved-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.si-unresolved-toolbar-actions button { min-height: 34px; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+.si-unresolved-toolbar-actions button:disabled { cursor: not-allowed; }
+.si-unresolved-select-cell { display: flex; align-items: center; justify-content: center; }
 .si-unresolved-barcode { min-width: 0; color: #332c31; font-size: 14px; overflow-wrap: anywhere; word-break: break-word; }
 .si-unresolved-qty { text-align: center; font-size: 15px; font-variant-numeric: tabular-nums; }
 .si-unresolved-status { color: #694900; font-size: 13px; font-weight: 800; }
 .si-unresolved-actions { display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
 .si-unresolved-actions button { min-height: 34px; padding: 6px 9px; border: 1px solid #d8cbd0; border-radius: 6px; background: #fff; color: var(--primary); font: inherit; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; }
-.si-unresolved-actions .si-discard-btn { border-color: #d7a632; background: #fff4d8; color: #694900; }
 .si-unresolved-empty { padding: 30px 16px; text-align: center; font-weight: 800; }
 .si-unresolved-row.is-historical { grid-template-columns: minmax(120px,1.1fr) 56px minmax(145px,.85fr) minmax(220px,1.5fr); }
 .si-master-state { font-size: 13px; font-weight: 800; overflow-wrap: anywhere; }
@@ -178,6 +201,14 @@
 .si-export-btn { min-height: 42px; padding: 0 18px; border: 2px solid var(--primary); border-radius: 8px; background: #fff; color: var(--primary); font: inherit; font-weight: 700; cursor: pointer; }
 .si-export-btn:hover:not(:disabled) { background: #f7e8ee; }
 .si-export-btn:disabled { border-color: #d1d5db; background: #d1d5db; color: #6b7280; cursor: not-allowed; }
+.si-unresolved-overlay.klbs-drawer-open .si-unresolved-drawer .si-unresolved-footer,
+.si-unresolved-overlay.klbs-drawer-closing .si-unresolved-drawer .si-unresolved-footer { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; justify-content: stretch; flex-wrap: nowrap; gap: 10px; padding-right: 16px; padding-left: 16px; }
+.si-retry-alert { grid-column: 1; min-width: 0; padding: 0 !important; border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; color: #332c31; font-size: 15px; font-weight: 600; line-height: 1.15; text-align: left; white-space: nowrap; }
+.si-retry-alert[hidden] { display: none !important; }
+.si-retry-alert.si-success { color: #147a3d !important; }
+.si-retry-alert.si-warning { color: #9a6a00 !important; }
+.si-retry-alert.si-error { color: #9b2424 !important; }
+.si-unresolved-footer .si-export-btn { grid-column: 2; flex: 0 0 auto; white-space: nowrap; }
 
 /* Duplicate invoice prompt reuses the shared KLBS modal surface and buttons. */
 .si-duplicate-overlay[hidden] { display: none; }
@@ -219,6 +250,14 @@
 .si-success-dialog > p { margin: 8px 0; color: #332c31; font-size: 15px; }
 .si-success-dialog .si-success-unresolved { color: #8b5a00; font-size: 14px; font-weight: 700; }
 .si-success-unresolved[hidden],.si-success-dialog .si-print-message:empty { display:none; }
+.si-partial-summary { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 14px 0 10px; }
+.si-partial-summary[hidden],.si-partial-explanation[hidden] { display:none; }
+.si-partial-summary > div { display: grid; min-width: 0; gap: 7px; padding: 11px 8px; border: 1px solid #d8cbd0; border-radius: 7px; }
+.si-partial-summary small { font-size: 11px; font-weight: 800; line-height: 1.2; }
+.si-partial-summary strong { font-size: 23px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.si-partial-posted { border-color: #9bc49b !important; background: #edf6ed; color: #147a3d; }
+.si-partial-pending { border-color: #d7b45b !important; background: #fff7e5; color: #9a6a00; }
+.si-success-dialog > .si-partial-explanation { margin: 9px 0; color: #51464c; font-size: 13px; line-height: 1.4; }
 .si-success-dialog .si-print-message { margin: 8px 0 0; padding: 7px 9px; border-radius: 5px; background: #fff3d5; color: #805400; font-size: 13px; font-weight: 700; }
 .si-success-actions { justify-content: center; gap: 10px; margin-top: 15px; }
 .si-success-actions button { min-width: 126px; min-height: 42px; flex: 0 1 auto; padding-inline: 18px; font-size: 13px; }
@@ -246,6 +285,7 @@
     .si-card-actions { grid-column: 1/-1; flex-wrap: wrap; justify-content: flex-start; }
     .si-history-table { min-width: 920px; }
     .si-unresolved-row, .si-unresolved-row.is-historical { grid-template-columns: minmax(105px,1fr) 48px minmax(120px,1fr); gap: 8px; }
+    .si-unresolved-row.has-select-checkbox { grid-template-columns: 24px minmax(90px,1fr) 42px minmax(100px,1fr) minmax(80px,auto); gap: 7px; }
     .si-unresolved-actions, .si-master-state { grid-column: 1/-1; justify-content: flex-start; }
 }
 @media (min-width: 1051px) and (max-width: 1300px) {
@@ -270,9 +310,13 @@
     .si-actions > .si-post-btn { flex: 2 1 100%; margin: 0; }
     .si-history-table { min-width: 900px; }
     .si-unresolved-row, .si-unresolved-row.is-historical { grid-template-columns: minmax(0,1fr) 48px; gap: 7px 10px; }
+    .si-unresolved-row.has-select-checkbox { grid-template-columns: 22px minmax(0,1fr) 42px; gap: 7px 8px; }
     .si-unresolved-heading { display: none; }
     .si-unresolved-status, .si-master-state, .si-unresolved-actions { grid-column: 1/-1; }
     .si-unresolved-actions { justify-content: flex-start; }
+    .si-unresolved-toolbar { grid-template-columns: auto minmax(0,1fr); gap: 8px; }
+    .si-unresolved-toolbar-actions { grid-column: 1/-1; justify-content: flex-end; }
+    .si-selection-summary { text-align: right; }
     .si-duplicate-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
     .si-review { padding: 18px; }
     .si-review-reconciliation > strong { width: 100%; margin-left: 0; }

@@ -16,10 +16,22 @@ function formatRestoreDateTime(value) {
     const get = type =>
         parts.find(part => part.type === type)?.value || "";
 
-    return `${get("day")} ${get("month")}, ${get("year")}, ${get("hour").padStart(2, "0")}:${get("minute")} ${get("dayPeriod").toUpperCase()}`;
+    return `${get("day")} ${get("month")} ${get("year")}, ${get("hour").padStart(2, "0")}:${get("minute")} ${get("dayPeriod").toUpperCase()}`;
 }
 
-function showRestorePage() {
+async function showRestorePage() {
+
+    let lastRestore = null;
+    try {
+        lastRestore = await window.electronAPI.getLastRestore();
+    }
+    catch (error) {
+        console.error("Unable to load restore history:", error);
+    }
+
+    const lastRestoreText = lastRestore
+        ? `LAST RESTORE - ${lastRestore.activity_date}, ${lastRestore.activity_time}`
+        : "LAST RESTORE - History unavailable";
 
     renderSettingsPage({
 
@@ -35,10 +47,10 @@ function showRestorePage() {
 
     content: `
 
-<div class="settings-grid">
+<div class="settings-grid restore-page-sections">
 
     <div
-        class="settings-card"
+        class="settings-card restore-primary-card"
         id="restoreNowCard">
 
         <div class="settings-icon">📂</div>
@@ -49,19 +61,19 @@ function showRestorePage() {
 
     </div>
 
-    <div class="settings-card">
-
-        <div class="settings-icon">⚠️</div>
-
-        <h2>Warning</h2>
-
-        <p>
-            Restoring replaces current local business data with the backup state.
-            A durable safety copy of the current database is created first.
-            The application restarts after a successful restore.
-        </p>
-
+    <div class="restore-last-panel" role="status">
+        <span>🕒</span>
+        <strong>${lastRestoreText}</strong>
     </div>
+
+    <section class="danger-zone restore-danger-zone">
+        <h2>⚠️ DANGER ZONE</h2>
+        <p>Restoring a backup will replace the current local business database with the data contained in the selected backup.</p>
+        <p>Transactions and changes made after the selected backup was created may be lost.</p>
+        <p>A safety copy of the current database will be created automatically before restoration.</p>
+        <p>KLBS will restart automatically after a successful restore.</p>
+        <p class="danger-warning">This operation cannot be undone through the restore workflow.</p>
+    </section>
 
 </div>
 
