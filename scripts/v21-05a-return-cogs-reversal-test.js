@@ -56,7 +56,7 @@ async function testMigrationAndConstraints() {
             INSERT INTO return_items VALUES (21,1,11,1);
         `);
         await prepareDatabaseSchema({ database: db, currentVersion: 13, runCurrentMigrations: async () => {} });
-        assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 14);
+        assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 27);
         assert.strictEqual(await readSchemaVersion(db), 13);
         assert.strictEqual(Number((await get(db, `SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table'
             AND name IN ('management_accounting_entries','management_accounting_entry_sequences')`)).count), 2,
@@ -113,7 +113,7 @@ async function buildRuntimeDatabase() {
             id INTEGER PRIMARY KEY, bill_no TEXT, barcode TEXT, product_name TEXT, qty INTEGER, mrp REAL,
             discount_percent REAL, discount_amount REAL, taxable_amount REAL, gst_rate REAL, gst_amount REAL,
             net_amount REAL, business_segment TEXT, unit_cost_paise INTEGER, cost_basis_status TEXT,
-            cost_source TEXT, cost_method TEXT
+            cost_source TEXT, cost_method TEXT, mrp_bucket_id INTEGER
         );
         CREATE TABLE returns (
             id INTEGER PRIMARY KEY AUTOINCREMENT, return_no TEXT, credit_note_no TEXT, original_bill_no TEXT,
@@ -129,11 +129,12 @@ async function buildRuntimeDatabase() {
             product_name TEXT, original_bill_item_id INTEGER, quantity INTEGER NOT NULL, unit_value REAL NOT NULL DEFAULT 0,
             return_value REAL NOT NULL DEFAULT 0, mrp REAL, gross_reversal REAL, discount_percent REAL,
             discount_reversal REAL, taxable_reversal REAL, gst_rate REAL, cgst_reversal REAL, sgst_reversal REAL,
-            gst_reversal REAL, net_reversal REAL, remarks TEXT, created_at TEXT NOT NULL
+            gst_reversal REAL, net_reversal REAL, remarks TEXT, created_at TEXT NOT NULL, mrp_bucket_id INTEGER
         );
         CREATE TABLE inventory_transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT, product_id INTEGER, barcode TEXT, transaction_type TEXT,
-            quantity INTEGER, reference_type TEXT, reference_id TEXT, remarks TEXT, created_by TEXT, created_at TEXT
+            quantity INTEGER, reference_type TEXT, reference_id TEXT, remarks TEXT, created_by TEXT, created_at TEXT,
+            mrp_bucket_id INTEGER
         );
         CREATE TABLE store_credits (
             id INTEGER PRIMARY KEY AUTOINCREMENT, store_credit_no TEXT, return_id INTEGER, original_bill_no TEXT,
@@ -143,6 +144,10 @@ async function buildRuntimeDatabase() {
         CREATE TABLE customer_credit_transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER, transaction_type TEXT, amount REAL,
             reference_type TEXT, reference_id TEXT, remarks TEXT, created_by TEXT, created_at TEXT
+        );
+        CREATE TABLE stock_cost_allocations (
+            id INTEGER PRIMARY KEY, return_item_id INTEGER, quantity INTEGER, unit_cost_paise INTEGER,
+            cost_basis_status TEXT, source_allocation_id INTEGER
         );
     `);
     await migrateReturnCogsReversal(db);

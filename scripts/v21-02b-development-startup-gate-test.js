@@ -28,7 +28,7 @@ const pending = {
 };
 
 assert.strictEqual(BYPASS_ENVIRONMENT_VARIABLE, "KLBS_DEV_BYPASS_BUSINESS_DAY_GATE");
-assert.strictEqual(packageJson.version, "2.0.0");
+assert.strictEqual(packageJson.version, "2.1.0");
 assert.strictEqual(packageJson.scripts.start, "electron .", "normal npm start remains unchanged");
 assert.strictEqual(packageJson.scripts.dev, "node scripts/dev-launch.js");
 assert.match(devLauncher, /spawn\(process\.execPath, \[npmCli, "start"\]/);

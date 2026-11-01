@@ -280,11 +280,6 @@ function renderInventoryProducts(products) {
         <tr>
             <td>${product.barcode}</td>
             <td>${product.brand}</td>
-            <td>${product.segment || ""}</td>
-            <td>${product.business_segment || ""}</td>
-            <td>${product.category}</td>
-            <td>${product.season || ""}</td>
-            <td>${product.collection || ""}</td>
             <td>${product.product_name}</td>
             <td>${product.size}</td>
             <td>${product.colour || "-"}</td>
@@ -293,7 +288,6 @@ function renderInventoryProducts(products) {
             <td>${Number(product.discount || 0)}%</td>
             <td>${Number(product.gst_rate || 0)}%</td>
             <td>₹${Number(product.selling_price || 0).toFixed(2)}</td>
-            <td>${Number(product.variable_value) === 1 ? "YES" : "NO"}</td>
         </tr>
         `
     ).join("");

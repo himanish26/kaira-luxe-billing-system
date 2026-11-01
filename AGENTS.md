@@ -2,7 +2,7 @@
 
 ## Project
 Kaira Luxe Billing System (KLBS)
-Current target: Version 2.0.0 Release Candidate
+Current target: Version 2.1.0
 Platform: Windows desktop application using Node.js/Electron and SQLite.
 
 ## Platform Authority

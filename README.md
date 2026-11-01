@@ -1,6 +1,6 @@
 # KAIRA LUXE Billing System
 
-**Version 2.0.0 Release Candidate**
+**Version 2.1.0**
 **Windows x64**
 
 KAIRA LUXE Billing System is an offline-first Windows desktop application for retail billing, inventory operations, customer transactions, reporting, and controlled business-day workflows.
@@ -8,7 +8,7 @@ KAIRA LUXE Billing System is an offline-first Windows desktop application for re
 ## Release information
 
 - Product: KAIRA LUXE Billing System
-- Release: Version 2.0.0 Release Candidate
+- Release: Version 2.1.0
 - Platform: Windows 10/11, x64
 - Installer: Windows NSIS installer
 - Copyright: 2026 Himanish Patnaik. All Rights Reserved.
@@ -151,7 +151,7 @@ Core local operations do not require continuous internet access. Configured exte
 
 ## Supported Windows platform
 
-Version 2.0.0 Release Candidate targets Windows 10 and Windows 11 on x64 hardware. Windows installation, printer drivers, permissions, storage, and third-party services remain subject to qualification before production release.
+Version 2.1.0 targets Windows 10 and Windows 11 on x64 hardware. Windows installation, printer drivers, permissions, storage, and third-party services remain subject to qualification before production release.
 
 ## Data and operator responsibilities
 

@@ -96,3 +96,5 @@
   .so-actions { flex-wrap: wrap; }
   .so-actions button { flex: 1 1 auto; }
 }
+.so-mrp-allocation { display:flex; min-height:54px; align-items:center; justify-content:space-between; gap:16px; padding:10px 0; border-bottom:1px solid #eadfe4; font-weight:700; }
+.so-mrp-allocation input { width:110px; min-height:42px; padding:8px; border:1px solid #cfc4ca; border-radius:6px; font-size:16px; }

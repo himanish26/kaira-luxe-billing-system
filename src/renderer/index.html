@@ -2046,6 +2046,13 @@ returned after purchase.
                 <label>Address Line 1<input name="addressLine1" maxlength="200"></label><label>Address Line 2<input name="addressLine2" maxlength="200"></label>
                 <label>City<input name="city" maxlength="100"></label><label>District<input name="district" maxlength="100"></label><label class="supplier-required">State *<input name="state" required maxlength="100"><span class="supplier-field-error" data-field-error="state" role="alert"></span></label><label>PIN Code<input name="pinCode" inputmode="numeric" maxlength="6"><span class="supplier-field-error" data-field-error="pinCode" role="alert"></span></label>
                 <div class="supplier-wide-field supplier-business-relationships"><h3>BRAND MAPPING *</h3><div id="supplierRelationshipRows"></div><button id="supplierRelationshipAddBtn" class="klbs-cancel-btn" type="button">+ ADD BRAND MAPPING</button><div id="supplierRelationshipError" class="supplier-field-error" role="alert"></div></div>
+                <section id="supplierInvoiceLayoutSettings" class="supplier-wide-field supplier-invoice-layout-settings" hidden>
+                    <h3>INVOICE FORMATS</h3>
+                    <p>Each tab saves one way this supplier formats an invoice. Add a format only when the supplier sends a different layout: choose a sample invoice, match its columns, then save.</p>
+                    <div id="supplierInvoiceLayoutRows" class="supplier-invoice-layout-tabs" role="tablist" aria-label="Saved supplier invoice formats"></div>
+                    <div id="supplierInvoiceLayoutDetails" class="supplier-invoice-layout-details" role="tabpanel"></div>
+                    <div id="supplierInvoiceLayoutEditor" class="supplier-invoice-layout-editor" hidden></div>
+                </section>
                 <h3 class="supplier-form-section-title supplier-wide-field">NOTES / REMARKS</h3><label class="supplier-wide-field">Notes / Remarks<textarea name="notes" rows="3" maxlength="2000"></textarea></label>
             </form>
             </div>

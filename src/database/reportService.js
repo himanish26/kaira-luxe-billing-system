@@ -403,6 +403,7 @@ async function getProductBillSideReport(fromDate, toDate) {
                 bi.barcode,
 
                 bi.brand,
+                COALESCE(p.supplier, '') AS supplier,
                 p.segment,
                 bi.business_segment,
 
@@ -513,6 +514,7 @@ function productKey(row) {
     return JSON.stringify([
         String(row.barcode || "").trim().toUpperCase(),
         String(row.brand || ""),
+        String(row.supplier || ""),
         String(row.segment || ""),
         String(row.business_segment || ""),
         String(row.product_name || ""),
@@ -527,6 +529,7 @@ function createProductRow(row) {
     return {
         barcode: row.barcode || "",
         brand: row.brand || "",
+        supplier: row.supplier || "",
         segment: row.segment || "",
         business_segment: row.business_segment || "",
         product_name: row.product_name || "",
@@ -597,6 +600,9 @@ function mergeProductReportData(salesRows, creditRows) {
     const rows = Array.from(grouped.values()).map(row => ({
         barcode: row.barcode,
         brand: row.brand,
+        supplier: row.supplier,
+        segment: row.segment,
+        business_segment: row.business_segment,
         product_name: row.product_name,
         style_code: row.style_code,
         colour: row.colour,
@@ -637,6 +643,7 @@ async function getProductSalesReport(fromDate, toDate) {
         SELECT
             COALESCE(obi.barcode, ri.barcode) AS barcode,
             COALESCE(obi.brand, '') AS brand,
+            COALESCE(p.supplier, '') AS supplier,
             COALESCE(p.segment, '') AS segment,
             COALESCE(obi.business_segment, '') AS business_segment,
             COALESCE(obi.product_name, ri.product_name, '') AS product_name,

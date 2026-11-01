@@ -17,7 +17,9 @@ function displayProduct(row) {
         colour: row.colour ?? "",
         mrp: row.mrp ?? null,
         active: row.active ?? null,
-        currentStock: Number(row.current_stock ?? 0)
+        currentStock: Number(row.current_stock ?? 0),
+        mrpBuckets: Array.isArray(row.mrp_buckets) ? row.mrp_buckets : [],
+        unallocatedStock: Number(row.unallocated_stock ?? 0)
     };
 }
 
@@ -57,22 +59,48 @@ function createStyleFamilyService(db) {
         LEFT JOIN inventory_transactions it ON it.product_id = p.id
     `;
 
+    async function enrichRows(rows) {
+        if (!rows.length) return rows;
+        const ids = rows.map(row => Number(row.id)).filter(Number.isSafeInteger);
+        if (!ids.length) return rows;
+        const marks = ids.map(() => "?").join(",");
+        const [bucketRows, unallocatedRows] = await Promise.all([
+            all(`SELECT b.product_id,b.id,b.mrp_paise,b.status,COALESCE(SUM(t.quantity),0) AS quantity
+                FROM product_mrp_buckets b LEFT JOIN inventory_transactions t ON t.mrp_bucket_id=b.id
+                WHERE b.product_id IN (${marks}) GROUP BY b.id ORDER BY b.product_id,b.mrp_paise`, ids),
+            all(`SELECT product_id,COALESCE(SUM(quantity),0) AS quantity FROM inventory_transactions
+                WHERE product_id IN (${marks}) AND mrp_bucket_id IS NULL GROUP BY product_id`, ids)
+        ]);
+        const byProduct = new Map();
+        for (const bucket of bucketRows) {
+            const id = Number(bucket.product_id);
+            if (!byProduct.has(id)) byProduct.set(id, []);
+            byProduct.get(id).push({ id: Number(bucket.id), mrp: Number(bucket.mrp_paise) / 100,
+                quantity: Number(bucket.quantity), status: bucket.status });
+        }
+        const unallocatedByProduct = new Map(unallocatedRows.map(row => [Number(row.product_id), Number(row.quantity)]));
+        return rows.map(row => ({ ...row, mrp_buckets: byProduct.get(Number(row.id)) || [],
+            unallocated_stock: unallocatedByProduct.get(Number(row.id)) || 0 }));
+    }
+
     async function rowsForBrandStyle(brand, styleCode) {
-        return all(`${stockSelect}
+        const rows = await all(`${stockSelect}
             WHERE lower(trim(COALESCE(p.brand, ''))) = lower(trim(?))
               AND lower(trim(COALESCE(p.style_code, ''))) = lower(trim(?))
             GROUP BY p.id
             ORDER BY p.colour COLLATE NOCASE, p.size COLLATE NOCASE, p.id
             LIMIT ?`, [brand, styleCode, MAX_STYLE_ROWS + 1]);
+        return enrichRows(rows);
     }
 
     async function rowsForStyleCode(styleCode) {
-        return all(`${stockSelect}
+        const rows = await all(`${stockSelect}
             WHERE lower(trim(COALESCE(p.style_code, ''))) = lower(trim(?))
             GROUP BY p.id
             ORDER BY p.brand COLLATE NOCASE, p.category COLLATE NOCASE,
                      p.colour COLLATE NOCASE, p.size COLLATE NOCASE, p.id
             LIMIT ?`, [styleCode, MAX_STYLE_ROWS + 1]);
+        return enrichRows(rows);
     }
 
     function makeFamily(brand, styleCode, category, rows, exactProduct = null) {
@@ -125,10 +153,11 @@ function createStyleFamilyService(db) {
     }
 
     async function resolveBarcode(barcode) {
-        const row = await get(`${stockSelect}
+        const found = await get(`${stockSelect}
             WHERE trim(CAST(p.barcode AS TEXT)) = ?
             GROUP BY p.id
             LIMIT 1`, [barcode]);
+        const row = found ? (await enrichRows([found]))[0] : null;
         if (!row) return { status: "NOT_FOUND", exactProduct: null, family: null, candidates: [], diagnostic: "BARCODE_NOT_FOUND" };
 
         const exactProduct = displayProduct(row);

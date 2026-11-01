@@ -8,6 +8,7 @@ const sqlite3 = require("sqlite3").verbose();
 const { createStockOutwardService } = require("../src/database/stockOutwardService");
 const { createStockOutwardDeletionAuthorization } = require("../src/database/stockOutwardService");
 const { migrateStockOutwardCompletionV16 } = require("../src/database/stockOutwardCompletionMigrationV16");
+const { migrateDynamicMrpV19 } = require("../src/database/dynamicMrpMigrationV19");
 const databaseModulePath=require.resolve("../src/database/database");
 const previousDatabaseModule=require.cache[databaseModulePath];
 require.cache[databaseModulePath]={id:databaseModulePath,filename:databaseModulePath,loaded:true,exports:{}};
@@ -83,6 +84,12 @@ async function createV15Fixture() {
     await run(db,`CREATE TRIGGER trg_stock_movement_delete_prohibited BEFORE DELETE ON stock_movements
       BEGIN SELECT RAISE(ABORT,'KLBS_STOCK_MOVEMENT_DELETE_PROHIBITED'); END`);
     await migrateStockOutwardCompletionV16(db);
+    await run(db,"CREATE TABLE supplier_master(id INTEGER PRIMARY KEY)");
+    await run(db,"CREATE TABLE supplier_invoices(id INTEGER PRIMARY KEY)");
+    await run(db,"CREATE TABLE bill_items(id INTEGER PRIMARY KEY,bill_no TEXT,barcode TEXT,mrp REAL)");
+    await run(db,"CREATE TABLE returns(id INTEGER PRIMARY KEY,return_no TEXT)");
+    await run(db,"CREATE TABLE return_items(id INTEGER PRIMARY KEY,return_id INTEGER,original_bill_item_id INTEGER,product_id INTEGER,barcode TEXT,mrp REAL,quantity INTEGER)");
+    await migrateDynamicMrpV19(db);
     return {db,databasePath,directory};
 }
 

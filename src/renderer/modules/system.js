@@ -122,9 +122,9 @@ backAction: () => {
 
         <div class="settings-icon">📤</div>
 
-        <h2>Export Data</h2>
+        <h2>Data Import &amp; Export</h2>
 
-        <p>Export application data</p>
+        <p>Export business data<br>Prepare supplier invoices</p>
 
     </div>
 
@@ -205,7 +205,7 @@ if (exportCard) {
 
 exportCard.addEventListener(
     "click",
-    () => showComingSoon("Export Data")
+    showExportDataPage
 );
 
 }

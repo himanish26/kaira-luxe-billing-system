@@ -102,11 +102,12 @@ assert.match(businessCss, /align-items:\s*center[\s\S]*?text-align:\s*center/);
 assert.match(businessCss, /transform:\s*translateY\(-8px\)/, "Business hover follows the existing System elevation convention");
 assert.match(read("src/renderer/styles/settings.css"), /\.settings-card\{[\s\S]*?border-radius:\s*24px[\s\S]*?box-shadow:\s*0 10px 30px/, "System visual reference remains intact");
 
-// Legacy Bill History, settings and Export Data routes remain present.
+// Legacy Bill History and settings routes remain present; System opens the combined data tools page.
 assert.match(app, /historyBackBtn[\s\S]*?dashboardScreen\.style\.display = "block"/);
 assert.match(app, /settingsDashboardBtn[\s\S]*?dashboardScreen\.style\.display = "block"/);
-assert.match(read("src/renderer/modules/system.js"), /showComingSoon\("Export Data"\)/, "legacy System Export Data card remains untouched");
-assert.match(read("src/renderer/modules/system/exportData.js"), /function showExportDataPage\(\)/, "existing Export Data page implementation remains available");
+assert.match(read("src/renderer/modules/system.js"), /Data Import &amp; Export[\s\S]*?showExportDataPage/, "System data card opens the combined Import & Export page");
+assert.match(read("src/renderer/modules/system/exportData.js"), /function showExportDataPage\(\)/, "combined Import & Export page remains available");
+assert.match(read("src/renderer/modules/system/exportData.js"), /id="supplierInvoiceConverterCard"[\s\S]*?Supplier Invoice Converter/, "Import & Export page includes the supplier invoice conversion entry point");
 assert.match(app, /getCurrentStoreIdentity\(\)[\s\S]*?storeNameValue[\s\S]*?storeCodeValue[\s\S]*?storeStatusValue/, "Settings Store Information resolves Code, Name, and Status through the current Store authority");
 assert(!app.includes("accountingStoreManagementBtn") && !app.includes("accountingStoreManagementView"), "Accounting & Data no longer has a Store Management route");
 

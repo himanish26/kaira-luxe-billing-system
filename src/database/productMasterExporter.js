@@ -271,7 +271,7 @@ instructions.addRow([
 ]);
 
 instructions.addRow([
-    "• SKU"
+    "• SKU (leave blank for new products; KLBS assigns the SKU during import. A blank SKU keeps the existing SKU for a known barcode.)"
 ]);
 
 instructions.addRow([

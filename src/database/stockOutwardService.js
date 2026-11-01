@@ -253,6 +253,7 @@ function createStockOutwardService(database, options = {}) {
     async function removeLine(input = {}) {
         return serialize(() => transaction(async () => {
             const doc = await assertDraft(input.movementId);
+            await run("DELETE FROM stock_movement_mrp_allocations WHERE movement_line_id=? AND posting_state='UNPOSTED'",[Number(input.lineId)]);
             const result = await run("DELETE FROM stock_movement_lines WHERE id=? AND movement_id=? AND posting_state='UNPOSTED'", [Number(input.lineId),doc.id]);
             if (!result.changes) throw new StockOutwardError("This Stock Outward line can no longer be removed.", "STOCK_OUTWARD_LINE_LOCKED");
             return readDocument(doc.id);
@@ -339,6 +340,7 @@ function createStockOutwardService(database, options = {}) {
                     { field: "status", label: "Previous status", old: doc.status, new: "DELETED" }
                 ] }
             }, now());
+            await run("DELETE FROM stock_movement_mrp_allocations WHERE movement_line_id IN (SELECT id FROM stock_movement_lines WHERE movement_id=?) AND posting_state='UNPOSTED'",[doc.id]);
             await run("DELETE FROM stock_movement_lines WHERE movement_id=?", [doc.id]);
             const removed = await run("DELETE FROM stock_movements WHERE id=? AND direction='OUTWARD' AND status=? AND posted_at IS NULL", [doc.id, doc.status]);
             if (removed.changes !== 1) throw new StockOutwardError("Stock Outward changed while deletion was in progress. Refresh history and retry.", "STOCK_OUTWARD_DELETE_CONFLICT");
@@ -377,6 +379,38 @@ function createStockOutwardService(database, options = {}) {
             const instant=now().toISOString();
             for(const line of lines){
                 const quantity=Number(line.recognized_quantity);
+                const mrpAllocations=await all(`SELECT a.*,b.mrp_paise FROM stock_movement_mrp_allocations a
+                    JOIN product_mrp_buckets b ON b.id=a.bucket_id WHERE a.movement_line_id=? AND a.posting_state='UNPOSTED' ORDER BY b.mrp_paise`,[line.id]);
+                const existingBuckets=await get("SELECT COUNT(*) AS count FROM product_mrp_buckets WHERE product_id=?",[line.product_id]);
+                if(!mrpAllocations.length&&Number(existingBuckets?.count||0)>0)throw new StockOutwardError(`Assign an MRP for ${line.barcode} before posting this outward.`,"STOCK_OUTWARD_MRP_ALLOCATION_REQUIRED");
+                if(mrpAllocations.length){
+                    if(mrpAllocations.reduce((sum,row)=>sum+Number(row.quantity),0)!==quantity)throw new StockOutwardError(`MRP quantities for ${line.barcode} must equal the outward quantity.`,"STOCK_OUTWARD_MRP_ALLOCATION_INVALID");
+                    for(const allocation of mrpAllocations){
+                        const bucketStock=await get("SELECT COALESCE(SUM(quantity),0) AS quantity FROM inventory_transactions WHERE mrp_bucket_id=?",[allocation.bucket_id]);
+                        if(Number(bucketStock?.quantity||0)<Number(allocation.quantity))throw new StockOutwardError(`Only ${Number(bucketStock?.quantity||0)} units remain under MRP ₹${(Number(allocation.mrp_paise)/100).toFixed(2)} for ${line.barcode}. Refresh this Stock Outward before posting.`,"STOCK_OUTWARD_MRP_INSUFFICIENT_STOCK");
+                        const inserted=await run(`INSERT INTO inventory_transactions(product_id,barcode,transaction_type,quantity,reference_type,reference_id,remarks,created_by,created_at,mrp_bucket_id)
+                            VALUES(?,?,?,?,?,?,?,?,?,?)`,[line.product_id,line.barcode,doc.reason,-Number(allocation.quantity),"STOCK_OUTWARD",doc.movement_no,
+                            `${doc.reason} · MRP ₹${(Number(allocation.mrp_paise)/100).toFixed(2)} · ${doc.remarks||""}`,input.actor||"MANAGER",instant,allocation.bucket_id]);
+                        await run("UPDATE stock_movement_mrp_allocations SET posting_state='POSTED',posted_quantity=quantity,inventory_transaction_id=? WHERE id=? AND posting_state='UNPOSTED'",[inserted.lastID,allocation.id]);
+                        const batch=await run(`INSERT INTO stock_cost_allocation_batches(inventory_transaction_id,expected_quantity,status,created_at)
+                            VALUES(?,?,'OPEN',?)`,[inserted.lastID,-Number(allocation.quantity),instant]);
+                        let remaining=Number(allocation.quantity);
+                        const layers=await all(`SELECT l.id,l.quantity_received,l.unit_cost_paise,l.cost_basis_status,
+                            l.quantity_received+COALESCE((SELECT SUM(c.quantity) FROM stock_cost_allocations c WHERE c.layer_id=l.id),0) AS remaining
+                            FROM stock_receipt_layers l WHERE l.bucket_id=? ORDER BY l.received_at,l.id`,[allocation.bucket_id]);
+                        for(const layer of layers){
+                            const available=Math.max(0,Number(layer.remaining)); if(!available)continue;
+                            const take=Math.min(remaining,available);
+                            await run(`INSERT INTO stock_cost_allocations(batch_id,inventory_transaction_id,layer_id,quantity,unit_cost_paise,cost_basis_status,movement_allocation_id,created_at)
+                                VALUES(?,?,?,?,?,?,?,?)`,[batch.lastID,inserted.lastID,layer.id,-take,layer.unit_cost_paise,layer.cost_basis_status,allocation.id,instant]);
+                            remaining-=take; if(!remaining)break;
+                        }
+                        if(remaining)throw new StockOutwardError(`Cost layers do not cover stock under MRP ₹${(Number(allocation.mrp_paise)/100).toFixed(2)}.`,"STOCK_OUTWARD_MRP_COST_LAYER_MISMATCH");
+                        await run("UPDATE stock_cost_allocation_batches SET status='COMPLETE' WHERE id=?",[batch.lastID]);
+                    }
+                    await run("UPDATE stock_movement_lines SET posting_state='POSTED',posted_quantity=?,inventory_transaction_id=NULL,updated_at=? WHERE id=? AND posting_state='UNPOSTED'",[quantity,instant,line.id]);
+                    continue;
+                }
                 const insert=await run(`INSERT INTO inventory_transactions(
                     product_id,barcode,transaction_type,quantity,reference_type,reference_id,remarks,created_by,created_at
                 ) VALUES(?,?,?,?,?,?,?, ?,?)`,[line.product_id,line.barcode,doc.reason,-quantity,"STOCK_OUTWARD",doc.movement_no,doc.remarks, input.actor||"MANAGER",instant]);

@@ -124,6 +124,21 @@ async function child(tempRoot) {
     assert.strictEqual(inactive.variable_value, 0);
     assert.strictEqual(await openingCount(), 1);
 
+    const generatedSkuImport = await importRows([
+        baseRow("8909900020", { SKU: "" }),
+        baseRow("8909900021", { SKU: "" })
+    ]);
+    assert.strictEqual(generatedSkuImport.success, true);
+    const generatedSkuOne = await getProductByBarcode("8909900020");
+    const generatedSkuTwo = await getProductByBarcode("8909900021");
+    assert.match(generatedSkuOne.sku, /^KL\d{6}$/);
+    assert.match(generatedSkuTwo.sku, /^KL\d{6}$/);
+    assert.notStrictEqual(generatedSkuOne.sku, generatedSkuTwo.sku);
+
+    const existingSku = (await getProductByBarcode("8909900001")).sku;
+    assert.strictEqual((await importRows([baseRow("8909900001", { SKU: "", Brand: "Keep SKU" })])).success, true);
+    assert.strictEqual((await getProductByBarcode("8909900001")).sku, existingSku);
+
     assert.strictEqual((await importRows([baseRow("8909900010", { "Variable Value": " yEs " })])).success, true);
     assert.strictEqual((await getProductByBarcode("8909900010")).variable_value, 1);
     assert.strictEqual((await importRows([baseRow("8909900011", { "Variable Value": " nO " })])).success, true);
@@ -158,6 +173,7 @@ async function child(tempRoot) {
     const templateRows = XLSX.utils.sheet_to_json(templateWorkbook.Sheets["Product Master"], { defval: "" });
     assert.strictEqual(templateRows[0]["Variable Value"], "NO");
     assert(XLSX.utils.sheet_to_json(templateWorkbook.Sheets.Instructions, { header: 1 }).flat().some(value => String(value).includes("Variable Value") && String(value).includes("YES or NO")));
+    assert(XLSX.utils.sheet_to_json(templateWorkbook.Sheets.Instructions, { header: 1 }).flat().some(value => String(value).includes("KLBS assigns the SKU during import")));
 
     const beforeAtomicProducts = await productCount();
     const beforeAtomicOpening = await openingCount();

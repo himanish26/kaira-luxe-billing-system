@@ -228,7 +228,7 @@ function assertAcyclicWorkbook(workbook) {
 
 async function main() {
     const fixture = resultFixture();
-    const workbook = await createManagementPnlWorkbook(fixture, { version: "2.0.0", schemaVersion: 9 });
+    const workbook = await createManagementPnlWorkbook(fixture, { version: "2.1.0", schemaVersion: 9 });
     assert.deepStrictEqual(workbook.worksheets.map(sheet => sheet.name), [
         "Management P&L", "Sales & GST Bridge", "COGS Coverage", "Posted Expenses", "Data Quality", "Other Accounting Entries"
     ]);
@@ -239,7 +239,7 @@ async function main() {
     assert.strictEqual(pnl.getCell("F2").value, "FY 2026-27");
     assert.strictEqual(pnl.getCell("B3").value, "ALL");
     assert.strictEqual(pnl.getCell("D3").value, "2026-10-07");
-    assert.strictEqual(pnl.getCell("B4").value, "2.0.0");
+    assert.strictEqual(pnl.getCell("B4").value, "2.1.0");
     assert.strictEqual(pnl.getCell("D4").value, 9);
     assert.strictEqual(managementPnlFilename("KL001", "FY 2026-27", "2026-10-07"),
         "KLBS_KL001_Management_PnL_FY2026-27_2026-10-07.xlsx");
@@ -350,7 +350,7 @@ async function main() {
         assert.strictEqual(sheet.getCell("N5").value, 9);
     }
 
-    const incomplete = await createManagementPnlWorkbook(resultFixture({ incomplete: true, comparisonNetSales: 0 }), { version: "2.0.0", schemaVersion: 9 });
+    const incomplete = await createManagementPnlWorkbook(resultFixture({ incomplete: true, comparisonNetSales: 0 }), { version: "2.1.0", schemaVersion: 9 });
     assertAcyclicWorkbook(incomplete);
     const incompletePnl = incomplete.getWorksheet("Management P&L");
     const incompleteGrossRow = rowByLabel(incompletePnl, "GROSS PROFIT");
@@ -375,7 +375,7 @@ async function main() {
     zeroProfitFixture.months[4].result.cogs.fullGrossMarginPercent = 0;
     zeroProfitFixture.months[4].result.operatingResult.operatingProfitPaise = 0;
     zeroProfitFixture.months[4].result.operatingResult.operatingMarginPercent = 0;
-    const zeroProfitMonth = await createManagementPnlWorkbook(zeroProfitFixture, { version: "2.0.0", schemaVersion: 9 });
+    const zeroProfitMonth = await createManagementPnlWorkbook(zeroProfitFixture, { version: "2.1.0", schemaVersion: 9 });
     assertAcyclicWorkbook(zeroProfitMonth);
     const zeroProfitSheet = zeroProfitMonth.getWorksheet("Management P&L");
     const zeroProfitGross = rowByLabel(zeroProfitSheet, "GROSS PROFIT");
@@ -384,7 +384,7 @@ async function main() {
         "complete month keeps formula-driven numeric zero available when source arithmetic yields zero");
     assert.match(zeroProfitSheet.getCell(`F${zeroProfitOperating}`).value.formula, /AVAILABLE.*F\d+-F\d+/);
 
-    const segmentWorkbook = await createManagementPnlWorkbook(resultFixture({ segment: "MENS" }), { version: "2.0.0", schemaVersion: 9 });
+    const segmentWorkbook = await createManagementPnlWorkbook(resultFixture({ segment: "MENS" }), { version: "2.1.0", schemaVersion: 9 });
     assertAcyclicWorkbook(segmentWorkbook);
     assert.strictEqual(segmentWorkbook.getWorksheet("Management P&L").getCell("B3").value, "MENS");
     assert.notStrictEqual(rowByLabel(segmentWorkbook.getWorksheet("Management P&L"), "COMMON EXPENSES — NOT ALLOCATED"), 0);
@@ -392,7 +392,7 @@ async function main() {
     assert.strictEqual(segmentAccounting.getCell("A9").value, "KLPAE000002");
     assert.strictEqual(segmentAccounting.getCell("G9").value, "NOT ALLOCATED", "COMMON detail is disclosed but excluded from selected-segment P&L effect");
 
-    const completedWorkbook = await createManagementPnlWorkbook(resultFixture({ completed: true }), { version: "2.0.0", schemaVersion: 9 });
+    const completedWorkbook = await createManagementPnlWorkbook(resultFixture({ completed: true }), { version: "2.1.0", schemaVersion: 9 });
     assertAcyclicWorkbook(completedWorkbook);
     assert.strictEqual(completedWorkbook.getWorksheet("Management P&L").getCell("N8").value, "FY TOTAL");
     assert.strictEqual(completedWorkbook.getWorksheet("Management P&L").getCell("O8").value, "Last FY");
@@ -401,7 +401,7 @@ async function main() {
     try {
         const filename = managementPnlFilename("KL001", fixture.metadata.financialYearLabel, "2026-10-07");
         const filePath = path.join(tempDir, filename);
-        const exported = await exportManagementPnlFinancialYear(fixture, filePath, { version: "2.0.0", schemaVersion: 9 });
+        const exported = await exportManagementPnlFinancialYear(fixture, filePath, { version: "2.1.0", schemaVersion: 9 });
         assert.strictEqual(exported.success, true);
         const reopened = new ExcelJS.Workbook();
         await reopened.xlsx.readFile(filePath);

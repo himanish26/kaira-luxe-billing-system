@@ -3,6 +3,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const Module = require("module");
 
 function run(db, sql, params = []) {
     return new Promise((resolve, reject) => db.run(sql, params, function (error) {
@@ -13,6 +14,12 @@ function run(db, sql, params = []) {
 function get(db, sql, params = []) {
     return new Promise((resolve, reject) => db.get(sql, params, (error, row) => {
         error ? reject(error) : resolve(row);
+    }));
+}
+
+function all(db, sql, params = []) {
+    return new Promise((resolve, reject) => db.all(sql, params, (error, rows) => {
+        error ? reject(error) : resolve(rows || []);
     }));
 }
 
@@ -88,6 +95,37 @@ async function child(tempRoot) {
     assert.strictEqual(saved.discount_percent, 20);
     assert.strictEqual(bill.net_amount, 960);
     assert.strictEqual(saved.business_segment, "KL");
+
+    await run(db, `INSERT INTO products
+        (barcode,sku,brand,product_name,mrp,discount,selling_price,gst_rate,opening_stock,active,business_segment)
+        VALUES ('890-DMRP','DMRP-1','DMRP','Dynamic MRP Test',100,0,100,5,0,1,'KL')`);
+    const dynamicProduct = await get(db, "SELECT id FROM products WHERE barcode='890-DMRP'");
+    const oldMrpBucket = await run(db, `INSERT INTO product_mrp_buckets(product_id,mrp_paise,status,source,created_by,created_at)
+        VALUES(?,10000,'ACTIVE','STOCK_MOVEMENT','TEST',datetime('now'))`, [dynamicProduct.id]);
+    const newMrpBucket = await run(db, `INSERT INTO product_mrp_buckets(product_id,mrp_paise,status,source,created_by,created_at)
+        VALUES(?,15000,'ACTIVE','STOCK_MOVEMENT','TEST',datetime('now'))`, [dynamicProduct.id]);
+    for (const [bucketId, mrp, cost] of [[oldMrpBucket.lastID,100,5000],[newMrpBucket.lastID,150,7500]]) {
+        const inward = await run(db, `INSERT INTO inventory_transactions
+            (product_id,barcode,transaction_type,quantity,reference_type,reference_id,created_by,created_at,mrp_bucket_id)
+            VALUES(?,'890-DMRP','INWARD',1,'H01_TEST','DYNAMIC-MRP','TEST',datetime('now'),?)`, [dynamicProduct.id,bucketId]);
+        await run(db, `INSERT INTO stock_receipt_layers
+            (bucket_id,quantity_received,unit_cost_paise,cost_basis_status,cost_source,received_at,created_by)
+            VALUES(?,1,?,'CAPTURED','SUPPLIER_INVOICE',datetime('now'),'TEST')`, [bucketId,cost]);
+        assert(inward.lastID > 0);
+    }
+    await saveBill(payload("H01-DMRP-001", {
+        gross_amount: 100, discount_amount: 0, taxable_amount: 95, gst_amount: 5, net_amount: 100,
+        cash_amount: 100,
+        items: [{ barcode: "890-DMRP", qty: 1, mrp: 100, discount: 0, gst_rate: 5,
+            mrp_bucket_id: oldMrpBucket.lastID, ff_discount: null }]
+    }));
+    const dynamicBillItem = await get(db, "SELECT mrp,mrp_bucket_id,cost_total_paise FROM bill_items WHERE bill_no='H01-DMRP-001'");
+    assert.deepStrictEqual(dynamicBillItem, { mrp: 100, mrp_bucket_id: oldMrpBucket.lastID, cost_total_paise: 5000 });
+    const remainingMrpStock = await all(db, `SELECT b.mrp_paise,COALESCE(SUM(t.quantity),0) AS quantity
+        FROM product_mrp_buckets b LEFT JOIN inventory_transactions t ON t.mrp_bucket_id=b.id
+        WHERE b.product_id=? GROUP BY b.id ORDER BY b.mrp_paise`, [dynamicProduct.id]);
+    assert.deepStrictEqual(remainingMrpStock.map(row => [row.mrp_paise,row.quantity]), [[10000,0],[15000,1]],
+        "billing the selected old MRP must not deduct the new-MRP batch");
 
     await run(db, "UPDATE products SET mrp = 1300, discount = 15, gst_rate = 18, business_segment = 'MENS' WHERE barcode = '890-H01'");
     await saveBill(payload("H01-003", {
@@ -216,7 +254,17 @@ async function child(tempRoot) {
     app.exit(0);
 }
 
-if (process.argv.includes("--h01-child")) {
+if (process.argv.includes("--h01-node-child")) {
+    const tempRoot = process.argv[process.argv.indexOf("--h01-node-child") + 1];
+    const originalLoad = Module._load;
+    const testApp = { isPackaged: false, setPath: () => {}, getPath: () => path.join(tempRoot, "user data"), exit: () => {} };
+    Module._load = function(request, parent, isMain) {
+        if (request === "electron") return { app: testApp };
+        return originalLoad.call(this, request, parent, isMain);
+    };
+    child(tempRoot).catch(error => { console.error(error); process.exitCode = 1; });
+}
+else if (process.argv.includes("--h01-child")) {
     child(process.argv[process.argv.indexOf("--h01-child") + 1]).catch(error => {
         console.error(error);
         try { require("electron").app.exit(1); } catch (_) {}

@@ -232,6 +232,8 @@ function resolveAuthoritativeBillData(billData) {
         }
 
         const authoritativeItems = [];
+        const dynamicMrpRequested = new Map();
+        const dynamicMrpLayerRequested = new Map();
 
         function fail(message, code) {
             const error = new Error(message);
@@ -352,7 +354,8 @@ function resolveAuthoritativeBillData(billData) {
                         return;
                     }
 
-                    const mrp = Number(product.mrp);
+                    const continueWithMrp = (mrpBucket, fifoData = null) => {
+                    const mrp = mrpBucket ? Number(mrpBucket.mrp_paise) / 100 : Number(product.mrp);
                     const gstRate = Number(product.gst_rate);
                     const normalDiscount = Number(product.discount ?? 0);
                     const isVariableValue = Number(product.variable_value) === 1;
@@ -455,12 +458,15 @@ function resolveAuthoritativeBillData(billData) {
                         qty: quantity,
                         mrp,
                         variable_value: isVariableValue ? 1 : 0,
-                        unit_cost_paise: hasSaleCost ? Math.round(numericCost * 100) : null,
-                        cost_basis_status: isVariableValue
+                        mrp_bucket_id: mrpBucket ? Number(mrpBucket.id) : null,
+                        unit_cost_paise: mrpBucket ? (fifoData?.captured ? Math.round(fifoData.costTotalPaise / quantity) : null) : hasSaleCost ? Math.round(numericCost * 100) : null,
+                        cost_total_paise: mrpBucket && fifoData?.captured ? fifoData.costTotalPaise : null,
+                        fifo_cost_allocations: mrpBucket ? fifoData?.allocations || [] : null,
+                        cost_basis_status: mrpBucket ? (fifoData?.captured ? "CAPTURED" : "UNKNOWN") : isVariableValue
                             ? "NOT_APPLICABLE"
                             : hasSaleCost ? "CAPTURED" : "UNKNOWN",
-                        cost_source: hasSaleCost ? "PRODUCT_MASTER" : null,
-                        cost_method: hasSaleCost ? "SALE_TIME_COST_PRICE_PAISE" : null,
+                        cost_source: mrpBucket ? (fifoData?.captured ? "SUPPLIER_INVOICE_FIFO" : null) : hasSaleCost ? "PRODUCT_MASTER" : null,
+                        cost_method: mrpBucket ? (fifoData?.captured ? "DYNAMIC_MRP_FIFO_LAYER_PAISE" : null) : hasSaleCost ? "SALE_TIME_COST_PRICE_PAISE" : null,
                         gross_amount: grossAmount,
                         master_discount: normalDiscount,
                         discount: effectiveDiscount,
@@ -469,6 +475,72 @@ function resolveAuthoritativeBillData(billData) {
                     });
 
                     resolveItem(index + 1);
+                    };
+
+                    if (Number(product.variable_value) === 1) {
+                        continueWithMrp(null);
+                        return;
+                    }
+                    db.all("SELECT id FROM product_mrp_buckets WHERE product_id=(SELECT id FROM products WHERE barcode=?)", [product.barcode], (bucketErr, buckets) => {
+                        if (bucketErr) { fail("Unable to verify MRP stock.", "DYNAMIC_MRP_LOOKUP_FAILED"); return; }
+                        const submittedBucketId = Number(submittedItem.mrp_bucket_id || 0);
+                        if (!buckets?.length) {
+                            if (submittedBucketId) { fail("Selected MRP stock is no longer available.", "DYNAMIC_MRP_BUCKET_INVALID"); return; }
+                            db.get(`SELECT COALESCE(SUM(quantity),0) AS quantity FROM inventory_transactions
+                                WHERE product_id=(SELECT id FROM products WHERE barcode=?) AND mrp_bucket_id IS NULL`, [product.barcode], (legacyErr, legacyStock) => {
+                                if (legacyErr) { fail("Unable to verify legacy stock allocation.", "DYNAMIC_MRP_LOOKUP_FAILED"); return; }
+                                if (Number(legacyStock?.quantity || 0) !== 0) {
+                                    fail("This product's stock must be assigned to an MRP before billing.", "DYNAMIC_MRP_RECONCILIATION_REQUIRED");
+                                    return;
+                                }
+                                continueWithMrp(null);
+                            });
+                            return;
+                        }
+                        db.get(`SELECT COALESCE(SUM(quantity),0) AS quantity FROM inventory_transactions
+                            WHERE product_id=(SELECT id FROM products WHERE barcode=?) AND mrp_bucket_id IS NULL`, [product.barcode], (legacyErr, legacyStock) => {
+                        if (legacyErr) { fail("Unable to verify legacy stock allocation.", "DYNAMIC_MRP_LOOKUP_FAILED"); return; }
+                        if (Number(legacyStock?.quantity || 0) !== 0) {
+                            fail("Physical MRP reconciliation is required before this product can be billed.", "DYNAMIC_MRP_RECONCILIATION_REQUIRED");
+                            return;
+                        }
+                        if (!Number.isSafeInteger(submittedBucketId) || submittedBucketId <= 0) {
+                            fail("Choose the printed MRP before completing this bill.", "DYNAMIC_MRP_SELECTION_REQUIRED");
+                            return;
+                        }
+                        db.get(`SELECT b.id,b.mrp_paise,b.status,COALESCE(SUM(t.quantity),0) AS available
+                            FROM product_mrp_buckets b LEFT JOIN inventory_transactions t ON t.mrp_bucket_id=b.id
+                            WHERE b.id=? AND b.product_id=(SELECT id FROM products WHERE barcode=?) GROUP BY b.id`,
+                            [submittedBucketId, product.barcode], (mrpErr, bucket) => {
+                                if (mrpErr) { fail("Unable to verify selected MRP stock.", "DYNAMIC_MRP_LOOKUP_FAILED"); return; }
+                                if (!bucket || bucket.status !== "ACTIVE") { fail("Selected MRP is no longer available.", "DYNAMIC_MRP_BUCKET_INVALID"); return; }
+                                const prior = dynamicMrpRequested.get(submittedBucketId) || 0;
+                                const available = Number(bucket.available);
+                                if (!Number.isSafeInteger(available) || quantity + prior > available) {
+                                    fail(`Insufficient stock for the selected MRP ₹${(Number(bucket.mrp_paise)/100).toFixed(2)}.`, "DYNAMIC_MRP_INSUFFICIENT_STOCK"); return;
+                                }
+                                db.all(`SELECT l.id,l.quantity_received,l.unit_cost_paise,l.cost_basis_status,
+                                    l.quantity_received+COALESCE((SELECT SUM(c.quantity) FROM stock_cost_allocations c WHERE c.layer_id=l.id),0) AS remaining
+                                    FROM stock_receipt_layers l WHERE l.bucket_id=? ORDER BY l.received_at,l.id`, [bucket.id], (layerErr,layers) => {
+                                    if (layerErr) { fail("Unable to verify FIFO cost layers.", "DYNAMIC_MRP_COST_LOOKUP_FAILED"); return; }
+                                    let needed=quantity, costTotalPaise=0, captured=true;
+                                    const allocations=[];
+                                    for (const layer of layers || []) {
+                                        const availableLayer=Math.max(0,Number(layer.remaining)-(dynamicMrpLayerRequested.get(Number(layer.id))||0)); if (!availableLayer) continue;
+                                        const take=Math.min(needed,availableLayer);
+                                        allocations.push({layerId:Number(layer.id),quantity:take,unitCostPaise:layer.unit_cost_paise,costBasisStatus:layer.cost_basis_status});
+                                        dynamicMrpLayerRequested.set(Number(layer.id),(dynamicMrpLayerRequested.get(Number(layer.id))||0)+take);
+                                        if (layer.cost_basis_status !== "CAPTURED" || layer.unit_cost_paise == null) captured=false;
+                                        else costTotalPaise += take * Number(layer.unit_cost_paise);
+                                        needed-=take; if (!needed) break;
+                                    }
+                                    if (needed) { fail("Cost layers do not cover the selected MRP stock. Contact a manager before billing.", "DYNAMIC_MRP_COST_LAYER_MISMATCH"); return; }
+                                    dynamicMrpRequested.set(submittedBucketId, prior + quantity);
+                                    continueWithMrp(bucket,{allocations,captured,costTotalPaise});
+                                });
+                            });
+                        });
+                    });
 
                 }
             );
@@ -752,10 +824,12 @@ function saveBill(billData) {
                             unit_cost_paise,
                             cost_basis_status,
                             cost_source,
-                            cost_method
+                            cost_method,
+                            mrp_bucket_id,
+                            cost_total_paise
                         )
                         VALUES
-                        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         `,
 
                         [
@@ -795,7 +869,9 @@ function saveBill(billData) {
                             item.unit_cost_paise,
                             item.cost_basis_status,
                             item.cost_source,
-                            item.cost_method
+                            item.cost_method,
+                            item.mrp_bucket_id || null,
+                            item.cost_total_paise ?? null
 
                         ],
 
@@ -811,6 +887,7 @@ function saveBill(billData) {
 
                             }
 
+                            item.bill_item_id = this.lastID;
                             pending--;
 
                             if(pending===0){
@@ -831,6 +908,34 @@ function createSaleInventoryTransactions(){
 
     const items = billData.items || [];
     const now = new Date().toISOString();
+
+    function recordFifoCost(item, inventoryTransactionId, done) {
+        const allocations = Array.isArray(item.fifo_cost_allocations) ? item.fifo_cost_allocations : [];
+        if (!item.mrp_bucket_id || !allocations.length) { done(); return; }
+        db.run(`INSERT INTO stock_cost_allocation_batches(inventory_transaction_id,expected_quantity,status,created_at)
+            VALUES(?,?,'OPEN',?)`, [inventoryTransactionId,-Number(item.qty),now], function(batchErr) {
+            if (batchErr) { db.run("ROLLBACK"); reject(batchErr); return; }
+            const batchId=this.lastID;
+            let at=0;
+            const insertNext=()=>{
+                if(at>=allocations.length){
+                    db.run("UPDATE stock_cost_allocation_batches SET status='COMPLETE',completed_at=? WHERE id=?",[now,batchId], completeErr=>{
+                        if(completeErr){db.run("ROLLBACK");reject(completeErr);return;}
+                        done();
+                    });
+                    return;
+                }
+                const allocation=allocations[at++];
+                db.run(`INSERT INTO stock_cost_allocations(batch_id,inventory_transaction_id,bill_item_id,layer_id,quantity,unit_cost_paise,cost_basis_status,created_at)
+                    VALUES(?,?,?,?,?,?,?,?)`,[batchId,inventoryTransactionId,item.bill_item_id,allocation.layerId,-Number(allocation.quantity),
+                    allocation.unitCostPaise,allocation.costBasisStatus,now],insertErr=>{
+                    if(insertErr){db.run("ROLLBACK");reject(insertErr);return;}
+                    insertNext();
+                });
+            };
+            insertNext();
+        });
+    }
 
     function insertMovement(index){
 
@@ -857,7 +962,7 @@ function createSaleInventoryTransactions(){
 
         db.get(
             `
-            SELECT
+                SELECT
                 p.id,
                 p.barcode,
                 COALESCE(SUM(it.quantity), 0) AS current_stock
@@ -908,10 +1013,11 @@ function createSaleInventoryTransactions(){
                         reference_id,
                         remarks,
                         created_by,
-                        created_at
+                        created_at,
+                        mrp_bucket_id
                     )
                     VALUES
-                    (?, ?, 'SALE', ?, 'BILL', ?, ?, 'Administrator', ?)
+                    (?, ?, 'SALE', ?, 'BILL', ?, ?, 'Administrator', ?, ?)
                     `,
                     [
                         product.id,
@@ -919,9 +1025,10 @@ function createSaleInventoryTransactions(){
                         -saleQuantity,
                         billData.bill_no,
                         `Sale against bill ${billData.bill_no}`,
-                        now
+                        now,
+                        item.mrp_bucket_id || null
                     ],
-                    insertErr => {
+                    function(insertErr){
 
                         if(insertErr){
                             db.run("ROLLBACK");
@@ -929,7 +1036,7 @@ function createSaleInventoryTransactions(){
                             return;
                         }
 
-                        insertMovement(index + 1);
+                        recordFifoCost(item,this.lastID,()=>insertMovement(index + 1));
 
                     }
                 );

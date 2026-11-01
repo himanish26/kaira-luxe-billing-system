@@ -357,6 +357,11 @@ reprintStoreCredit: (storeCreditNo) =>
                 barcode
             ),
 
+        getDynamicMrpBillingOptions: (barcode, currentCart) =>
+            ipcRenderer.invoke("dynamic-mrp:billing-options", barcode, currentCart || []),
+        getDynamicMrpReturnCostOptions: (billItemId, grant) =>
+            ipcRenderer.invoke("dynamic-mrp:return-cost-options", billItemId, grant),
+
         searchInventoryStyle: (input) =>
             ipcRenderer.invoke(
                 "inventory:style-search",
@@ -382,11 +387,25 @@ reprintStoreCredit: (storeCreditNo) =>
         stockInwardListDrafts: () => stockInwardInvoke("stock-inward:resume-list"),
         stockInwardHistory: (options) => stockInwardInvoke("stock-inward:history", options || {}),
         stockInwardSuppliers: () => stockInwardInvoke("stock-inward:suppliers"),
+        stockInwardDownloadInvoiceTemplate: () => stockInwardInvoke("stock-inward:invoice-template"),
+        stockInwardImportInvoiceWorkbook: (data) => stockInwardInvoke("stock-inward:invoice-import", data || {}),
+        getSupplierInvoiceConverterSuppliers: () => ipcRenderer.invoke("supplier-invoice-converter:suppliers"),
+        getSupplierInvoiceConverterProfile: (supplierId) => ipcRenderer.invoke("supplier-invoice-converter:profile", supplierId),
+        getSupplierInvoiceFormatProfiles: (supplierId) => ipcRenderer.invoke("supplier-invoice-converter:profiles", supplierId),
+        getSupplierInvoiceLayoutsForEdit: supplierCode => ipcRenderer.invoke("supplier-invoice-converter:profile-layouts-edit", supplierCode),
+        inspectSupplierInvoiceLayout: supplierCode => ipcRenderer.invoke("supplier-invoice-converter:profile-layout-inspect", supplierCode),
+        saveSupplierInvoiceLayout: options => ipcRenderer.invoke("supplier-invoice-converter:profile-layout-save", options || {}),
+        setSupplierInvoiceLayoutDefault: (supplierCode, formatSignature) => ipcRenderer.invoke("supplier-invoice-converter:profile-layout-default", { supplierCode, formatSignature }),
+        deleteSupplierInvoiceLayout: (supplierCode, formatSignature) => ipcRenderer.invoke("supplier-invoice-converter:profile-layout-delete", { supplierCode, formatSignature }),
+        reorderSupplierInvoiceLayouts: (supplierCode, formatSignatures) => ipcRenderer.invoke("supplier-invoice-converter:profile-layout-reorder", { supplierCode, formatSignatures }),
+        resetSupplierInvoiceLayouts: supplierCode => ipcRenderer.invoke("supplier-invoice-converter:profile-layouts-reset", supplierCode),
+        convertSupplierInvoice: (options) => ipcRenderer.invoke("supplier-invoice-converter:convert", options || {}),
         stockInwardCreate: (data) => stockInwardInvoke("stock-inward:create", data),
         stockInwardLoad: (id) => stockInwardInvoke("stock-inward:load", id),
         stockInwardUpdateContext: (data) => stockInwardInvoke("stock-inward:update-context", data),
         stockInwardResolveBarcode: (barcode) => stockInwardInvoke("stock-inward:resolve-barcode", barcode),
         stockInwardScan: (data) => stockInwardInvoke("stock-inward:scan", data),
+        stockInwardCreateProductFromInvoice: (data) => stockInwardInvoke("stock-inward:create-product-from-invoice", data),
         stockInwardEditLine: (data) => stockInwardInvoke("stock-inward:edit-line", data),
         stockInwardRemoveLine: (data) => stockInwardInvoke("stock-inward:remove-line", data),
         stockInwardBulkRemoveLines: (data) => stockInwardInvoke("stock-inward:bulk-remove-lines", data),
@@ -398,6 +417,10 @@ reprintStoreCredit: (storeCreditNo) =>
         stockInwardInvoices: (supplierId) => stockInwardInvoke("stock-inward:invoices", supplierId),
         stockInwardFindDuplicateInvoice: (data) => stockInwardInvoke("stock-inward:duplicate-invoice", data),
         stockInwardCurrentMasterUnresolved: (id) => stockInwardInvoke("stock-inward:current-master-unresolved", id),
+        stockInwardMrpBuckets: (barcode) => stockInwardInvoke("stock-inward:mrp-buckets", barcode),
+        stockInwardMrpReconcile: (input) => stockInwardInvoke("stock-inward:mrp-reconcile", input || {}),
+        stockInwardMrpAllocations: id => stockInwardInvoke("stock-inward:mrp-allocations", id),
+        stockInwardMrpAllocate: input => stockInwardInvoke("stock-inward:mrp-allocate", input || {}),
         stockInwardArchiveCancelled: (data) => stockInwardInvoke("stock-inward:archive-cancelled", data),
         stockInwardExportUnknown: (id) => stockInwardInvoke("stock-inward:export-unknown", id),
         stockInwardPrintReceipt: (data) => stockInwardInvoke("stock-inward:print-receipt", data),
@@ -418,6 +441,9 @@ reprintStoreCredit: (storeCreditNo) =>
         stockOutwardLoad: id => stockOutwardInvoke("stock-outward:load", id),
         stockOutwardUpdateContext: data => stockOutwardInvoke("stock-outward:update-context", data || {}),
         stockOutwardSaveDraft: data => stockOutwardInvoke("stock-outward:save-draft", data || {}),
+        stockOutwardMrpAllocations: id => stockOutwardInvoke("stock-outward:mrp-allocations", id),
+        stockOutwardMrpAllocate: data => stockOutwardInvoke("stock-outward:mrp-allocate", data || {}),
+        stockOutwardMrpBuckets: barcode => stockOutwardInvoke("stock-outward:mrp-buckets", barcode),
         stockOutwardScan: data => stockOutwardScanInvoke(data || {}),
         stockOutwardEditLine: data => stockOutwardEditLineInvoke(data || {}),
         stockOutwardRemoveLine: data => stockOutwardInvoke("stock-outward:remove-line", data || {}),

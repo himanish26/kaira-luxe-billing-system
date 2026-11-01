@@ -5,6 +5,9 @@ const sqlite3=require("sqlite3").verbose();
 const {migrateStockInwardV14}=require("../src/database/stockInwardMigration");
 const {migrateStockInwardArchiveV15}=require("../src/database/stockInwardArchiveMigration");
 const {migrateStockOutwardCompletionV16}=require("../src/database/stockOutwardCompletionMigrationV16");
+const {migrateDynamicMrpV19}=require("../src/database/dynamicMrpMigrationV19");
+const {migrateStockInwardInvoiceV20}=require("../src/database/stockInwardInvoiceMigrationV20");
+const {migrateDynamicMrpReceiptAuditV26}=require("../src/database/dynamicMrpReceiptAuditMigrationV26");
 const {createStockInwardService}=require("../src/database/stockInwardService");
 const {createStockOutwardService,createStockOutwardDeletionAuthorization}=require("../src/database/stockOutwardService");
 const databaseModulePath=require.resolve("../src/database/database");
@@ -41,6 +44,9 @@ async function main(){
         await run(db,`CREATE TABLE stock_movements(id INTEGER PRIMARY KEY AUTOINCREMENT,movement_no TEXT NOT NULL UNIQUE,direction TEXT NOT NULL CHECK(direction IN ('INWARD','OUTWARD')),status TEXT NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','PARTIALLY_POSTED','PENDING_MASTER','COMPLETE','CANCELLED')),supplier_id INTEGER,supplier_name TEXT,supplier_code_snapshot TEXT,supplier_invoice_id INTEGER,supplier_invoice_code_snapshot TEXT,invoice_no TEXT,invoice_number_snapshot TEXT,reference_text TEXT,invoice_date TEXT,invoice_total_quantity INTEGER,store_id INTEGER,store_code_snapshot TEXT,store_name_snapshot TEXT,business_date TEXT NOT NULL,reason TEXT,remarks TEXT,idempotency_key TEXT NOT NULL UNIQUE,posted_by TEXT,posted_at TEXT,cancelled_by TEXT,cancelled_at TEXT,cancel_reason TEXT,created_by TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)`);
         await run(db,`CREATE TABLE stock_movement_lines(id INTEGER PRIMARY KEY AUTOINCREMENT,movement_id INTEGER NOT NULL,barcode TEXT NOT NULL,scanned_quantity INTEGER NOT NULL,recognized_quantity INTEGER NOT NULL DEFAULT 0,product_id INTEGER,product_state TEXT NOT NULL DEFAULT 'PENDING_MASTER',posting_state TEXT NOT NULL DEFAULT 'UNPOSTED',posted_quantity INTEGER NOT NULL DEFAULT 0,inventory_transaction_id INTEGER,sku_snapshot TEXT,product_name_snapshot TEXT,colour_snapshot TEXT,size_snapshot TEXT,resolution_note TEXT,discard_reason TEXT,discarded_by TEXT,discarded_at TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(movement_id,barcode),FOREIGN KEY(movement_id) REFERENCES stock_movements(id),FOREIGN KEY(product_id) REFERENCES products(id),FOREIGN KEY(inventory_transaction_id) REFERENCES inventory_transactions(id))`);
         await run(db,"CREATE TABLE activities(id INTEGER PRIMARY KEY AUTOINCREMENT,activity_date TEXT,activity_time TEXT,category TEXT,action TEXT,details TEXT,user_name TEXT,status TEXT,entity_type TEXT,reference_no TEXT,change_data TEXT,created_at TEXT)");
+        await run(db,"CREATE TABLE bill_items(id INTEGER PRIMARY KEY,bill_no TEXT,barcode TEXT,mrp REAL,qty INTEGER)");
+        await run(db,"CREATE TABLE returns(id INTEGER PRIMARY KEY,return_no TEXT UNIQUE)");
+        await run(db,"CREATE TABLE return_items(id INTEGER PRIMARY KEY,original_bill_item_id INTEGER,barcode TEXT,mrp REAL,product_id INTEGER,return_id INTEGER,quantity INTEGER)");
         await run(db,"CREATE TABLE klbs_schema_metadata(id INTEGER PRIMARY KEY,schema_version INTEGER NOT NULL)");
         await run(db,"INSERT INTO klbs_schema_metadata VALUES(1,13)");
         await migrateStockInwardV14(db);
@@ -49,6 +55,10 @@ async function main(){
         await run(db,"UPDATE klbs_schema_metadata SET schema_version=16 WHERE id=1");
         await migrateStockOutwardCompletionV16(db);
         await run(db,"UPDATE stock_movement_sequences SET next_movement_number=1 WHERE id=1");
+        await migrateDynamicMrpV19(db);
+        await migrateStockInwardInvoiceV20(db);
+        await migrateDynamicMrpReceiptAuditV26(db);
+        await run(db,"UPDATE klbs_schema_metadata SET schema_version=20 WHERE id=1");
 
         const clock=()=>new Date("2026-10-10T06:00:00.000Z");
         const inward=createStockInwardService(db,{allowMultipleDrafts:true,getCurrentStore:async()=>({id:1,storeCode:"KL001",storeName:"Kaira Luxe",status:"ACTIVE"}),getBusinessDate:()=>"2026-10-10",now:clock,authorize:(grant,purpose)=>{if(grant!=="manager-grant"||purpose!=="INVENTORY_INWARD")throw new Error("Manager grant required");},appendActivityInTransaction:appendActivity});
@@ -94,7 +104,7 @@ async function main(){
         await assert.rejects(outward.deleteDocument({movementId:outDoc.movementId,authorization:createStockOutwardDeletionAuthorization(),actor:"MANAGER"}),error=>error.code==="STOCK_OUTWARD_DELETE_NOT_ALLOWED");
 
         const byRef=await all(db,"SELECT action,entity_type,reference_no,status FROM activities WHERE reference_no IN (?,?) ORDER BY id",[inDoc.movementNo,outDoc.movementNo]);
-        assert.deepEqual(byRef.map(x=>x.reference_no).sort(),[inDoc.movementNo,outDoc.movementNo].sort(),"both completed movements have Activity Log references");
+        assert.deepEqual([...new Set(byRef.map(x=>x.reference_no))].sort(),[inDoc.movementNo,outDoc.movementNo].sort(),"both completed movements have Activity Log references; multiple inward entries may share one movement reference");
         assert(byRef.every(row=>row.status==="SUCCESS"&&row.entity_type),"Activity Log entries retain success and entity identity");
         const historyIn=await inward.listRecentHistory({page:1,keyword:inDoc.movementNo});
         const historyOut=await outward.listHistory({page:1,keyword:outDoc.movementNo});
@@ -102,10 +112,10 @@ async function main(){
         assert.equal(historyOut.rows[0].movement_no,outDoc.movementNo);
         assert.equal((await inward.load(inDoc.movementId)).document.status,"COMPLETE");
         assert.equal((await outward.load(outDoc.movementId)).document.status,"COMPLETE");
-        assert.equal(Number((await get(db,"SELECT schema_version FROM klbs_schema_metadata WHERE id=1")).schema_version),16,"fixture remains at V16");
+        assert.equal(Number((await get(db,"SELECT schema_version FROM klbs_schema_metadata WHERE id=1")).schema_version),20,"fixture applies the current V20 schema");
         assert.equal((await get(db,"PRAGMA integrity_check")).integrity_check,"ok");
         assert.equal((await get(db,"SELECT COUNT(*) AS n FROM inventory_transactions WHERE product_id=1 AND (quantity IS NULL OR quantity=0)")).n,0);
-        console.log("PASS isolated V16 inventory integration: opening → inward → outward; stock deltas, failed operations, document links, Activity Log, manager grant, history, completed-document protection, and SQLite integrity");
+        console.log("PASS isolated V20 inventory integration: opening → inward → outward; stock deltas, failed operations, document links, Activity Log, manager grant, history, completed-document protection, and SQLite integrity");
     }finally{await new Promise(resolve=>db.close(()=>resolve()));}
 }
 

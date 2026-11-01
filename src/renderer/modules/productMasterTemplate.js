@@ -168,11 +168,6 @@ window.productMasterTemplate = `
 
                 <th>Barcode</th>
                 <th>Brand</th>
-                <th>Segment</th>
-                <th>Business Segment</th>
-                <th>Category</th>
-                <th>Season</th>
-                <th>Collection</th>
                 <th>Product</th>
                 <th>Size</th>
                 <th>Colour</th>
@@ -181,7 +176,6 @@ window.productMasterTemplate = `
                 <th>Disc%</th>
                 <th>GST%</th>
                 <th>Selling Price</th>
-                <th>Variable Value</th>
 
             </tr>
 

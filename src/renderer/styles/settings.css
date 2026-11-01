@@ -53,6 +53,64 @@ margin-bottom:50px;
 
 }
 
+.supplier-invoice-entry-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    max-width:1100px;
+    margin-left:auto;
+    margin-right:auto;
+}
+
+.supplier-invoice-converter-guide{margin-top:20px;color:#444;line-height:1.6}
+.supplier-invoice-converter-guide ol{padding-left:24px;margin:0 0 14px}
+.supplier-invoice-converter-guide li{margin:0 0 8px}
+.supplier-invoice-converter-guide p{margin:0;color:#666}
+.supplier-invoice-profile-confirmation{margin-top:20px;padding:18px;background:#fff;border:1px solid #eadde2;border-left:5px solid var(--primary);border-radius:12px}
+.supplier-invoice-profile-confirmation h3{margin:0 0 8px;color:var(--primary)}
+.supplier-invoice-profile-summary,.supplier-invoice-profile-layouts,.supplier-invoice-profile-help{margin:6px 0;color:#555;line-height:1.45}
+.supplier-invoice-profile-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px}
+.supplier-invoice-profile-fields label{display:grid;gap:6px;font-weight:600}
+.supplier-invoice-profile-fields select{min-width:0;padding:12px;border:1px solid #d9cbd2;border-radius:8px;background:#fff}
+.supplier-invoice-supplier-field{display:grid;gap:7px;width:min(100%,520px);margin-top:20px;color:#4b4548;font-weight:700}
+.supplier-invoice-supplier-field select{width:100%;min-height:48px;padding:10px 12px;border:1px solid #d9cdd2;border-radius:8px;background:#fff;color:#333;font:inherit}
+.supplier-invoice-review-toggle{display:flex;align-items:flex-start;gap:12px;width:min(100%,900px);margin-top:18px;padding:14px 16px;border:1px solid #eadde2;border-radius:10px;background:#faf7f9;color:#4b4548;cursor:pointer}
+.supplier-invoice-review-toggle input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--primary);flex:0 0 auto}
+.supplier-invoice-review-toggle span{display:grid;gap:4px}
+.supplier-invoice-review-toggle strong{color:var(--primary)}
+.supplier-invoice-review-toggle small{font-size:14px;line-height:1.4}
+.supplier-invoice-review-toggle:has(input:disabled){opacity:.58;cursor:not-allowed}
+.supplier-invoice-converter-actions{margin-top:22px;display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+.supplier-invoice-converter-actions .dashboard-btn{width:min(100%,440px);height:auto;min-height:58px;margin:0;padding:12px 18px;font-size:20px}
+.supplier-invoice-converter-actions .dashboard-btn:disabled{opacity:.55;cursor:not-allowed}
+.supplier-invoice-dropzone{display:grid;justify-items:center;gap:9px;margin-top:22px;padding:30px 20px;border:2px dashed #c8a9b7;border-radius:14px;background:#fff;color:#4b4548;text-align:center;transition:border-color .16s ease,background .16s ease,box-shadow .16s ease}
+.supplier-invoice-dropzone.is-ready{border-color:var(--primary);background:#fffafd;cursor:pointer}
+.supplier-invoice-dropzone.is-ready:hover,.supplier-invoice-dropzone.is-ready:focus-visible{outline:none;border-color:var(--primary);box-shadow:0 0 0 4px rgba(145,0,74,.1)}
+.supplier-invoice-dropzone.is-dragover{border-style:solid;background:#faedf4;box-shadow:0 0 0 5px rgba(145,0,74,.12)}
+.supplier-invoice-dropzone.is-disabled{background:#f8f6f7;color:#777}
+.supplier-invoice-dropzone-icon{font-size:34px;line-height:1}
+.supplier-invoice-dropzone strong{color:var(--primary);font-size:20px}
+.supplier-invoice-dropzone>span{line-height:1.4}
+.supplier-invoice-dropzone .supplier-invoice-dropzone-hint{color:#666;font-size:14px}
+.supplier-invoice-dropzone button{min-height:44px;margin-top:5px}
+.supplier-invoice-dropzone button:disabled{opacity:.55;cursor:not-allowed}
+.supplier-invoice-converter-status{margin-top:18px;color:#555;line-height:1.5}
+.supplier-invoice-converter-result{display:grid;gap:5px;margin-top:14px;padding:14px 16px;background:#f8f4f6;border:1px solid #eadde2;border-radius:10px;overflow-wrap:anywhere}
+.supplier-invoice-converter-result strong{color:var(--primary)}
+.supplier-invoice-mapping{margin-top:18px;padding:18px 0 2px;border-top:1px solid var(--border)}
+.supplier-invoice-mapping h3{margin:0 0 8px;color:var(--primary);font-size:20px}
+.supplier-invoice-mapping>p{color:#5f6368;line-height:1.5;margin:8px 0}
+.supplier-invoice-mapping-source{font-weight:700;overflow-wrap:anywhere}
+.supplier-invoice-mapping-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:16px 0}
+.supplier-invoice-mapping-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 18px;margin:14px 0}
+.supplier-invoice-mapping-fields label,.supplier-invoice-mapping-controls label{display:grid;gap:6px;color:#4b4548;font-size:14px;font-weight:700}
+.supplier-invoice-mapping-fields select,.supplier-invoice-mapping-controls select{width:100%;min-height:42px;padding:8px 10px;border:1px solid #d9cdd2;border-radius:8px;background:#fff;color:#333}
+.supplier-invoice-system-field{display:grid;gap:4px;margin:14px 0;padding:12px 14px;border:1px solid #eadde2;border-radius:8px;background:#faf7f9;color:#4b4548}
+.supplier-invoice-system-field strong{color:var(--primary)}
+.supplier-invoice-system-field span{line-height:1.45}
+.supplier-invoice-mapping-optional{margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.supplier-invoice-mapping-optional summary{color:var(--primary);font-weight:700;cursor:pointer}
+
+@media(max-width:760px){.supplier-invoice-entry-grid,.supplier-invoice-mapping-controls,.supplier-invoice-mapping-fields,.supplier-invoice-profile-fields{grid-template-columns:1fr}.supplier-invoice-converter-actions .dashboard-btn{font-size:17px}}
+
 .settings-card{
 
     background:#fff;
@@ -2432,6 +2490,10 @@ body{
 
 .dc-lifecycle-overlay.is-visible{ display:flex; }
 
+.dc-lifecycle-overlay.is-visible{
+    animation:dc-lifecycle-backdrop-in .22s ease-out both;
+}
+
 .dc-lifecycle-shell{
     display:flex;
     flex-direction:column;
@@ -2444,6 +2506,20 @@ body{
     border-top:6px solid var(--primary);
     border-radius:var(--radius-xl);
     box-shadow:0 24px 70px rgba(0,0,0,.28);
+}
+
+.dc-lifecycle-overlay.is-visible .dc-lifecycle-shell{
+    animation:dc-lifecycle-shell-in .3s cubic-bezier(.2,.75,.25,1) both;
+}
+
+@keyframes dc-lifecycle-backdrop-in{
+    from{ opacity:0; }
+    to{ opacity:1; }
+}
+
+@keyframes dc-lifecycle-shell-in{
+    from{ opacity:0; transform:translateY(12px) scale(.985); }
+    to{ opacity:1; transform:translateY(0) scale(1); }
 }
 
 .dc-lifecycle-scroll{
@@ -2500,6 +2576,7 @@ body{
     min-height:46px;
     padding:7px 14px;
     border-bottom:1px solid #eeeeee;
+    transition:background-color .2s ease, color .2s ease;
 }
 
 .dc-lifecycle-stage:last-child{ border-bottom:none; }
@@ -2544,16 +2621,22 @@ body{
 }
 
 .dc-lifecycle-stage.is-active .dc-lifecycle-stage-icon{
-    animation:dc-lifecycle-pulse 1.4s ease-in-out infinite;
+    animation:dc-lifecycle-pulse 1.8s ease-in-out infinite;
 }
 
 @keyframes dc-lifecycle-pulse{
-    50%{ opacity:.58; }
+    50%{ opacity:.78; transform:scale(1.06); box-shadow:0 0 0 4px rgba(123,30,43,.12); }
 }
 
 .dc-lifecycle-stage.is-complete .dc-lifecycle-stage-icon{
     background:var(--success);
     color:#fff;
+    animation:dc-lifecycle-complete .24s ease-out both;
+}
+
+@keyframes dc-lifecycle-complete{
+    from{ opacity:.65; transform:scale(.82); }
+    to{ opacity:1; transform:scale(1); }
 }
 
 .dc-lifecycle-stage.is-complete .dc-lifecycle-stage-state{
@@ -2633,4 +2716,15 @@ body{
     .dc-lifecycle-stage-state{ grid-column:2; text-align:left; }
     .dc-lifecycle-actions{ flex-direction:column-reverse; }
     .dc-lifecycle-actions button{ width:100%; }
+}
+
+@media (prefers-reduced-motion:reduce){
+    .dc-lifecycle-overlay.is-visible,
+    .dc-lifecycle-overlay.is-visible .dc-lifecycle-shell,
+    .dc-lifecycle-stage,
+    .dc-lifecycle-stage.is-active .dc-lifecycle-stage-icon,
+    .dc-lifecycle-stage.is-complete .dc-lifecycle-stage-icon{
+        animation:none;
+        transition:none;
+    }
 }

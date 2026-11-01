@@ -25,18 +25,20 @@ const close = database => new Promise((resolve, reject) =>
 const open = filePath => new sqlite3.Database(filePath);
 
 const BASE_SCHEMA = `
-    CREATE TABLE products (id INTEGER PRIMARY KEY, product_name TEXT);
-    CREATE TABLE bill_items (id INTEGER PRIMARY KEY, bill_no TEXT, unit_cost_paise INTEGER,
+    CREATE TABLE products (id INTEGER PRIMARY KEY, product_name TEXT, barcode TEXT, sku TEXT, mrp REAL);
+    CREATE TABLE bill_items (id INTEGER PRIMARY KEY, bill_no TEXT, barcode TEXT, mrp REAL, qty INTEGER, unit_cost_paise INTEGER,
         cost_basis_status TEXT DEFAULT 'UNKNOWN', cost_source TEXT, cost_method TEXT,
         business_segment TEXT);
     CREATE TABLE bills (id INTEGER PRIMARY KEY, bill_no TEXT);
-    CREATE TABLE returns (id INTEGER PRIMARY KEY, original_bill_no TEXT,
+    CREATE TABLE returns (id INTEGER PRIMARY KEY, return_no TEXT UNIQUE, original_bill_no TEXT,
         accounting_status TEXT DEFAULT 'LEGACY_UNASSESSED', business_date TEXT,
         accounting_snapshot_version INTEGER);
-    CREATE TABLE return_items (id INTEGER PRIMARY KEY, return_id INTEGER,
-        original_bill_item_id INTEGER, quantity INTEGER);
+    CREATE TABLE return_items (id INTEGER PRIMARY KEY, return_id INTEGER, original_bill_item_id INTEGER,
+        product_id INTEGER, barcode TEXT, mrp REAL, quantity INTEGER);
     CREATE TABLE settings (id INTEGER PRIMARY KEY);
-    CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, quantity INTEGER);
+    CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, product_id INTEGER, barcode TEXT,
+        transaction_type TEXT, quantity INTEGER, reference_type TEXT, reference_id TEXT,
+        remarks TEXT, created_by TEXT, created_at TEXT);
     CREATE TABLE day_closing (id INTEGER PRIMARY KEY, business_date TEXT);
     CREATE TABLE customers (
         id INTEGER PRIMARY KEY AUTOINCREMENT, customer_code TEXT UNIQUE,
@@ -64,16 +66,16 @@ const prepare = (database, options = {}) => prepareDatabaseSchema({
 });
 
 async function main() {
-    assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 15);
+        assert.strictEqual(CURRENT_DB_SCHEMA_VERSION, 28);
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-schema-version-"));
     try {
         // 1, 2, 7: fresh initialization, legacy adoption, and data preservation.
         const legacyPath = path.join(temporary, "legacy.db");
         let database = await createDatabase(legacyPath);
-        await run(database, "INSERT INTO products VALUES (7, 'Test Product')");
+        await run(database, "INSERT INTO products (id, product_name) VALUES (7, 'Test Product')");
         await run(database, "INSERT INTO bill_items (id, bill_no) VALUES (11, 'OLD-BILL')");
         await run(database, "INSERT INTO bills VALUES (8, 'TEST-BILL')");
-        await run(database, "INSERT INTO inventory_transactions VALUES (9, 3)");
+        await run(database, "INSERT INTO inventory_transactions (id, quantity) VALUES (9, 3)");
         await run(database, "INSERT INTO day_closing VALUES (10, '2026-09-06')");
         await prepare(database);
         assert.strictEqual(await readSchemaVersion(database), CURRENT_DB_SCHEMA_VERSION);
@@ -94,18 +96,20 @@ async function main() {
         // 1: fresh disposable database receives the current version.
         database = open(path.join(temporary, "fresh.db"));
         await exec(database, `
-            CREATE TABLE products (id INTEGER PRIMARY KEY, product_name TEXT, variable_value INTEGER NOT NULL DEFAULT 0);
-            CREATE TABLE bill_items (id INTEGER PRIMARY KEY, bill_no TEXT, gross_amount REAL,
+            CREATE TABLE products (id INTEGER PRIMARY KEY, product_name TEXT, barcode TEXT, sku TEXT, mrp REAL, variable_value INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE bill_items (id INTEGER PRIMARY KEY, bill_no TEXT, barcode TEXT, mrp REAL, gross_amount REAL, qty INTEGER,
                 unit_cost_paise INTEGER, cost_basis_status TEXT DEFAULT 'UNKNOWN',
                 cost_source TEXT, cost_method TEXT, business_segment TEXT);
             CREATE TABLE bills (id INTEGER PRIMARY KEY, bill_no TEXT);
-            CREATE TABLE returns (id INTEGER PRIMARY KEY, original_bill_no TEXT,
+            CREATE TABLE returns (id INTEGER PRIMARY KEY, return_no TEXT UNIQUE, original_bill_no TEXT,
                 accounting_status TEXT DEFAULT 'LEGACY_UNASSESSED', business_date TEXT,
                 accounting_snapshot_version INTEGER);
-            CREATE TABLE return_items (id INTEGER PRIMARY KEY, return_id INTEGER,
-                original_bill_item_id INTEGER, quantity INTEGER);
+            CREATE TABLE return_items (id INTEGER PRIMARY KEY, return_id INTEGER, original_bill_item_id INTEGER,
+                product_id INTEGER, barcode TEXT, mrp REAL, quantity INTEGER);
             CREATE TABLE settings (id INTEGER PRIMARY KEY);
-            CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, quantity INTEGER);
+            CREATE TABLE inventory_transactions (id INTEGER PRIMARY KEY, product_id INTEGER, barcode TEXT,
+                transaction_type TEXT, quantity INTEGER, reference_type TEXT, reference_id TEXT,
+                remarks TEXT, created_by TEXT, created_at TEXT);
             CREATE TABLE day_closing (id INTEGER PRIMARY KEY, business_date TEXT);
             CREATE TABLE customers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, customer_code TEXT UNIQUE,
@@ -124,7 +128,7 @@ async function main() {
         database = await createDatabase(path.join(temporary, "versioned-v3.db"));
         await run(database, `CREATE TABLE ${SCHEMA_METADATA_TABLE} (id INTEGER PRIMARY KEY CHECK (id = 1), schema_version INTEGER NOT NULL)`);
         await run(database, `INSERT INTO ${SCHEMA_METADATA_TABLE} VALUES (1, 3)`);
-        await run(database, "INSERT INTO products VALUES (12, 'Versioned Product')");
+        await run(database, "INSERT INTO products (id, product_name) VALUES (12, 'Versioned Product')");
         await run(database, "INSERT INTO bill_items (id, bill_no) VALUES (13, 'VERSIONED-BILL')");
         await prepare(database);
         assert.strictEqual(await readSchemaVersion(database), CURRENT_DB_SCHEMA_VERSION);

@@ -3486,6 +3486,24 @@ if (saleType === "RETURN") {
 
         }
 
+        let dynamicMrpAuthorizationGrant = "";
+        try {
+            for (const item of activeReturnItems) {
+                const options = await window.electronAPI.getDynamicMrpReturnCostOptions(item.original_bill_item_id);
+                if (!options?.dynamicMrp) continue;
+                if (!dynamicMrpAuthorizationGrant) {
+                    dynamicMrpAuthorizationGrant = await requestOptionalManagerAuthorization("DYNAMIC_MRP_RETURN_COST");
+                    if (!dynamicMrpAuthorizationGrant) return;
+                }
+                const selection = await chooseDynamicReturnCostLayers(options, Number(item.qty), item.product_name);
+                if (!selection) return;
+                item.mrpCostAllocations = selection;
+            }
+        } catch (error) {
+            await showNativeAlert(error?.message || "Unable to prepare the return cost selection.");
+            return;
+        }
+
 paymentBtn.disabled = true;
 const returnReason = await showReturnReasonDialog();
 if (!returnReason) {
@@ -3563,6 +3581,8 @@ const returnAmount =
                     return_amount:
                         returnAmount,
 
+                    dynamicMrpAuthorizationGrant,
+
                     items:
                         activeReturnItems.map(
                             item => {
@@ -3598,6 +3618,9 @@ const returnAmount =
 
                                     quantity:
                                         Number(item.qty),
+
+                                    mrpCostAllocations:
+                                        Array.isArray(item.mrpCostAllocations) ? item.mrpCostAllocations : [],
 
                                     unit_value:
                                         Number(item.mrp || 0),
@@ -5614,7 +5637,26 @@ if (!product) {
                 }
             }
             else {
-                addProductToBill(product);
+                try {
+                    const mrpOptions = await window.electronAPI.getDynamicMrpBillingOptions(product.barcode, billItems);
+                    if (mrpOptions?.mode === "DYNAMIC_MRP") {
+                        if (mrpOptions.blockedReason === "MRP_RECONCILIATION_REQUIRED") {
+                            await showDynamicMrpReconciliationDrawer(product, mrpOptions);
+                        } else if (mrpOptions.action === "SELECT_MRP") {
+                            await showDynamicMrpDrawer(product, mrpOptions.choices);
+                        } else if (mrpOptions.action === "ADD_DIRECTLY") {
+                            const bucket = mrpOptions.choices[0];
+                            addProductToBill({ ...product, current_stock: bucket.available }, bucket);
+                        } else {
+                            await showNativeAlert("There is no available stock for this barcode.");
+                        }
+                    } else {
+                        addProductToBill(product);
+                    }
+                } catch (error) {
+                    console.error("Dynamic MRP billing lookup failed", error);
+                    await showNativeAlert("Unable to verify MRP stock. Please ask a Manager before continuing.");
+                }
             }
 
 barcodeInput.value = "";
@@ -5812,7 +5854,75 @@ function applyVariableValueEntry(product, entry, existingItem) {
     return true;
 }
 
-function addProductToBill(product) {
+async function showDynamicMrpDrawer(product, choices) {
+    const overlay = document.createElement("div");
+    overlay.className = "klbs-drawer-overlay dynamic-mrp-overlay";
+    overlay.style.display = "none";
+    overlay.innerHTML = `<section class="klbs-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="dynamicMrpTitle" tabindex="-1">
+        <header class="klbs-drawer-header"><h2 id="dynamicMrpTitle" class="klbs-drawer-title">SELECT PRINTED MRP</h2><button type="button" class="klbs-drawer-exit" data-mrp-close>EXIT</button></header>
+        <div class="klbs-drawer-body"><p>${escapeHtml(product.product_name || "Product")} · ${escapeHtml(product.barcode || "")}</p><div class="dynamic-mrp-choice-list">${choices.map(bucket => `<button type="button" class="dynamic-mrp-choice" data-bucket-id="${Number(bucket.id)}"><strong>₹${Number(bucket.mrp).toFixed(2)}</strong><span>${Number(bucket.availableToAdd)} available</span></button>`).join("")}</div></div>
+        <footer class="klbs-drawer-footer"><span>Choose the MRP printed on the item.</span></footer></section>`;
+    document.body.appendChild(overlay);
+    const panel = overlay.querySelector(".klbs-drawer-panel");
+    let selected = false;
+    let settle;
+    const result = new Promise(resolve => { settle = resolve; });
+    const drawer = window.KLBSDrawer.create({ root: overlay, panel, labelledBy: "dynamicMrpTitle", initialFocus: () => overlay.querySelector("[data-bucket-id]"), exitButtons: [overlay.querySelector("[data-mrp-close]")], onExit: () => drawer.close(), onEscape: () => false, onClosed: () => { overlay.remove(); if (!selected) settle(null); } });
+    overlay.querySelectorAll("[data-bucket-id]").forEach(button => button.addEventListener("click", () => {
+        const bucket = choices.find(row => Number(row.id) === Number(button.dataset.bucketId));
+        if (!bucket || selected) return;
+        selected = true;
+        addProductToBill({ ...product, current_stock: bucket.available }, bucket);
+        settle(bucket);
+        drawer.close();
+    }));
+    drawer.open({ opener: document.activeElement });
+    return result;
+}
+
+async function showDynamicMrpReconciliationDrawer(product, detail) {
+    const overlay = document.createElement("div");
+    overlay.className = "klbs-drawer-overlay dynamic-mrp-overlay";
+    overlay.innerHTML = `<section class="klbs-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="dynamicMrpReconcileTitle" tabindex="-1">
+        <header class="klbs-drawer-header"><h2 id="dynamicMrpReconcileTitle" class="klbs-drawer-title">MRP STOCK NEEDS A PHYSICAL CHECK</h2><button type="button" class="klbs-drawer-exit" data-mrp-close>EXIT</button></header>
+        <div class="klbs-drawer-body">
+            <p><strong>${escapeHtml(product.product_name || "Product")}</strong> · ${escapeHtml(product.barcode || "")}</p>
+            <p>KLBS has <strong>${Number(detail.unallocatedQuantity) || 0} unit(s)</strong> whose printed MRP has not been recorded.</p>
+            <p>MRP quantities already confirmed in KLBS:</p>
+            <ul>${(detail.buckets || []).filter(bucket => Number(bucket.quantity) > 0).map(bucket => `<li>₹${(Number(bucket.mrpPaise) / 100).toFixed(2)} × ${Number(bucket.quantity)} unit(s)</li>`).join("") || "<li>No MRP quantities confirmed yet</li>"}</ul>
+            <p>The same barcode can be on old and new packs. KLBS pauses billing so the cashier does not charge the wrong MRP.</p>
+            <p><strong>Manager:</strong> open <em>Stock Inward → Physical MRP Count</em>, scan this barcode, and enter the physical quantity under each printed MRP. The total must match the unassigned KLBS quantity. This records the MRP split without adding or removing stock. Then scan the item again in Billing.</p>
+        </div>
+        <footer class="klbs-drawer-footer"><button type="button" class="klbs-primary-btn" data-mrp-close>UNDERSTOOD</button></footer></section>`;
+    document.body.appendChild(overlay);
+    const panel = overlay.querySelector(".klbs-drawer-panel");
+    const closeButtons = [...overlay.querySelectorAll("[data-mrp-close]")];
+    const drawer = window.KLBSDrawer.create({
+        root: overlay,
+        panel,
+        labelledBy: "dynamicMrpReconcileTitle",
+        initialFocus: () => closeButtons[1],
+        exitButtons: [closeButtons[0]],
+        onExit: () => drawer.close(),
+        onEscape: () => false,
+        onClosed: () => overlay.remove()
+    });
+    closeButtons[1].addEventListener("click", () => drawer.close());
+    drawer.open({ opener: document.activeElement });
+}
+
+function chooseDynamicReturnCostLayers(options, quantity, productName) {
+    return new Promise(resolve => {
+        const overlay=document.createElement("div");overlay.className="klbs-drawer-overlay dynamic-mrp-overlay";
+        overlay.innerHTML=`<section class="klbs-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="dynamicReturnCostTitle" tabindex="-1"><header class="klbs-drawer-header"><h2 id="dynamicReturnCostTitle" class="klbs-drawer-title">SELECT RETURN COST</h2><button type="button" class="klbs-drawer-exit" data-close>EXIT</button></header><div class="klbs-drawer-body"><p>${escapeHtml(productName||options.barcode)} · returning ${Number(quantity)} unit(s)</p><p>Manager: choose which invoice cost layer(s) to put back into stock.</p><div data-layers>${options.options.map(row=>`<label class="dynamic-return-cost-row"><span>Invoice cost: ${row.costBasisStatus==="CAPTURED"?`₹${(Number(row.unitCostPaise)/100).toFixed(2)}`:"Unknown"} · ${Number(row.availableQuantity)} returnable</span><input type="number" min="0" max="${Number(row.availableQuantity)}" step="1" value="0" data-source="${Number(row.sourceAllocationId)}" aria-label="Return quantity from cost ${row.unitCostPaise==null?"unknown":`₹${(Number(row.unitCostPaise)/100).toFixed(2)}`}"></label>`).join("")}</div><p data-error role="alert"></p></div><footer class="klbs-drawer-footer"><button type="button" class="klbs-primary-btn" data-save>CONFIRM COST LAYERS</button></footer></section>`;
+        document.body.appendChild(overlay);let chosen=false;
+        const drawer=window.KLBSDrawer.create({root:overlay,panel:overlay.querySelector(".klbs-drawer-panel"),labelledBy:"dynamicReturnCostTitle",initialFocus:()=>overlay.querySelector("[data-source]"),exitButtons:[overlay.querySelector("[data-close]")],onExit:()=>drawer.close(),onEscape:()=>false,onClosed:()=>{overlay.remove();if(!chosen)resolve(null);}});
+        overlay.querySelector("[data-save]").onclick=()=>{const rows=[...overlay.querySelectorAll("[data-source]")].map(input=>({sourceAllocationId:Number(input.dataset.source),quantity:Number(input.value||0)})).filter(row=>row.quantity>0);const error=overlay.querySelector("[data-error]");if(rows.reduce((sum,row)=>sum+row.quantity,0)!==Number(quantity)){error.textContent=`Selected quantities must total ${Number(quantity)}.`;return;}chosen=true;resolve(rows);drawer.close();};
+        drawer.open({opener:document.activeElement});
+    });
+}
+
+function addProductToBill(product, mrpBucket = null) {
 
     const availableStock =
         Number(
@@ -5824,7 +5934,7 @@ function addProductToBill(product) {
     const existingItem =
         billItems.find(
             item =>
-                item.barcode === product.barcode
+                item.barcode === product.barcode && Number(item.mrp_bucket_id || 0) === Number(mrpBucket?.id || 0)
         );
 
     const currentBillQty =
@@ -5852,7 +5962,7 @@ if (currentBillQty >= availableStock) {
         existingItem.product_name = product.product_name;
         existingItem.size = product.size;
         existingItem.colour = product.colour;
-        existingItem.mrp = Number(product.mrp);
+        existingItem.mrp = Number(mrpBucket?.mrp ?? product.mrp);
         existingItem.master_discount = Number(product.discount || 0);
         existingItem.gst_rate = Number(product.gst_rate || 0);
         if (existingItem.ff_discount === null || existingItem.ff_discount === undefined) {
@@ -5877,7 +5987,8 @@ if (currentBillQty >= availableStock) {
 
             colour: product.colour,
 
-mrp: Number(product.mrp),
+            mrp: Number(mrpBucket?.mrp ?? product.mrp),
+            mrp_bucket_id: mrpBucket ? Number(mrpBucket.id) : null,
 
 qty: 1,
 

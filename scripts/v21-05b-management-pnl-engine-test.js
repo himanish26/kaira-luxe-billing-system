@@ -27,7 +27,7 @@ async function fixture() {
         CREATE TABLE products(id INTEGER PRIMARY KEY,barcode TEXT UNIQUE,cost_price REAL,variable_value INTEGER,business_segment TEXT);
         CREATE TABLE bill_items(id INTEGER PRIMARY KEY,bill_no TEXT,barcode TEXT,qty INTEGER,business_segment TEXT,
             gross_amount REAL,discount_amount REAL,taxable_amount REAL,gst_amount REAL,net_amount REAL,
-            unit_cost_paise INTEGER,cost_basis_status TEXT,cost_source TEXT,cost_method TEXT);
+            unit_cost_paise INTEGER,cost_total_paise INTEGER,cost_basis_status TEXT,cost_source TEXT,cost_method TEXT);
         CREATE TABLE returns(id INTEGER PRIMARY KEY,return_no TEXT,credit_note_no TEXT,original_bill_no TEXT,
             business_date TEXT,accounting_status TEXT,accounting_snapshot_version INTEGER,
             gross_reversal REAL,discount_reversal REAL,taxable_reversal REAL,gst_reversal REAL,net_reversal REAL);
@@ -35,6 +35,8 @@ async function fixture() {
             gross_reversal REAL,discount_reversal REAL,taxable_reversal REAL,gst_reversal REAL,net_reversal REAL,
             return_unit_cost_paise INTEGER,return_cost_paise INTEGER,return_cost_basis_status TEXT DEFAULT 'UNKNOWN',
             return_cost_source TEXT,return_cost_method TEXT);
+        CREATE TABLE stock_cost_allocations(id INTEGER PRIMARY KEY,return_item_id INTEGER,quantity INTEGER,
+            unit_cost_paise INTEGER,cost_basis_status TEXT);
         CREATE TABLE expenses(id INTEGER PRIMARY KEY,expense_date TEXT,category TEXT,particulars TEXT,
             expense_class TEXT,amount_paise INTEGER,payment_mode TEXT,paid_to TEXT,reference TEXT,
             business_segment TEXT,remarks TEXT,lifecycle_status TEXT,entered_by TEXT,last_modified_by TEXT,
@@ -57,11 +59,11 @@ async function addSale(db, { billNo, date, lines }) {
         await run(db, "INSERT INTO products(barcode,cost_price,variable_value,business_segment) VALUES(?,?,0,?)",
             [barcode, line.currentCost ?? null, line.segment]);
         await run(db, `INSERT INTO bill_items(bill_no,barcode,qty,business_segment,gross_amount,discount_amount,
-            taxable_amount,gst_amount,net_amount,unit_cost_paise,cost_basis_status,cost_source,cost_method)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, [billNo, barcode, line.qty, line.segment, line.gross, line.discount,
-            line.taxable, line.gst, line.net, line.unitCostPaise, line.status,
-            line.status === "CAPTURED" ? "PRODUCT_MASTER" : null,
-            line.status === "CAPTURED" ? "SALE_TIME_COST_PRICE_PAISE" : null]);
+            taxable_amount,gst_amount,net_amount,unit_cost_paise,cost_total_paise,cost_basis_status,cost_source,cost_method)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [billNo, barcode, line.qty, line.segment, line.gross, line.discount,
+            line.taxable, line.gst, line.net, line.unitCostPaise, line.costTotalPaise ?? null, line.status,
+            line.costSource || (line.status === "CAPTURED" ? "PRODUCT_MASTER" : null),
+            line.costMethod || (line.status === "CAPTURED" ? "SALE_TIME_COST_PRICE_PAISE" : null)]);
     }
 }
 
@@ -324,7 +326,7 @@ async function main() {
         });
         assert.deepStrictEqual((await reinitialized.getManagementPnl({ fromDate: "2026-04-01", toDate: "2026-04-30" })).selected, g,
             "reinitializing the service against the same persisted facts is deterministic");
-        const workbook = await createManagementPnlWorkbook(goldenFy, { version: "2.0.0", schemaVersion: 9 });
+        const workbook = await createManagementPnlWorkbook(goldenFy, { version: "2.1.0", schemaVersion: 9 });
         const pnlSheet = workbook.getWorksheet("Management P&L");
         const findRow = label => {
             for (let row = 9; row <= pnlSheet.rowCount; row += 1) if (pnlSheet.getCell(row, 1).value === label) return row;
@@ -520,12 +522,21 @@ async function main() {
         await assert.rejects(() => service.getManagementPnl({ fromDate: "2026-10-30", toDate: "2026-10-01" }), /must not be after/);
         await assert.rejects(() => service.getManagementPnl({ fromDate: "2026-10-01", toDate: "2026-10-31", businessSegment: "COMMON" }), /Select ALL/);
 
+        await addSale(db, { billNo: "DMRP-COST", date: "2026-10-06", lines: [
+            { qty: 3, segment: "KIDS", gross: 300, discount: 0, taxable: 285.71, gst: 14.29, net: 300,
+                unitCostPaise: 6667, costTotalPaise: 20000, status: "CAPTURED",
+                costSource: "SUPPLIER_INVOICE_FIFO", costMethod: "DYNAMIC_MRP_FIFO_LAYER_PAISE" }
+        ] });
+        const dynamicMrpPeriod = await service.getManagementPnl({ fromDate: "2026-10-01", toDate: "2026-10-07", businessSegment: "KIDS" });
+        assert.strictEqual(dynamicMrpPeriod.selected.cogs.capturedSaleCogsPaise, 20000,
+            "Dynamic MRP profitability uses the exact total of FIFO cost layers for the sold quantity");
+
         if (process.env.KLBS_E3_OWNER_RETEST_DIR) {
             const outputDirectory = path.resolve(process.env.KLBS_E3_OWNER_RETEST_DIR);
             fs.mkdirSync(outputDirectory, { recursive: true });
             const filename = managementPnlFilename(goldenFy.metadata.store.storeCode, goldenFy.metadata.financialYearLabel, goldenFy.metadata.asOfDate);
             const outputPath = path.join(outputDirectory, filename);
-            const exported = await exportManagementPnlFinancialYear(goldenFy, outputPath, { version: "2.0.0", schemaVersion: 9 });
+            const exported = await exportManagementPnlFinancialYear(goldenFy, outputPath, { version: "2.1.0", schemaVersion: 9 });
             assert.strictEqual(exported.success, true);
             console.log(`OWNER RETEST WORKBOOK ${exported.filePath}`);
         }

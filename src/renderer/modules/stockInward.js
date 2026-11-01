@@ -28,6 +28,7 @@
     let unresolvedRetryAlertTimer = null;
     let unresolvedRetryAlertGeneration = 0;
     let previousTopbarClass = "";
+    let returnDestination = "inventory";
     let duplicateCheckSequence = 0;
     let messageTimeout = null;
     let currentReconciliation = { state:"NO_INVOICE_QTY", difference:null, text:"" };
@@ -44,8 +45,9 @@
     const el = id => document.getElementById(id);
     const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, ch => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[ch]));
 
-    async function enterStockInwardPage() {
+    async function enterStockInwardPage(options = {}) {
         if (active) return;
+        returnDestination = options?.returnTo === "exportData" ? "exportData" : "inventory";
         previousFocus = document.activeElement;
         const globalBack = el("settingsPageBackBtn");
         previousBackHidden = globalBack.hidden;
@@ -69,7 +71,7 @@
               <div id="siPageMessage" class="si-message" role="status" aria-live="polite"></div>
               <div id="stockInwardResume" class="stock-inward-resume" hidden></div>
               <div id="stockInwardWorkspace" hidden>
-                <section class="si-document-head" aria-label="Stock Inward document identity"><strong id="siCode">—</strong><span id="siStatus" class="si-status-badge">DRAFT</span><span id="siReadOnlyBanner" class="si-read-only-banner" hidden>READ ONLY</span><span class="si-business-date-label">BUSINESS DATE</span><time id="siBusinessDate">—</time><button id="siHistoricalUnresolved" type="button" class="klbs-cancel-btn" hidden>VIEW UNRESOLVED BARCODES</button><button id="siHistoricalPrint" type="button" class="klbs-primary-btn si-history-print" hidden>REPRINT RECEIPT</button></section>
+                <section class="si-document-head" aria-label="Stock Inward document identity"><strong id="siCode">—</strong><span id="siStatus" class="si-status-badge">DRAFT</span><span id="siReadOnlyBanner" class="si-read-only-banner" hidden>READ ONLY</span><span class="si-business-date-label">BUSINESS DATE</span><time id="siBusinessDate">—</time><button id="siReconcileMrp" type="button" class="klbs-cancel-btn">RECONCILE OLD STOCK</button><button id="siHistoricalUnresolved" type="button" class="klbs-cancel-btn" hidden>VIEW UNRESOLVED BARCODES</button><button id="siHistoricalPrint" type="button" class="klbs-primary-btn si-history-print" hidden>REPRINT RECEIPT</button></section>
                 <section class="si-context-grid expense-entry-grid" aria-label="Supplier and invoice details">
                   <label>SUPPLIER<select id="siSupplier"><option value="">No Supplier</option></select></label>
                   <label>LINK KLBS INVOICE<select id="siInvoice" disabled><option value="">Select Supplier first</option></select></label>
@@ -79,6 +81,8 @@
                   <label class="si-remarks-field">REMARKS<input id="siRemarks" type="text" maxlength="500" placeholder="Optional remarks"></label>
                 </section>
                 <section id="siReconciliation" class="si-reconciliation si-neutral" aria-live="polite"></section>
+                <section class="si-invoice-workbook-actions" aria-label="Supplier invoice conversion"><button id="siDownloadInvoiceTemplate" type="button" class="klbs-cancel-btn">DOWNLOAD KLBS INWARD TEMPLATE</button><button id="siImportInvoice" type="button" class="klbs-cancel-btn">UPLOAD SUPPLIER INVOICE</button><span id="siInvoiceImportStatus" role="status" aria-live="polite">Excel (.xls/.xlsx) or CSV accepted. Upload loads expected lines only; physically scan every item before review and posting.</span></section>
+                <section id="siInvoiceLineReconciliation" class="si-invoice-line-reconciliation" hidden></section>
                 <section class="si-scan-area"><label for="siScanner">SCAN PRODUCT</label><input id="siScanner" type="text" autocomplete="off" placeholder="Scan Barcode Here" aria-label="Scan product barcode" disabled><small id="siScanGateHint">Complete receiving details to start scanning.</small></section>
                 <div id="siMessage" class="si-message" role="status" aria-live="polite"></div>
                 <section class="si-received-items"><h2>RECEIVED ITEMS</h2><div id="siKnownLines"></div></section>
@@ -90,7 +94,7 @@
             <div id="siUnresolvedOverlay" class="si-unresolved-overlay klbs-drawer-overlay" hidden>
               <aside id="siUnresolvedDrawer" class="klbs-drawer-panel si-unresolved-drawer" role="dialog" aria-modal="true" aria-labelledby="siUnresolvedTitle" tabindex="-1">
                 <header class="klbs-drawer-header"><h2 id="siUnresolvedTitle" class="klbs-drawer-title">UNRESOLVED BARCODES</h2><button id="siUnresolvedExit" class="klbs-drawer-exit" type="button" aria-label="Exit unresolved barcodes">EXIT</button></header>
-                <div class="klbs-drawer-body"><div id="siUnresolvedContext" class="si-unresolved-context"></div><div id="siUnknownLines"></div></div>
+                <div class="klbs-drawer-body"><div id="siUnresolvedContext" class="si-unresolved-context"></div><div id="siProductCapture" class="si-product-capture" hidden></div><div id="siUnknownLines"></div></div>
                 <footer class="klbs-drawer-footer si-unresolved-footer"><div id="siRetryAlert" class="si-retry-alert" role="status" aria-live="polite" hidden></div><button id="siExport" type="button" class="si-export-btn">EXPORT UNKNOWN BARCODES</button></footer>
               </aside>
             </div>
@@ -264,6 +268,19 @@
                 scanQueue = scanQueue.then(() => scanBarcode(barcode)).catch(error => showMessage(error.message, true));
             };
             el("siDeleteDraft").onclick = () => deleteDraft();
+            el("siDownloadInvoiceTemplate").onclick = async () => { try { const result=await api().stockInwardDownloadInvoiceTemplate(); if(!result?.canceled) el("siInvoiceImportStatus").textContent="Stock Inward template saved."; } catch(error) { showMessage(error.message || "Could not save the template.",true); } };
+            el("siImportInvoice").onclick = async () => {
+                try {
+                    if (!await saveContext()) throw new Error("Save the supplier and invoice details before uploading the invoice file.");
+                    const result=await api().stockInwardImportInvoiceWorkbook({movementId:documentData.document.id});
+                    if(result?.canceled)return;
+                    documentData=result; contextSaved=true;
+                    el("siInvoiceQty").value=result.document.invoice_total_quantity ?? "";
+                    const matched=result.summary.invoiceMatchedBarcodes||0, unresolved=result.summary.invoiceUnresolvedBarcodes||0;
+                    el("siInvoiceImportStatus").textContent=`Converted ${result.importedRowCount} rows from ${result.sourceName || "supplier file"}: ${matched} barcode${matched===1?"":"s"} matched KLBS Product Master${unresolved?`, ${unresolved} not yet in Product Master`:""}. Invoice quantities are expected only; physically scan every received piece. Upload does not add stock.`;
+                    render();
+                } catch(error) { showMessage(error.message || "Could not import the invoice workbook.",true); }
+            };
             el("siUnresolved").onclick = openUnresolvedDrawer;
             el("siHistoricalUnresolved").onclick = event => openUnresolvedDrawer(event.currentTarget,documentData.document.id);
             el("siPost").onclick = handlePrimaryAction;
@@ -395,8 +412,14 @@
             if (quantity == null) showMessage("Variable Value quantity entry cancelled.", "warning");
             else {
                 documentData = await api().stockInwardScan({ movementId:documentData.document.id,barcode,quantity });
-                if (documentData.lastResolution === "AMBIGUOUS") showMessage("Barcode matches more than one Product. It is retained for review.", "warning");
+                const allocatedMrps = Array.isArray(documentData.lastMrpAllocations) ? documentData.lastMrpAllocations : [];
+                const scannedLine = documentData.lines.find(line => line.barcode === barcode && !line.discarded_at);
+                const hasInvoiceRow = (documentData.summary.invoiceLines || []).some(row => row.barcode === barcode && Number(row.expected_quantity) > 0);
+                if (documentData.lastResolution === "NOT_ON_INVOICE") showMessage("This barcode is not on the uploaded invoice. It is retained as unresolved.", "warning");
+                else if (documentData.lastResolution === "AMBIGUOUS") showMessage("Barcode matches more than one Product. It is retained for review.", "warning");
                 else if (documentData.lastResolution === "NOT_FOUND") showMessage("Product not found. Barcode retained as unresolved.", "warning");
+                else if (scannedLine?.product_state === "READY" && hasInvoiceRow && !allocatedMrps.length) showMessage(`Scanned quantity for ${barcode} exceeds the remaining invoice quantity. Review the invoice and received count before posting.`, "warning");
+                else if (allocatedMrps.length) showMessage(`Scanned. Invoice MRP assigned: ${allocatedMrps.map(row => `₹${(Number(row.mrpPaise)/100).toFixed(2)} × ${row.quantity}`).join(", ")}.`);
                 else showMessage("Product added to Stock Inward.");
                 render();
             }
@@ -488,6 +511,7 @@
                     ? `<span class="si-unresolved-select-cell" role="cell">${isEligible ? `<input class="si-selection-checkbox si-line-selection" type="checkbox" data-line-select="${lineId}" aria-label="Select unresolved barcode ${escapeHtml(line.barcode)}" ${selectedUnresolvedLineIds.has(lineId) ? "checked" : ""} ${busy ? "disabled" : ""}>` : "—"}</span>`
                     : "";
                 const status = line.discarded_at ? "DISCARDED" : escapeHtml(line.resolution_note || "PRODUCT NOT FOUND");
+                const master = masters.get(lineId);
                 const detail = historical
                     ? (() => {
                         const master = masters.get(lineId);
@@ -497,7 +521,7 @@
                             : state === "AMBIGUOUS" ? "⚠ AMBIGUOUS" : "✕ STILL NOT FOUND";
                         return `<span class="si-master-state ${state === "UNIQUE" ? "found" : state === "AMBIGUOUS" ? "ambiguous" : "missing"}">${stateText}</span>`;
                     })()
-                    : `<div class="si-unresolved-actions" role="cell">${line.discarded_at || readOnlyRows ? "—" : `<button class="si-remove-btn" data-remove="${lineId}" ${busy ? "disabled" : ""}>REMOVE</button>`}</div>`;
+                    : `<div class="si-unresolved-actions" role="cell">${line.discarded_at || readOnlyRows ? "—" : `${master?.currentResolution === "NOT_FOUND" && master?.hasInvoiceLine ? `<button class="klbs-cancel-btn si-product-capture-open" data-capture-product="${lineId}" ${busy ? "disabled" : ""}>${master.missingProductFields?.length ? "COMPLETE PRODUCT" : "CREATE PRODUCT"}</button>` : ""}<button class="si-remove-btn" data-remove="${lineId}" ${busy ? "disabled" : ""}>REMOVE</button>`}</div>`;
                 return `<div class="si-unresolved-row ${selectable ? "has-select-checkbox" : ""} ${historical ? "is-historical" : ""} ${line.discarded_at ? "si-discarded" : ""}" role="row">${checkbox}<strong class="si-unresolved-barcode" role="cell">${escapeHtml(line.barcode)}</strong><strong class="si-unresolved-qty" role="cell">${line.scanned_quantity}</strong><span class="si-unresolved-status" role="cell">${status}</span>${detail}</div>`;
             }).join("")}
         </div>` : `<p class="si-empty si-unresolved-empty">NO UNRESOLVED BARCODES</p>`;
@@ -535,6 +559,39 @@
         });
         el("siUnknownLines").querySelector(".si-remove-selected")?.addEventListener("click", () => bulkRemoveSelected(eligibleRows, movementId));
         el("siUnknownLines").querySelector(".si-retry-all")?.addEventListener("click", () => retryAllUnresolved(movementId));
+        el("siUnknownLines").querySelectorAll("[data-capture-product]").forEach(button => button.onclick = () => openInvoiceProductCapture(Number(button.dataset.captureProduct), masters.get(Number(button.dataset.captureProduct))));
+    }
+    function openInvoiceProductCapture(lineId, master) {
+        if (!master?.hasInvoiceLine || master.currentResolution !== "NOT_FOUND") return;
+        const draft = master.productDraft || {};
+        const rupees = paise => Number.isSafeInteger(Number(paise)) ? (Number(paise) / 100).toFixed(2) : "";
+        const field = (key,label,value,required=false,type="text",readOnly=false) => `<label>${label}${required?" *":""}<input name="${key}" type="${type}" value="${escapeHtml(value ?? "")}" ${required?"required":""} ${readOnly?"readonly":""} ${type==="number"?"step=\"0.01\" min=\"0\"":""}></label>`;
+        const select = (key,label,value,choices,required=false) => `<label>${label}${required?" *":""}<select name="${key}" ${required?"required":""}><option value="">Select ${label}</option>${choices.map(([v,t])=>`<option value="${escapeHtml(v)}" ${String(value||"")===v?"selected":""}>${escapeHtml(t)}</option>`).join("")}</select></label>`;
+        const host = el("siProductCapture");
+        host.hidden = false;
+        host.innerHTML = `<form id="siProductCaptureForm" class="si-product-capture-form"><header><strong>PRODUCT DETAILS · ${escapeHtml(master.barcode)}</strong><button type="button" class="si-product-capture-close" aria-label="Close">×</button></header><p>KLBS will create a new SKU from this uploaded invoice. Invoice MRP and rate are locked. SKU and opening stock are assigned by KLBS; stock is added only when this inward is posted.</p><div class="si-product-capture-grid">${field("brand","Brand",draft.brand,true)}${field("productName","Product Name",draft.productName,true)}${field("category","Category",draft.category,true)}${select("businessSegment","Business Segment",draft.businessSegment,[["KL","Kaira Luxe"],["MENS","Mens Wear"],["KIDS","Kids Wear"]],true)}${select("segment","Segment",draft.segment||"Women",[["Women","Women"],["Men","Men"],["Kids","Kids"]],true)}${field("gstRate","GST Rate %",draft.gstRate,true,"number")}${field("season","Season",draft.season)}${field("collection","Collection",draft.collection)}${field("styleCode","Style Code",draft.styleCode)}${field("size","Size",draft.size)}${field("colour","Colour",draft.colour)}${field("mrpPaise","Printed MRP ₹",rupees(draft.mrpPaise),true,"number",true)}${field("sellingPricePaise","Selling Price ₹",rupees(draft.sellingPricePaise),false,"number",true)}${field("discount","Discount %",draft.discount)}${field("unitCostPaise","Invoice Rate / Piece ₹",rupees(draft.unitCostPaise),true,"number",true)}${field("hsnCode","HSN Code",draft.hsnCode)}${field("reorderLevel","Reorder Level",draft.reorderLevel,false,"number")}</div><div class="si-product-capture-actions"><button type="button" class="klbs-cancel-btn si-product-capture-close">CANCEL</button><button type="submit" class="klbs-primary-btn">AUTHORIZE &amp; CREATE SKU</button></div><div class="si-product-capture-error" role="status" aria-live="polite"></div></form>`;
+        host.querySelectorAll(".si-product-capture-close").forEach(button=>button.onclick=()=>{host.hidden=true;host.replaceChildren();});
+        host.querySelector("#siProductCaptureForm").onsubmit = async event => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const data = Object.fromEntries(new FormData(form).entries());
+            const toPaise = value => Math.round(Number(value || 0) * 100);
+            const product = { ...data, mrpPaise:toPaise(data.mrpPaise), sellingPricePaise:data.sellingPricePaise===""?null:toPaise(data.sellingPricePaise), unitCostPaise:toPaise(data.unitCostPaise), gstRate:Number(data.gstRate), discount:data.discount===""?0:Number(data.discount), reorderLevel:data.reorderLevel===""?0:Number(data.reorderLevel) };
+            const error = host.querySelector(".si-product-capture-error");
+            try {
+                const grant = await requestAdminAuthorization("PRODUCT_IMPORT");
+                if (!grant) return;
+                const result = await api().stockInwardCreateProductFromInvoice({ movementId:unresolvedMovementId,lineId,product,authorizationGrant:grant });
+                if (result.productCapture?.missing?.length) { error.textContent=`Complete required details: ${result.productCapture.missing.join(", ")}.`; return; }
+                documentData = result;
+                host.hidden = true; host.replaceChildren();
+                render();
+                await openUnresolvedDrawer(el("siUnresolved"), unresolvedMovementId);
+                showMessage(`Product created${result.productCapture?.sku ? ` as ${result.productCapture.sku}` : ""}. Review MRP / rate and continue posting.`);
+            } catch (failure) { error.textContent=failure.message || "Product could not be created."; }
+        };
+        host.scrollIntoView({behavior:"smooth",block:"center"});
+        host.querySelector("input,select")?.focus();
     }
 
     async function bulkRemoveSelected(eligibleRows, movementId) {
@@ -671,6 +728,167 @@
         }
     }
 
+    async function openMrpReconciliationDrawer() {
+        if (readOnly) return;
+        const overlay = document.createElement("div");
+        overlay.className = "klbs-drawer-overlay si-mrp-reconciliation-overlay";
+        overlay.innerHTML = `<aside class="klbs-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="siMrpReconcileTitle" tabindex="-1">
+            <header class="klbs-drawer-header"><h2 id="siMrpReconcileTitle" class="klbs-drawer-title">ASSIGN MRP TO EXISTING STOCK</h2><button type="button" class="klbs-drawer-exit" data-close>EXIT</button></header>
+            <div class="klbs-drawer-body">
+                <p class="si-mrp-guide">Use this once for stock already in KLBS that has no MRP split. Scan the barcode, count the pieces by the MRP printed on each item, and enter each MRP with its quantity. The quantities must add up to the unallocated KLBS stock. This only assigns the MRP breakdown; it does not add or remove stock.</p>
+                <ol class="si-mrp-steps"><li>Scan or enter the product barcode, then load its stock.</li><li>Enter one row for each printed MRP found on the shelf.</li><li>Check that the counted total matches KLBS stock and enter why you counted it.</li></ol>
+                <div class="si-mrp-load-row"><label>BARCODE<input data-barcode autocomplete="off" aria-label="Barcode"></label><button type="button" class="klbs-cancel-btn" data-load>LOAD STOCK</button></div>
+                <div data-details class="si-mrp-product-summary" hidden></div>
+                <div data-rows class="si-mrp-reconcile-rows"></div>
+                <button type="button" class="klbs-cancel-btn" data-add hidden>ADD ANOTHER MRP</button>
+                <div data-total class="si-mrp-count-total" hidden></div>
+                <label class="si-mrp-reason">REASON FOR COUNT<input data-reason maxlength="500" placeholder="For example: MRP check during stock inward"></label>
+                <p data-error class="si-message error" role="alert"></p>
+            </div>
+            <footer class="klbs-drawer-footer"><button type="button" class="klbs-primary-btn" data-save disabled>SAVE MRP BREAKDOWN</button></footer>
+        </aside>`;
+        document.body.appendChild(overlay);
+        let detail = null;
+        const rows = overlay.querySelector("[data-rows]");
+        const error = overlay.querySelector("[data-error]");
+        const total = overlay.querySelector("[data-total]");
+        const save = overlay.querySelector("[data-save]");
+        const drawer = window.KLBSDrawer.create({
+            root: overlay,
+            panel: overlay.querySelector(".klbs-drawer-panel"),
+            labelledBy: "siMrpReconcileTitle",
+            initialFocus: () => overlay.querySelector("[data-barcode]"),
+            exitButtons: [overlay.querySelector("[data-close]")],
+            onExit: () => drawer.close(),
+            onEscape: () => false,
+            onClosed: () => overlay.remove()
+        });
+        const updateCount = () => {
+            if (!detail) return;
+            const entries = [...rows.querySelectorAll(".si-mrp-reconcile-row")];
+            const quantities = entries.map(row => Number(row.querySelector("[data-qty]").value));
+            entries.forEach(row => { row.querySelector("[data-remove]").disabled = entries.length <= 1; });
+            const counted = quantities.reduce((sum, qty) => sum + (Number.isFinite(qty) ? qty : 0), 0);
+            const valid = entries.length > 0 && entries.every((row, index) => {
+                const mrp = Number(row.querySelector("[data-mrp]").value);
+                return Number.isFinite(mrp) && mrp >= 0 && Math.abs(mrp * 100 - Math.round(mrp * 100)) < 1e-8 && Number.isInteger(quantities[index]) && quantities[index] > 0;
+            });
+            const matches = valid && counted === Number(detail.unallocatedQuantity);
+            total.textContent = `COUNTED ${counted} OF ${detail.unallocatedQuantity} UNALLOCATED UNITS${matches ? " · MATCHED" : " · MUST MATCH TO SAVE"}`;
+            total.classList.toggle("is-matched", matches);
+            save.disabled = !matches || !overlay.querySelector("[data-reason]").value.trim();
+        };
+        const addRow = () => {
+            const row = document.createElement("div");
+            row.className = "si-mrp-reconcile-row";
+            row.innerHTML = '<label>PRINTED MRP ₹<input type="number" min="0" step="0.01" inputmode="decimal" data-mrp></label><label>PHYSICAL QTY<input type="number" min="1" step="1" inputmode="numeric" data-qty></label><button type="button" data-remove aria-label="Remove MRP row">REMOVE</button>';
+            rows.appendChild(row);
+            updateCount();
+        };
+        const loadStock = async () => {
+            error.textContent = "";
+            try {
+                detail = await api().stockInwardMrpBuckets(overlay.querySelector("[data-barcode]").value.trim());
+                overlay.querySelector("[data-details]").hidden = false;
+                overlay.querySelector("[data-details]").textContent = `${detail.product.productName} · ${detail.product.barcode} · Unallocated KLBS stock: ${detail.unallocatedQuantity}`;
+                rows.replaceChildren();
+                total.hidden = false;
+                overlay.querySelector("[data-add]").hidden = false;
+                addRow();
+                updateCount();
+                if (Number(detail.unallocatedQuantity) <= 0) {
+                    error.textContent = "There is no unallocated stock to assign an MRP to.";
+                    save.disabled = true;
+                }
+            } catch (failure) {
+                detail = null;
+                save.disabled = true;
+                overlay.querySelector("[data-details]").hidden = true;
+                rows.replaceChildren();
+                total.hidden = true;
+                overlay.querySelector("[data-add]").hidden = true;
+                error.textContent = failure?.message || "Barcode could not be loaded.";
+            }
+        };
+        overlay.querySelector("[data-load]").onclick = loadStock;
+        overlay.querySelector("[data-barcode]").addEventListener("keydown", event => {
+            if (event.key === "Enter") { event.preventDefault(); loadStock(); }
+        });
+        overlay.querySelector("[data-add]").onclick = addRow;
+        rows.addEventListener("input", updateCount);
+        rows.addEventListener("click", event => {
+            if (!event.target.closest("[data-remove]")) return;
+            const entries = rows.querySelectorAll(".si-mrp-reconcile-row");
+            if (entries.length <= 1) return;
+            event.target.closest(".si-mrp-reconcile-row").remove();
+            updateCount();
+        });
+        overlay.querySelector("[data-reason]").addEventListener("input", updateCount);
+        save.onclick = async () => {
+            try {
+                if (!detail) throw new Error("Load the barcode stock first.");
+                const allocations = [...rows.querySelectorAll(".si-mrp-reconcile-row")].map(row => ({
+                    mrp: row.querySelector("[data-mrp]").value,
+                    quantity: row.querySelector("[data-qty]").value
+                }));
+                if (allocations.reduce((sum, row) => sum + Number(row.quantity || 0), 0) !== Number(detail.unallocatedQuantity)) {
+                    throw new Error(`Physical quantities must total ${detail.unallocatedQuantity}.`);
+                }
+                const reason = overlay.querySelector("[data-reason]").value.trim();
+                if (!reason) throw new Error("Enter a reason for this physical count.");
+                await api().stockInwardMrpReconcile({ productId: detail.product.id, operationKey: `MRP-RECON-${window.crypto.randomUUID()}`, reason, allocations });
+                showMessage("MRP breakdown saved. Total stock is unchanged.");
+                drawer.close();
+            } catch (failure) {
+                error.textContent = failure?.message || "Could not save the MRP breakdown.";
+            }
+        };
+        drawer.open({opener:document.activeElement});
+    }
+
+    async function openMrpAllocationDrawer(line) {
+        if (!line || readOnly || line.posting_state === "POSTED") return;
+        const existing = await api().stockInwardMrpAllocations(documentData.document.id);
+        const allPrior = (Array.isArray(existing) ? existing : []).filter(row => Number(row.movement_line_id) === Number(line.id));
+        const prior = allPrior.filter(row => row.posting_state === "UNPOSTED");
+        const postedByMrp = new Map();
+        for (const row of allPrior.filter(row => row.posting_state === "POSTED")) postedByMrp.set(Number(row.mrp_paise),(postedByMrp.get(Number(row.mrp_paise))||0)+Number(row.quantity));
+        const imported = (documentData.summary.invoiceLines || []).filter(row => row.barcode === line.barcode);
+        const importedByMrp = new Map();
+        for (const row of imported) {
+            const priorRow=importedByMrp.get(Number(row.mrp_paise)) || {mrp:Number(row.mrp_paise)/100,quantity:0,unitCost:Number(row.unit_cost_paise)/100};
+            priorRow.quantity+=Number(row.expected_quantity); importedByMrp.set(Number(row.mrp_paise),priorRow);
+        }
+        for(const [mrp,qty] of postedByMrp) if(importedByMrp.has(mrp)) importedByMrp.get(mrp).quantity=Math.max(0,importedByMrp.get(mrp).quantity-qty);
+        const remainingQuantity=Number(line.recognized_quantity||line.scanned_quantity)-Number(line.posted_quantity||0);
+        const rows = prior.length ? prior.map(row => ({ mrp: Number(row.mrp_paise) / 100, quantity: Number(row.quantity), unitCost: row.unit_cost_paise == null ? "" : Number(row.unit_cost_paise) / 100 }))
+            : importedByMrp.size ? [...importedByMrp.values()].filter(row=>row.quantity>0) : [{ mrp: "", quantity: remainingQuantity, unitCost: "" }];
+        const overlay = document.createElement("div");
+        overlay.className = "klbs-drawer-overlay si-mrp-allocation-overlay";
+        overlay.innerHTML = `<aside class="klbs-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="siMrpAllocationTitle" tabindex="-1"><header class="klbs-drawer-header"><h2 id="siMrpAllocationTitle" class="klbs-drawer-title">ASSIGN MRP AND INVOICE RATE</h2><button type="button" class="klbs-drawer-exit" data-close>EXIT</button></header><div class="klbs-drawer-body"><p>${escapeHtml(line.product_name_snapshot)} · ${escapeHtml(line.barcode)}</p><p>Quantity to assign now: <strong>${remainingQuantity}</strong></p><div data-allocation-rows></div><button type="button" class="klbs-cancel-btn" data-add-row>ADD ANOTHER MRP</button><p data-error class="si-message error" role="alert"></p></div><footer class="klbs-drawer-footer"><button type="button" class="klbs-primary-btn" data-save> SAVE MRP ALLOCATION</button></footer></aside>`;
+        document.body.appendChild(overlay);
+        const list = overlay.querySelector("[data-allocation-rows]");
+        const renderRows = () => { list.innerHTML = rows.map((row,index) => `<div class="si-mrp-allocation-row"><label>PRINTED MRP ₹<input type="number" min="0" step="0.01" inputmode="decimal" data-field="mrp" data-index="${index}" value="${escapeHtml(row.mrp)}"></label><label>QTY<input type="number" min="1" step="1" inputmode="numeric" data-field="quantity" data-index="${index}" value="${escapeHtml(row.quantity)}"></label><label>INVOICE RATE / PIECE ₹<input type="number" min="0" step="0.01" inputmode="decimal" data-field="unitCost" data-index="${index}" value="${escapeHtml(row.unitCost)}"></label></div>`).join(""); };
+        renderRows();
+        let drawer;
+        const close = () => drawer.close();
+        drawer = window.KLBSDrawer.create({ root: overlay, panel: overlay.querySelector(".klbs-drawer-panel"), labelledBy: "siMrpAllocationTitle", initialFocus: () => overlay.querySelector('[data-field="mrp"]'), exitButtons: [overlay.querySelector("[data-close]")], onExit: close, onEscape: () => false, onClosed: () => overlay.remove() });
+        overlay.querySelector("[data-add-row]").onclick = () => { rows.push({ mrp:"",quantity:"",unitCost:"" }); renderRows(); };
+        list.addEventListener("input", event => { const input=event.target.closest("[data-field]"); if(input) rows[Number(input.dataset.index)][input.dataset.field]=input.value; });
+        overlay.querySelector("[data-save]").onclick = async () => {
+            const error=overlay.querySelector("[data-error]");
+            try {
+                const allocations=rows.map(row=>({mrp:row.mrp,quantity:row.quantity,unitCost:row.unitCost}));
+                const total=allocations.reduce((sum,row)=>sum+Number(row.quantity||0),0);
+                if(total!==remainingQuantity)throw new Error(`MRP quantities must total ${remainingQuantity} unposted units.`);
+                if(allocations.some(row=>!Number.isFinite(Number(row.mrp))||!Number.isFinite(Number(row.unitCost))))throw new Error("Enter a printed MRP and invoice rate per piece for every row.");
+                await api().stockInwardMrpAllocate({movementId:documentData.document.id,lineId:Number(line.id),allocations});
+                close(); showMessage("MRP and invoice rate saved.");
+            } catch (failure) { error.textContent=failure?.message||"Could not save MRP allocation."; }
+        };
+        drawer.open({opener:document.activeElement});
+    }
+
     function render() {
         if (!documentData || !el("siCode")) return;
         const doc = documentData.document, lines = documentData.lines, summary = documentData.summary;
@@ -699,9 +917,17 @@
         const cls = reconciliationClass(reconciliation.state);
         el("siReconciliation").className = `si-reconciliation ${cls}`;
         el("siReconciliation").innerHTML = reconciliationMarkup(reconciliation, summary.scannedQty, doc.invoice_total_quantity);
+        const workbookActions = document.querySelector(".si-invoice-workbook-actions");
+        if (workbookActions) workbookActions.hidden = readOnly;
+        el("siImportInvoice").disabled = readOnly || lines.length > 0;
+        el("siImportInvoice").title = lines.length ? "Import before scanning products." : "Upload the completed KLBS Stock Inward workbook.";
+        const expectedRows = summary.invoiceReconciliation || [];
+        const invoiceReconciliation = el("siInvoiceLineReconciliation");
+        invoiceReconciliation.hidden = expectedRows.length === 0;
+        invoiceReconciliation.innerHTML = expectedRows.length ? `<h2>INVOICE BARCODE MATCH &amp; PHYSICAL SCAN</h2><p class="si-invoice-match-guide">KLBS matches invoice rows by barcode. Matched rows show the existing KLBS SKU. Unresolved rows need Product Master attention. Invoice quantities are expected quantities only: scan every received piece before stock can be posted.</p><div class="si-invoice-match-counts"><b>MASTER MATCHED ${summary.invoiceMatchedBarcodes||0}</b><b class="${summary.invoiceUnresolvedBarcodes?"has-unresolved":""}">UNRESOLVED ${summary.invoiceUnresolvedBarcodes||0}</b></div><div class="table-container"><table class="si-table"><thead><tr><th>BARCODE</th><th>PRODUCT / KLBS SKU</th><th>INVOICE QTY</th><th>SCANNED QTY</th><th>MRP / INVOICE RATE</th><th>BARCODE MATCH</th><th>SCAN STATUS</th></tr></thead><tbody>${expectedRows.map(row=>{const match=row.productResolution==="UNIQUE"?`${escapeHtml(row.productName||"Product")}<small>${escapeHtml(row.sku||"SKU pending")}</small>`:row.productResolution==="AMBIGUOUS"?"Duplicate barcode in Product Master":"Not in Product Master";const matchStatus=row.productResolution==="UNIQUE"?"MATCHED":row.productResolution==="AMBIGUOUS"?"AMBIGUOUS — CHECK MASTER":"UNRESOLVED — ADD TO MASTER";return `<tr class="${row.productResolution==="UNIQUE"?"":"si-invoice-unresolved-row"}"><td>${escapeHtml(row.barcode)}</td><td>${match}</td><td>${row.expectedQuantity}</td><td>${row.scannedQuantity}</td><td>${row.mrps.map(mrp=>`₹${(mrp.mrpPaise/100).toFixed(2)} · ${mrp.quantity} pcs @ ₹${(mrp.unitCostPaise/100).toFixed(2)}`).join("<br>") || "Not on invoice"}</td><td>${matchStatus}</td><td>${row.expectedQuantity===0?"NOT ON INVOICE":row.state.replaceAll("_"," ")}${row.difference?` · ${row.difference>0?"SHORT BY":"OVER BY"} ${Math.abs(row.difference)}`:""}</td></tr>`;}).join("")}</tbody></table></div>` : "";
         const known = lines.filter(line => line.product_state === "READY");
         const unknown = lines.filter(line => line.product_state === "PENDING_MASTER");
-        el("siKnownLines").innerHTML = known.length ? `<div class="table-container si-received-table-container"><table class="si-table"><thead><tr><th>BARCODE</th><th>PRODUCT / SKU</th><th>COLOUR</th><th>SIZE</th><th>QTY</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>${known.map(line => `<tr><td>${escapeHtml(line.barcode)}</td><td>${escapeHtml(line.product_name_snapshot)}<small>${escapeHtml(line.sku_snapshot)}</small>${line.resolution_note === "PRODUCT IS INACTIVE" ? `<b class="si-inactive">PRODUCT IS INACTIVE</b>` : ""}</td><td>${escapeHtml(line.colour_snapshot)}</td><td>${escapeHtml(line.size_snapshot)}</td><td>${line.posting_state === "POSTED" || readOnly ? line.posted_quantity || line.scanned_quantity : `<input class="si-qty" type="number" min="1" step="1" inputmode="numeric" value="${line.scanned_quantity}" data-edit="${line.id}" aria-label="Quantity for ${escapeHtml(line.sku_snapshot || line.barcode)}">`}</td><td>${line.posting_state}</td><td>${line.posting_state === "POSTED" || readOnly ? "—" : `<button data-remove="${line.id}">REMOVE</button>`}</td></tr>`).join("")}</tbody></table></div>` : `<p class="si-empty">No recognized products scanned yet.</p>`;
+        el("siKnownLines").innerHTML = known.length ? `<div class="table-container si-received-table-container"><table class="si-table"><thead><tr><th>BARCODE</th><th>PRODUCT / SKU</th><th>COLOUR</th><th>SIZE</th><th>QTY</th><th>STATUS / MRP</th><th>ACTION</th></tr></thead><tbody>${known.map(line => { const mrpTotals=new Map(); for(const row of line.mrpAllocations||[])mrpTotals.set(Number(row.mrp_paise),(mrpTotals.get(Number(row.mrp_paise))||0)+Number(row.quantity)); const mrpText=[...mrpTotals].map(([mrp,quantity])=>`₹${(mrp/100).toFixed(2)} × ${quantity}`).join(", "); return `<tr><td>${escapeHtml(line.barcode)}</td><td>${escapeHtml(line.product_name_snapshot)}<small>${escapeHtml(line.sku_snapshot)}</small>${line.resolution_note === "PRODUCT IS INACTIVE" ? `<b class="si-inactive">PRODUCT IS INACTIVE</b>` : ""}</td><td>${escapeHtml(line.colour_snapshot)}</td><td>${escapeHtml(line.size_snapshot)}</td><td>${Number(line.posted_quantity)>0 || readOnly ? line.scanned_quantity : `<input class="si-qty" type="number" min="1" step="1" inputmode="numeric" value="${line.scanned_quantity}" data-edit="${line.id}" aria-label="Quantity for ${escapeHtml(line.sku_snapshot || line.barcode)}">`}</td><td>${line.posting_state}${mrpText?`<small>MRP ${escapeHtml(mrpText)}</small>`:""}</td><td>${line.posting_state === "POSTED" || readOnly ? "—" : `<button data-mrp-config="${line.id}">${mrpText ? "CHANGE MRP / RATE" : "MRP / RATE"}</button> ${Number(line.posted_quantity)>0 ? "" : `<button data-remove="${line.id}">REMOVE</button>`}`}</td></tr>`; }).join("")}</tbody></table></div>` : `<p class="si-empty">No recognized products scanned yet.</p>`;
         el("siUnresolvedContext").textContent = `${doc.movement_no} · ${summary.unresolvedBarcodes} unresolved barcode${summary.unresolvedBarcodes === 1 ? "" : "s"} · ${summary.unresolvedUnits} unit${summary.unresolvedUnits === 1 ? "" : "s"}`;
         renderUnresolvedRows(unknown, { movementId: doc.id, readOnly });
         el("siSummary").innerHTML = `<span>KNOWN SKUs <b>${summary.knownSkus}</b></span><span>KNOWN UNITS <b>${summary.knownUnits}</b></span><span>UNRESOLVED BARCODES <b>${summary.unresolvedBarcodes}</b></span><span>UNRESOLVED UNITS <b>${summary.unresolvedUnits}</b></span><span>ELIGIBLE TO POST <b>${summary.eligibleToPost}</b></span><span>POSTED UNITS <b>${summary.postedUnits}</b></span>`;
@@ -730,6 +956,9 @@
             };
         });
         el("siKnownLines").querySelectorAll("[data-remove]").forEach(button => button.onclick = () => removeLine(button.dataset.remove));
+        el("siKnownLines").querySelectorAll("[data-mrp-config]").forEach(button => button.onclick = () => openMrpAllocationDrawer(lines.find(line => Number(line.id) === Number(button.dataset.mrpConfig))));
+        el("siReconcileMrp").hidden=readOnly;
+        el("siReconcileMrp").onclick=()=>openMrpReconciliationDrawer();
         el("siUnknownLines").querySelectorAll("[data-remove]").forEach(button => button.onclick = () => removeLine(button.dataset.remove));
         updatePrimaryAction();
         if (reviewOpen) renderReviewCard();
@@ -866,9 +1095,10 @@
                     el("siSuccessUnresolved").hidden=true;
                     el("siPartialSummary").hidden=false;
                     el("siPartialPostedCount").textContent=`${added} ${added===1?"Unit":"Units"}`;
-                    el("siPartialPendingCount").textContent=`${unresolvedUnits} ${unresolvedUnits===1?"Unit":"Units"}`;
+                    const invoiceRemaining=Math.max(0,Number(documentData.document.invoice_total_quantity||0)-Number(documentData.summary.scannedQty||0));
+                    el("siPartialPendingCount").textContent=invoiceRemaining>0?`${invoiceRemaining} invoice ${invoiceRemaining===1?"unit":"units"} expected`:`${unresolvedUnits} ${unresolvedUnits===1?"Unit":"Units"}`;
                     el("siPartialExplanation").hidden=false;
-                    el("siPartialExplanation").textContent=`${unresolvedBarcodes} ${unresolvedBarcodes===1?"barcode remains":"barcodes remain"} unresolved. You can resume this stock inward after updating Product Master.`;
+                    el("siPartialExplanation").textContent=invoiceRemaining>0?`${invoiceRemaining} invoice units are still expected. Resume this same Stock Inward when they arrive.${unresolvedBarcodes?` ${unresolvedBarcodes} scanned ${unresolvedBarcodes===1?"barcode remains":"barcodes remain"} unresolved.`:""}`:`${unresolvedBarcodes} ${unresolvedBarcodes===1?"barcode remains":"barcodes remain"} unresolved. Resume this Stock Inward after the barcode is reviewed.`;
                 } else {
                     el("siSuccessMessage").hidden=false;
                     el("siSuccessMessage").textContent=`${added} ${added===1?"unit":"units"} posted to inventory`;
@@ -987,14 +1217,16 @@
         if (escHandler) document.removeEventListener("keydown",escHandler,true);
         escHandler=null;
         try { await api().stockInwardExit(); } catch (error) { console.error("Stock Inward workspace exit failed", error); }
-        showInventory();
+        if (returnDestination === "exportData") showExportDataPage();
+        else showInventory();
         const globalBack=el("settingsPageBackBtn");
         globalBack.hidden = previousBackHidden;
         globalBack.textContent = previousBackText;
         globalBack.onclick = previousBackOnclick;
         el("siPageTitle")?.remove();
         globalBack.parentElement.className = previousTopbarClass;
-        requestAnimationFrame(() => document.getElementById("stockInwardBtn")?.focus());
+        const returnFocusId = returnDestination === "exportData" ? "supplierInvoiceConverterCard" : "stockInwardBtn";
+        requestAnimationFrame(() => document.getElementById(returnFocusId)?.focus());
     }
     window.openStockInwardPage = enterStockInwardPage;
 })();

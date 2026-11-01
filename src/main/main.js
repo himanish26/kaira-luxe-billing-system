@@ -200,6 +200,8 @@ const {
 
 const database = require("../database/database");
 const { databaseReady, closeDatabase } = database;
+const { createDynamicMrpService } = require("../database/dynamicMrpService");
+const dynamicMrpService = createDynamicMrpService(database);
 const { createStyleFamilyService } = require("../database/styleFamilyService");
 const styleFamilyService = createStyleFamilyService(database);
 const masterRecoveryVerifier = require("../config/masterRecoveryVerifier");
@@ -234,6 +236,7 @@ function requireSecurityGrant(grant, purpose) {
 const stockInwardWorkspaceSessions = new Map();
 const stockInwardReceiptTickets = new Map();
 const stockOutwardWorkspaceSessions = new Map();
+const supplierInvoiceConverterSessions = new Map();
 function clearStockInwardReceiptTickets(senderId) { stockInwardReceiptTickets.delete(senderId); }
 function requireStockInwardRenderer(event) {
     if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Unauthorized renderer for Stock Inward.");
@@ -353,6 +356,9 @@ const {
 
 const inventoryTransactionService = require("../database/inventoryTransactionService");
 const stockInwardService = require("../database/stockInwardService");
+const stockInwardInvoiceWorkbook = require("../database/stockInwardInvoiceWorkbook");
+const { createSupplierInvoiceFormatProfileService } = require("../database/supplierInvoiceFormatProfileService");
+const supplierInvoiceFormatProfileService = createSupplierInvoiceFormatProfileService(database);
 const stockOutwardService = require("../database/stockOutwardService");
 const stockOutwardDeletionAuthorization = stockOutwardService.createStockOutwardDeletionAuthorization();
 
@@ -674,12 +680,14 @@ function createWindow() {
             stockInwardWorkspaceSessions.delete(mainWindow.webContents.id);
             clearStockInwardReceiptTickets(mainWindow.webContents.id);
             stockOutwardWorkspaceSessions.delete(mainWindow.webContents.id);
+            supplierInvoiceConverterSessions.delete(mainWindow.webContents.id);
         }
     });
     mainWindow.webContents.on("render-process-gone", () => {
         stockInwardWorkspaceSessions.delete(mainWindow.webContents.id);
         clearStockInwardReceiptTickets(mainWindow.webContents.id);
         stockOutwardWorkspaceSessions.delete(mainWindow.webContents.id);
+        supplierInvoiceConverterSessions.delete(mainWindow.webContents.id);
     });
 
     mainWindow.on(
@@ -1566,6 +1574,16 @@ ipcMain.handle("inventory:style-search", async (event, input) => {
     await databaseReady;
     return styleFamilyService.resolveStyleFamily(input);
 });
+ipcMain.handle("dynamic-mrp:billing-options", async (event, barcode, currentCart) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Unauthorized Dynamic MRP request.");
+    await databaseReady;
+    return dynamicMrpService.getBillingOptions(barcode, currentCart);
+});
+ipcMain.handle("dynamic-mrp:return-cost-options", async (event, billItemId, grant) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Unauthorized Dynamic MRP request.");
+    await databaseReady;
+    return dynamicMrpService.getReturnCostOptions(billItemId);
+});
 
 function stockInwardInput(input) {
     const value = { ...(input || {}) };
@@ -1604,6 +1622,9 @@ const stockOutwardCalls = {
     "stock-outward:load": (_event, id) => stockOutwardService.load(id),
     "stock-outward:update-context": (_event, input) => stockOutwardService.updateContext(input || {}),
     "stock-outward:save-draft": (_event, input) => stockOutwardService.saveDraft(input || {}),
+    "stock-outward:mrp-buckets": (_event, barcode) => dynamicMrpService.getBuckets(barcode),
+    "stock-outward:mrp-allocations": (_event, id) => dynamicMrpService.getMovementAllocations(id),
+    "stock-outward:mrp-allocate": (_event, input) => dynamicMrpService.configureMovementAllocations({ ...(input || {}), actor: "MANAGER" }),
     "stock-outward:scan": async (_event, input) => {
         try { return await stockOutwardService.scan(input || {}); }
         catch (error) {
@@ -1705,6 +1726,29 @@ ipcMain.handle("stock-inward:exit", async (event, token) => {
     return { success: true };
 });
 const stockInwardCalls = {
+    "stock-inward:invoice-template": async () => {
+        const result = await dialog.showSaveDialog(mainWindow, { defaultPath: "KLBS_Stock_Inward_Template.xlsx", filters: [{ name: "Excel Workbook", extensions: ["xlsx"] }] });
+        if (result.canceled || !result.filePath) return { canceled: true };
+        await fs.promises.writeFile(result.filePath, await stockInwardInvoiceWorkbook.createTemplateBuffer());
+        return { canceled: false, filePath: result.filePath };
+    },
+    "stock-inward:invoice-import": async (_e, input) => {
+        const result = await dialog.showOpenDialog(mainWindow, { properties: ["openFile"], filters: [{ name: "Supplier Invoice or KLBS Workbook", extensions: ["xlsx", "xls", "csv"] }] });
+        if (result.canceled || !result.filePaths?.[0]) return { canceled: true };
+        let rows;
+        const filePath = result.filePaths[0];
+        const extension = path.extname(filePath).toLowerCase();
+        const buffer = await fs.promises.readFile(filePath);
+        try {
+            if (extension === ".xlsx") {
+                try { rows = await stockInwardInvoiceWorkbook.parseInvoiceWorkbook(buffer); }
+                catch (_) { rows = stockInwardInvoiceWorkbook.parseSupplierInvoiceWorkbook(buffer); }
+            } else rows = stockInwardInvoiceWorkbook.parseSupplierInvoiceWorkbook(buffer);
+        }
+        catch (error) { throw new Error(`Could not convert this supplier invoice: ${error.message}`); }
+        const imported = await stockInwardService.importInvoiceLines({ movementId: input?.movementId, rows });
+        return { ...imported, importedRowCount: rows.length, sourceName: path.basename(filePath), sourceType: extension.slice(1).toUpperCase() };
+    },
     "stock-inward:resume-list": () => stockInwardService.listResumable(),
     "stock-inward:history": (_e, input) => stockInwardService.listRecentHistory(input || {}),
     "stock-inward:suppliers": () => stockInwardService.getSuppliers(),
@@ -1713,6 +1757,10 @@ const stockInwardCalls = {
     "stock-inward:update-context": (_e, input) => stockInwardService.updateContext(input || {}),
     "stock-inward:resolve-barcode": (_e, barcode) => stockInwardService.resolveBarcode(barcode),
     "stock-inward:scan": (_e, input) => stockInwardService.scan(input || {}),
+    "stock-inward:create-product-from-invoice": async (_e, input) => {
+        requireSecurityGrant(input?.authorizationGrant, "PRODUCT_IMPORT");
+        return stockInwardService.createProductFromInvoice(input || {});
+    },
     "stock-inward:edit-line": (_e, input) => stockInwardService.editLine(input || {}),
     "stock-inward:remove-line": (_e, input) => stockInwardService.removeLine(input || {}),
     "stock-inward:bulk-remove-lines": (_e, input) => stockInwardService.removeUnresolvedLines(input || {}),
@@ -1721,8 +1769,301 @@ const stockInwardCalls = {
     "stock-inward:abandon-empty": (_e, id) => stockInwardService.abandonEmptyDraft(id),
     "stock-inward:invoices": (_e, supplierId) => stockInwardService.getSupplierInvoices(supplierId),
     "stock-inward:duplicate-invoice": (_e, input) => stockInwardService.findDuplicateInvoice(input || {}),
-    "stock-inward:current-master-unresolved": (_e, id) => stockInwardService.currentMasterForUnresolved(id)
+    "stock-inward:current-master-unresolved": (_e, id) => stockInwardService.currentMasterForUnresolved(id),
+    "stock-inward:mrp-buckets": (_e, barcode) => dynamicMrpService.getBuckets(barcode),
+    "stock-inward:mrp-reconcile": (_e, input) => dynamicMrpService.reconcileExistingStock({ ...(input || {}), actor: "MANAGER" }),
+    "stock-inward:mrp-allocations": (_e, id) => dynamicMrpService.getMovementAllocations(id),
+    "stock-inward:mrp-allocate": (_e, input) => dynamicMrpService.configureMovementAllocations({ ...(input || {}), actor: "MANAGER" })
 };
+ipcMain.handle("supplier-invoice-converter:suppliers", async event => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Unauthorized supplier invoice converter request.");
+    await databaseReady;
+    return stockInwardService.getSuppliers();
+});
+ipcMain.handle("supplier-invoice-converter:profile", async (event, supplierId) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Unauthorized supplier invoice converter request.");
+    await databaseReady;
+    const id = Number(supplierId);
+    const supplier = (await stockInwardService.getSuppliers()).find(row => Number(row.id) === id && String(row.status || "ACTIVE").toUpperCase() === "ACTIVE");
+    if (!supplier) throw new Error("Select an active supplier before choosing an invoice.");
+    const profile = await supplierDistributorService.getSupplierByCode(supplier.supplier_code);
+    if (!profile) throw new Error("The selected supplier profile could not be loaded.");
+    const layouts = await supplierInvoiceFormatProfileService.listForSupplier(id);
+    const seasons = await new Promise((resolve, reject) => database.all(
+        "SELECT DISTINCT TRIM(season) AS season FROM products WHERE supplier=? AND TRIM(COALESCE(season,''))<>'' ORDER BY season COLLATE NOCASE",
+        [profile.name], (error, rows) => error ? reject(error) : resolve((rows || []).map(row => row.season))));
+    return {
+        supplierId: id, supplierCode: profile.supplier_code, supplierName: profile.name,
+        supplierType: profile.supplier_type,
+        relationships: (profile.relationships || []).map(row => ({ brand: row.brand, productSegment: row.productSegment, businessSegment: row.businessSegment })),
+        seasons,
+        layouts: layouts.map(row => ({ sheetName: row.sheetName, headerRow: row.headerRow, headings: row.headers }))
+    };
+});
+ipcMain.handle("supplier-invoice-converter:profiles", async (event, supplierId) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Unauthorized supplier invoice converter request.");
+    await databaseReady;
+    return supplierInvoiceFormatProfileService.listForSupplier(supplierId);
+});
+ipcMain.handle("supplier-invoice-converter:profile-layouts-edit", async (event, supplierCode) => {
+    requireSupplierRenderer(event);
+    await databaseReady;
+    const supplier = (await stockInwardService.getSuppliers()).find(row => row.supplier_code === String(supplierCode || "").toUpperCase());
+    if (!supplier) throw new Error("Select a valid supplier before viewing its invoice columns.");
+    return supplierInvoiceFormatProfileService.listForSupplier(supplier.id);
+});
+ipcMain.handle("supplier-invoice-converter:profile-layout-inspect", async (event, supplierIdValue) => {
+    requireSupplierRenderer(event);
+    await databaseReady;
+    const supplier = (await stockInwardService.getSuppliers()).find(row => row.supplier_code === String(supplierIdValue || "").toUpperCase());
+    if (!supplier) throw new Error("Select a valid supplier before mapping its invoice columns.");
+    const supplierId = Number(supplier.id);
+    const source = await dialog.showOpenDialog(mainWindow, { properties: ["openFile"], filters: [{ name: "Supplier Invoice", extensions: ["xlsx", "xls", "csv"] }] });
+    if (source.canceled || !source.filePaths?.[0]) return { canceled: true };
+    const sourcePath = source.filePaths[0];
+    const stats = await fs.promises.stat(sourcePath);
+    if (stats.size > 25 * 1024 * 1024) throw new Error("The selected file is larger than the 25 MB conversion limit.");
+    const buffer = await fs.promises.readFile(sourcePath);
+    const inspection = stockInwardInvoiceWorkbook.inspectSupplierInvoiceWorkbook(buffer);
+    const token = require("crypto").randomBytes(32).toString("hex");
+    supplierInvoiceConverterSessions.set(event.sender.id, { token, sourceName: path.basename(sourcePath), supplierId, supplierCode: supplier.supplier_code, supplierName: supplier.name, buffer, expiresAt: Date.now() + 10 * 60 * 1000 });
+    return { canceled: false, token, supplierId, supplierCode: supplier.supplier_code, supplierName: supplier.name, sourceName: path.basename(sourcePath), inspection };
+});
+ipcMain.handle("supplier-invoice-converter:profile-layout-save", async (event, request = {}) => {
+    requireSupplierRenderer(event);
+    await databaseReady;
+    const session = supplierInvoiceConverterSessions.get(event.sender.id);
+    if (!session || session.token !== request.token || session.expiresAt < Date.now()) {
+        supplierInvoiceConverterSessions.delete(event.sender.id);
+        throw new Error("This invoice layout session expired. Select the invoice again.");
+    }
+    const options = request.mappingOptions || {};
+    const inspection = stockInwardInvoiceWorkbook.inspectSupplierInvoiceWorkbook(session.buffer);
+    const worksheet = inspection.worksheets.find(sheet => sheet.name === String(options.sheetName || ""));
+    const candidate = worksheet?.rows.find(row => row.rowNumber === Number(options.headerRow));
+    if (!candidate) throw new Error("Select the worksheet and row containing this invoice’s headings.");
+    await supplierInvoiceFormatProfileService.save({ supplierId: session.supplierId, formatSignature: candidate.formatSignature, sheetName: worksheet.name, headerRow: candidate.rowNumber, headers: candidate.headers, mapping: options.mapping || {} });
+    supplierInvoiceConverterSessions.delete(event.sender.id);
+    return { saved: true, sheetName: worksheet.name, headerRow: candidate.rowNumber, formatSignature: candidate.formatSignature };
+});
+ipcMain.handle("supplier-invoice-converter:profile-layout-default", async (event, input = {}) => {
+    requireSupplierRenderer(event);
+    await databaseReady;
+    const supplier = (await stockInwardService.getSuppliers()).find(row => row.supplier_code === String(input.supplierCode || "").toUpperCase());
+    if (!supplier) throw new Error("Select a valid supplier before changing its default invoice layout.");
+    return supplierInvoiceFormatProfileService.setDefault({ ...input, supplierId: supplier.id });
+});
+ipcMain.handle("supplier-invoice-converter:profile-layout-delete", async (event, input = {}) => {
+    requireSupplierRenderer(event);
+    await databaseReady;
+    const supplier = (await stockInwardService.getSuppliers()).find(row => row.supplier_code === String(input.supplierCode || "").toUpperCase());
+    if (!supplier) throw new Error("Select a valid supplier before deleting its invoice format.");
+    return supplierInvoiceFormatProfileService.deleteLayout(supplier.id, input.formatSignature);
+});
+ipcMain.handle("supplier-invoice-converter:profile-layout-reorder", async (event, input = {}) => {
+    requireSupplierRenderer(event);
+    await databaseReady;
+    const supplier = (await stockInwardService.getSuppliers()).find(row => row.supplier_code === String(input.supplierCode || "").toUpperCase());
+    if (!supplier) throw new Error("Select a valid supplier before arranging its invoice tabs.");
+    return supplierInvoiceFormatProfileService.reorderLayouts(supplier.id, input.formatSignatures);
+});
+ipcMain.handle("supplier-invoice-converter:profile-layouts-reset", async (event, supplierCode) => {
+    requireSupplierRenderer(event);
+    await databaseReady;
+    const supplier = (await stockInwardService.getSuppliers()).find(row => row.supplier_code === String(supplierCode || "").toUpperCase());
+    if (!supplier) throw new Error("Select a valid supplier before resetting its invoice layouts.");
+    return supplierInvoiceFormatProfileService.resetForSupplier(supplier.id);
+});
+
+ipcMain.handle("supplier-invoice-converter:convert", async (event, request = {}) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Unauthorized supplier invoice conversion request.");
+    try {
+    await databaseReady;
+    let sourceName, rows, supplierName, supplierContext, supplierCode, supplierId, buffer;
+    if (request?.token) {
+        const session = supplierInvoiceConverterSessions.get(event.sender.id);
+        if (!session || session.token !== request.token || session.expiresAt < Date.now()) {
+            supplierInvoiceConverterSessions.delete(event.sender.id);
+            throw new Error("This invoice conversion session expired. Select the invoice again.");
+        }
+        sourceName = session.sourceName;
+        supplierName = session.supplierName;
+        supplierCode = session.supplierCode;
+        supplierId = session.supplierId;
+        supplierContext = session.supplierContext;
+        try {
+            rows = stockInwardInvoiceWorkbook.parseSupplierInvoiceWorkbook(session.buffer, request.mappingOptions || {});
+            const mappingOptions = request.mappingOptions || {};
+            const inspection = stockInwardInvoiceWorkbook.inspectSupplierInvoiceWorkbook(session.buffer);
+            const layout = inspection.worksheets.find(sheet => sheet.name === mappingOptions.sheetName)?.rows
+                .find(row => row.rowNumber === Number(mappingOptions.headerRow));
+            if (layout) await supplierInvoiceFormatProfileService.save({
+                supplierId: session.supplierId,
+                formatSignature: layout.formatSignature,
+                sheetName: mappingOptions.sheetName,
+                headerRow: mappingOptions.headerRow,
+                headers: layout.headers,
+                mapping: mappingOptions.mapping
+            });
+        } catch (error) {
+            throw new Error(`Could not convert this supplier invoice: ${error.message}`);
+        }
+    } else {
+        supplierInvoiceConverterSessions.delete(event.sender.id);
+        supplierId = Number(request?.supplierId);
+        const suppliers = await stockInwardService.getSuppliers();
+        const selectedSupplier = suppliers.find(supplier => Number(supplier.id) === supplierId && String(supplier.status || "ACTIVE").toUpperCase() === "ACTIVE");
+        if (!Number.isSafeInteger(supplierId) || !selectedSupplier) {
+            throw new Error("Select an active supplier before choosing an invoice.");
+        }
+        supplierName = selectedSupplier.name;
+        supplierCode = selectedSupplier.supplier_code;
+        const supplierProfile = await supplierDistributorService.getSupplierByCode(supplierCode);
+        const selectedScope = request?.supplierContext || {};
+        const validScope = (supplierProfile?.relationships || []).find(row =>
+            row.productSegment === String(selectedScope.segment || "") &&
+            row.businessSegment === String(selectedScope.businessSegment || "") &&
+            row.brand === String(selectedScope.brand || ""));
+        if (!validScope) throw new Error("Confirm a valid Brand, Segment and Business Segment from this supplier’s active profile before choosing the invoice.");
+        const selectedSeason = String(selectedScope.season || "").trim();
+        if (selectedSeason) {
+            const seasonExists = await new Promise((resolve, reject) => database.get(
+                "SELECT 1 AS found FROM products WHERE supplier=? AND TRIM(season)=? LIMIT 1",
+                [supplierName, selectedSeason], (error, row) => error ? reject(error) : resolve(Boolean(row))));
+            if (!seasonExists) throw new Error("Choose a Season already recorded for this supplier, or leave it blank for invoice mapping/review.");
+        }
+        supplierContext = { brand: validScope.brand, segment: validScope.productSegment, businessSegment: validScope.businessSegment };
+        supplierContext.season = selectedSeason;
+        let extension;
+        try {
+            if (request?.sourceBytes != null) {
+                const suppliedName = String(request.sourceName || "").trim().replace(/\\/g, "/");
+                sourceName = path.basename(suppliedName).replace(/[\x00-\x1f]/g, "_");
+                extension = path.extname(sourceName).toLowerCase();
+                if (!sourceName || ![".xlsx", ".xls", ".csv"].includes(extension)) throw new Error("Choose an Excel (.xlsx or .xls) or CSV invoice.");
+                if (!(request.sourceBytes instanceof Uint8Array)) throw new Error("The dropped invoice file could not be read. Try choosing it again.");
+                if (!request.sourceBytes.byteLength || request.sourceBytes.byteLength > 25 * 1024 * 1024) throw new Error("The selected file is empty or larger than the 25 MB conversion limit.");
+                buffer = Buffer.from(request.sourceBytes);
+            } else {
+                const source = await dialog.showOpenDialog(mainWindow, {
+                    properties: ["openFile"],
+                    filters: [{ name: "Supplier Invoice", extensions: ["xlsx", "xls", "csv"] }]
+                });
+                if (source.canceled || !source.filePaths?.[0]) return { canceled: true };
+                const sourcePath = source.filePaths[0];
+                extension = path.extname(sourcePath).toLowerCase();
+                sourceName = path.basename(sourcePath);
+                if (![".xlsx", ".xls", ".csv"].includes(extension)) throw new Error("Choose an Excel (.xlsx or .xls) or CSV invoice.");
+                const stats = await fs.promises.stat(sourcePath);
+                if (!stats.isFile()) throw new Error("Choose a single invoice file.");
+                if (stats.size > 25 * 1024 * 1024) throw new Error("The selected file is larger than the 25 MB conversion limit.");
+                buffer = await fs.promises.readFile(sourcePath);
+            }
+            if (!request.forceMapping && extension === ".xlsx") {
+                try { rows = await stockInwardInvoiceWorkbook.parseInvoiceWorkbook(buffer); }
+                catch (_) { /* Supplier invoice format: resolve against the selected supplier's saved or inferred layout. */ }
+            }
+            if (!rows) {
+                const inspection = stockInwardInvoiceWorkbook.inspectSupplierInvoiceWorkbook(buffer);
+                const profiles = await supplierInvoiceFormatProfileService.listForSupplier(supplierId);
+                for (const worksheet of inspection.worksheets) {
+                    for (const candidate of worksheet.rows) {
+                        const saved = profiles.find(item => item.formatSignature === candidate.formatSignature);
+                        if (saved) candidate.savedMapping = saved.mapping;
+                    }
+                }
+                let parseError = null;
+                let appliedLayout = null;
+                for (const worksheet of request.forceMapping ? [] : inspection.worksheets) {
+                    for (const candidate of worksheet.rows) {
+                        const profile = profiles.find(item => item.formatSignature === candidate.formatSignature);
+                        // A suggested mapping is only a guess. Require the first layout for each
+                        // supplier to be reviewed and explicitly saved before it can auto-convert.
+                        if (!profile) continue;
+                        const mapping = profile.mapping;
+                        if (!["barcode", "quantity", "mrp", "unitCost"].every(field => Number.isSafeInteger(Number(mapping?.[field])))) continue;
+                        try {
+                            rows = stockInwardInvoiceWorkbook.parseSupplierInvoiceWorkbook(buffer, {
+                                sheetName: worksheet.name,
+                                headerRow: candidate.rowNumber,
+                                mapping
+                            });
+                            appliedLayout = { worksheet, candidate, mapping };
+                            break;
+                        } catch (error) { parseError = error; }
+                    }
+                    if (rows) break;
+                }
+                if (rows && appliedLayout) {
+                    await supplierInvoiceFormatProfileService.save({
+                        supplierId,
+                        formatSignature: appliedLayout.candidate.formatSignature,
+                        sheetName: appliedLayout.worksheet.name,
+                        headerRow: appliedLayout.candidate.rowNumber,
+                        headers: appliedLayout.candidate.headers,
+                        mapping: appliedLayout.mapping
+                    });
+                } else if (!rows || request.forceMapping) {
+                    if (parseError) throw parseError;
+                    const token = require("crypto").randomBytes(32).toString("hex");
+                    supplierInvoiceConverterSessions.set(event.sender.id, { token, sourceName, supplierId, supplierCode, supplierName, supplierContext, buffer, expiresAt: Date.now() + 10 * 60 * 1000 });
+                    return { canceled: false, needsMapping: true, token, supplierId, supplierCode, supplierName, supplierContext, sourceName, inspection };
+                }
+            }
+        } catch (error) {
+            throw new Error(`Could not convert ${sourceName}: ${error.message}`);
+        }
+    }
+    const barcodes = [...new Set(rows.map(row => String(row.barcode || "").trim()).filter(Boolean))];
+    const existingProducts = new Map();
+    for (let offset = 0; offset < barcodes.length; offset += 400) {
+        const batch = barcodes.slice(offset, offset + 400);
+        const products = await new Promise((resolve, reject) => database.all(
+            `SELECT barcode,brand,segment,business_segment,category,season,collection,product_name,style_code,size,colour,discount,selling_price,cost_price,gst_rate,hsn_code,reorder_level,supplier,active,variable_value
+             FROM products WHERE TRIM(CAST(barcode AS TEXT)) IN (${batch.map(() => "?").join(",")}) ORDER BY id`, batch,
+            (error, result) => error ? reject(error) : resolve(result || [])));
+        for (const product of products) {
+            const key = String(product.barcode || "").trim();
+            if (!existingProducts.has(key)) existingProducts.set(key, []);
+            existingProducts.get(key).push(product);
+        }
+    }
+    rows = rows.map(row => {
+        const products = existingProducts.get(String(row.barcode || "").trim()) || [];
+        if (products.length > 1) throw new Error(`Barcode ${row.barcode} matches multiple Product Master records. Resolve the duplicate before converting this invoice.`);
+        const product = products[0];
+        if (product) {
+            return { ...row, brand: product.brand, segment: product.segment, businessSegment: product.business_segment,
+                category: product.category, season: product.season, collection: product.collection, productName: product.product_name,
+                styleCode: product.style_code, size: product.size, colour: product.colour, discount: product.discount,
+                sellingPricePaise: product.selling_price == null ? null : Math.round(Number(product.selling_price) * 100),
+                gstRate: product.gst_rate, hsnCode: product.hsn_code, reorderLevel: product.reorder_level,
+                supplier: product.supplier || supplierName, active: product.active == null ? null : Boolean(product.active),
+                variableValue: product.variable_value == null ? null : Boolean(product.variable_value) };
+        }
+        return { ...row, brand: row.brand || supplierContext.brand, segment: row.segment || supplierContext.segment,
+            businessSegment: row.businessSegment || supplierContext.businessSegment, season: row.season || supplierContext.season,
+            supplier: row.supplier || supplierName };
+    });
+    const destination = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: `${path.basename(sourceName, path.extname(sourceName))}_KLBS_Stock_Inward.xlsx`,
+        filters: [{ name: "KLBS Stock Inward Workbook", extensions: ["xlsx"] }]
+    });
+    if (destination.canceled || !destination.filePath) return { canceled: true, sourceName, rowCount: rows.length };
+    await fs.promises.writeFile(destination.filePath, await stockInwardInvoiceWorkbook.createConvertedWorkbookBuffer(rows));
+    supplierInvoiceConverterSessions.delete(event.sender.id);
+    return {
+        canceled: false,
+        sourceName,
+        supplierName,
+        filePath: destination.filePath,
+        rowCount: rows.length,
+        quantityTotal: rows.reduce((total, row) => total + row.quantity, 0)
+    };
+    } catch (error) {
+        return { failed: true, error: String(error?.message || "The supplier invoice could not be converted.") };
+    }
+});
 for (const [channel, operation] of Object.entries(stockInwardCalls)) {
     ipcMain.handle(channel, async (event, token, ...args) => {
         requireStockInwardWorkspace(event, token);
@@ -1778,6 +2119,27 @@ ipcMain.handle("stock-inward:print-receipt", async (event, token, input) => {
         const monthNames=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
         const displayDate=match?`${match[3]}-${monthNames[Number(match[2])-1]||match[2]}-${match[1]}`:businessDate;
         const displayInvoiceDate=invoiceMatch?`${invoiceMatch[3]}-${monthNames[Number(invoiceMatch[2])-1]||invoiceMatch[2]}-${invoiceMatch[1]}`:invoiceDate||"—";
+        const movementAllocations=await dynamicMrpService.getMovementAllocations(movementId);
+        const allocationsByLine=new Map();
+        for(const allocation of movementAllocations) {
+            const key=Number(allocation.movement_line_id);
+            if(!allocationsByLine.has(key))allocationsByLine.set(key,[]);
+            allocationsByLine.get(key).push(allocation);
+        }
+        const receiptItems=await Promise.all(postedLines.map(async line=>{
+            const allocations=(allocationsByLine.get(Number(line.id))||[])
+                .filter(row=>row.posting_state==="POSTED"&&Number(row.posted_quantity)>0);
+            const mrpAllocations=allocations.map(row=>({mrp:Number(row.mrp_paise)/100,quantity:Number(row.posted_quantity||row.quantity),
+                referenceMrp:row.reference_mrp_paise==null?null:Number(row.reference_mrp_paise)/100,status:row.mrp_change_status}));
+            const changed=mrpAllocations.some(row=>row.status==="CHANGED");
+            const referenceMrp=mrpAllocations.find(row=>row.referenceMrp!=null)?.referenceMrp;
+            const assignedMrps=mrpAllocations.map(row=>`₹${row.mrp.toFixed(2)} × ${row.quantity}`).join(", ");
+            const mrpStatus=mrpAllocations.length===0?"MRP NOT ASSIGNED":changed
+                ?`MRP CHANGE · MASTER ₹${referenceMrp.toFixed(2)} → INWARD ${assignedMrps}`
+                :referenceMrp==null?`MRP ASSIGNED ${assignedMrps} · COMPARISON NOT RECORDED`
+                    :`SAME AS MASTER ₹${referenceMrp.toFixed(2)} · INWARD ${assignedMrps}`;
+            return {barcode:line.barcode,product:line.product_name_snapshot||"Product",sku:line.sku_snapshot||"—",colour:line.colour_snapshot||"—",size:line.size_snapshot||"—",quantity:Number(line.posted_quantity),mrpStatus,mrpAllocations};
+        }));
         const receipt={
             receiptMode:mode==="history"?"HISTORY":"IMMEDIATE",
             storeName:"KAIRA LUXE",
@@ -1787,7 +2149,7 @@ ipcMain.handle("stock-inward:print-receipt", async (event, token, input) => {
             supplierCode:loaded.document.supplier_code_snapshot||"—",
             invoiceNumber:loaded.document.invoice_number_snapshot||loaded.document.invoice_no||"—",
             invoiceDate:displayInvoiceDate,
-            items:postedLines.map(line=>({barcode:line.barcode,product:line.product_name_snapshot||"Product",sku:line.sku_snapshot||"—",colour:line.colour_snapshot||"—",size:line.size_snapshot||"—",quantity:Number(line.posted_quantity)})),
+            items:receiptItems,
             postedNowSkuCount:mode==="immediate"?postedLines.length:null,
             postedNowQuantity:mode==="immediate"?postedLines.reduce((sum,line)=>sum+Number(line.posted_quantity),0):null,
             totalPostedSkuCount:loaded.lines.filter(line=>line.posting_state==="POSTED"&&Number(line.posted_quantity)>0).length,
@@ -2316,6 +2678,13 @@ ipcMain.handle(
     async (event, returnData) => {
 
         try {
+
+            let hasDynamicMrpReturn=false;
+            for (const item of Array.isArray(returnData?.items) ? returnData.items : []) {
+                const options = await dynamicMrpService.getReturnCostOptions(item?.original_bill_item_id);
+                if (options.dynamicMrp) hasDynamicMrpReturn=true;
+            }
+            if(hasDynamicMrpReturn)requireSecurityGrant(returnData?.dynamicMrpAuthorizationGrant, "DYNAMIC_MRP_RETURN_COST");
 
             return await saveReturn(
                 returnData
@@ -3001,6 +3370,7 @@ ipcMain.handle(
 
             const products =
                 await getAllProducts();
+            const mrpBuckets = await dynamicMrpService.getInventoryExportRows();
 
             const result =
                 await dialog.showSaveDialog({
@@ -3020,7 +3390,8 @@ ipcMain.handle(
 
             await exportInventory(
                 products,
-                result.filePath
+                result.filePath,
+                { mrpBuckets }
             );
 
             let activityWarning = null;
@@ -4349,6 +4720,20 @@ ipcMain.handle(
                     const email = await dayClosingDeliveryCoordinator.settle(jobId, "email", online,
                         () => sendProgress("EMAIL_RETRYING"));
                     sendProgress("EMAIL_RESULT", { status: email.status, durable: email.durable, lastError: email.lastError });
+                    try {
+                        const push = await remoteDashboard.deliverDayClosedNow(result);
+                        const logDelivery = push.status === "ACCEPTED" ? technicalLogger.info : technicalLogger.warn;
+                        logDelivery.call(technicalLogger, "REMOTE_DASHBOARD", "Day Closing notification delivery attempted during close sequence", {
+                            closingId: result.snapshotId,
+                            status: push.status,
+                            retryScheduled: Boolean(push.retryScheduled)
+                        });
+                    } catch (error) {
+                        technicalLogger.warn("REMOTE_DASHBOARD", "Day Closing notification delivery could not be attempted during close sequence", {
+                            closingId: result.snapshotId,
+                            classification: String(error && error.message || "Delivery attempt failed.").slice(0, 160)
+                        });
+                    }
                     sendProgress("UPDATING_DSR");
                     const dsr = await dayClosingDeliveryCoordinator.settle(jobId, "sheet", online,
                         () => sendProgress("DSR_RETRYING"));

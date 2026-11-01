@@ -4,8 +4,8 @@ const INVENTORY_EXPORT_COLUMNS = [
     { header: "Barcode", key: "barcode", width: 18 },
     { header: "SKU", key: "sku", width: 18 },
     { header: "Brand", key: "brand", width: 18 },
-    { header: "Business Segment", key: "business_segment", width: 20 },
     { header: "Segment", key: "segment", width: 15 },
+    { header: "Business Segment", key: "business_segment", width: 20 },
     { header: "Category", key: "category", width: 18 },
     { header: "Season", key: "season", width: 15 },
     { header: "Collection", key: "collection", width: 22 },
@@ -27,7 +27,7 @@ const INVENTORY_EXPORT_COLUMNS = [
     { header: "Variable Value", key: "variable_value", width: 16 }
 ];
 
-async function exportInventory(products, filePath) {
+async function exportInventory(products, filePath, options = {}) {
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Inventory");
@@ -40,6 +40,16 @@ async function exportInventory(products, filePath) {
             variable_value: Number(product.variable_value) === 1 ? "YES" : "NO"
         });
     });
+
+    if (Array.isArray(options.mrpBuckets) && options.mrpBuckets.length) {
+        const mrpSheet=workbook.addWorksheet("MRP Stock");
+        mrpSheet.columns=[
+            {header:"Barcode",key:"barcode",width:20},{header:"SKU",key:"sku",width:18},
+            {header:"Product Name",key:"product_name",width:36},{header:"MRP",key:"mrp",width:14},
+            {header:"Quantity",key:"current_stock",width:14},{header:"Status",key:"status",width:42}
+        ];
+        options.mrpBuckets.forEach(row=>mrpSheet.addRow(row));
+    }
 
     await workbook.xlsx.writeFile(filePath);
 

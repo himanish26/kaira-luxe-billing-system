@@ -185,7 +185,8 @@ function resolveAuthoritativeReturnItems(
                         bi.net_amount,
                         bi.unit_cost_paise,
                         bi.cost_basis_status,
-                        bi.cost_source
+                        bi.cost_source,
+                        bi.mrp_bucket_id
                     FROM bill_items bi
                     INNER JOIN products p
                         ON p.barcode = bi.barcode
@@ -288,15 +289,12 @@ function resolveAuthoritativeReturnItems(
                                 roundHalfUp(gstPaise, 2);
                             const sgstPaise =
                                 gstPaise - cgstPaise;
-                            const returnCost = deriveReturnCostSnapshot(
-                                product,
-                                returnQuantity
-                            );
-
-                            resolve({
+                            const buildResolved = (returnCost, costAllocations = []) => resolve({
                                 original_bill_item_id:
                                     originalBillItemId,
                                 product_id: product.product_id,
+                                mrp_bucket_id: product.mrp_bucket_id == null ? null : Number(product.mrp_bucket_id),
+                                dynamic_mrp_cost_allocations: costAllocations,
                                 barcode: product.barcode,
                                 product_name:
                                     product.product_name || "",
@@ -331,6 +329,23 @@ function resolveAuthoritativeReturnItems(
                                     net: netPaise
                                 }
                             });
+                            if (product.mrp_bucket_id != null) {
+                                const selections=Array.isArray(item.mrpCostAllocations)?item.mrpCostAllocations:[];
+                                if(selections.reduce((sum,row)=>sum+Number(row.quantity||0),0)!==returnQuantity)throw new Error("A Manager must assign each returned unit to its original invoice cost layer.");
+                                const selected=selections.map(row=>({sourceAllocationId:Number(row.sourceAllocationId),quantity:Number(row.quantity)}));
+                                if(selected.some(row=>!Number.isSafeInteger(row.sourceAllocationId)||row.sourceAllocationId<=0||!Number.isSafeInteger(row.quantity)||row.quantity<=0))throw new Error("Invalid Manager return cost selection.");
+                                db.all(`SELECT a.id,a.unit_cost_paise,a.cost_basis_status,
+                                    ABS(a.quantity)-COALESCE((SELECT SUM(r.quantity) FROM stock_cost_allocations r WHERE r.source_allocation_id=a.id),0) AS available
+                                    FROM stock_cost_allocations a WHERE a.bill_item_id=? AND a.quantity<0`,[originalBillItemId],(costErr,costRows)=>{
+                                    if(costErr){reject(costErr);return;}
+                                    const byId=new Map((costRows||[]).map(row=>[Number(row.id),row]));let totalCostPaise=0,captured=true;
+                                    for(const selection of selected){const source=byId.get(selection.sourceAllocationId);if(!source||selection.quantity>Number(source.available)){reject(new Error("Selected invoice cost layer does not have enough returnable quantity."));return;}if(source.cost_basis_status!=="CAPTURED"||source.unit_cost_paise==null)captured=false;else totalCostPaise+=selection.quantity*Number(source.unit_cost_paise);}
+                                    const returnCost=captured?{return_unit_cost_paise:Math.round(totalCostPaise/returnQuantity),return_cost_paise:totalCostPaise,return_cost_basis_status:"CAPTURED",return_cost_source:"DYNAMIC_MRP_MANAGER",return_cost_method:"DYNAMIC_MRP_MANAGER_SELECTED"}:{return_unit_cost_paise:null,return_cost_paise:null,return_cost_basis_status:"UNKNOWN",return_cost_source:null,return_cost_method:null};
+                                    buildResolved(returnCost,selected);
+                                });
+                                return;
+                            }
+                            buildResolved(deriveReturnCostSnapshot(product,returnQuantity));
                         }
                         catch (calculationError) {
                             reject(calculationError);
@@ -384,11 +399,12 @@ function insertReturnItemWithInventory(
                 return_cost_basis_status,
                 return_cost_source,
                 return_cost_method,
+                mrp_bucket_id,
                 remarks,
                 created_at
             )
             VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `,
             [
                 returnId,
@@ -414,15 +430,17 @@ function insertReturnItemWithInventory(
                 item.return_cost_basis_status,
                 item.return_cost_source,
                 item.return_cost_method,
+                item.mrp_bucket_id || null,
                 "",
                 createdAt
             ],
-            itemErr => {
+            function(itemErr) {
 
                 if (itemErr) {
                     reject(itemErr);
                     return;
                 }
+                const returnItemId=this.lastID;
 
                 db.run(
                     `
@@ -436,10 +454,11 @@ function insertReturnItemWithInventory(
                         reference_id,
                         remarks,
                         created_by,
-                        created_at
+                        created_at,
+                        mrp_bucket_id
                     )
                     VALUES
-                    (?, ?, 'RETURN', ?, 'RETURN', ?, ?, ?, ?)
+                    (?, ?, 'RETURN', ?, 'RETURN', ?, ?, ?, ?, ?)
                     `,
                     [
                         item.product_id,
@@ -448,16 +467,34 @@ function insertReturnItemWithInventory(
                         returnNo,
                         `Return against bill ${originalBillNo}`,
                         createdBy,
-                        createdAt
+                        createdAt,
+                        item.mrp_bucket_id || null
                     ],
-                    inventoryErr => {
+                    function(inventoryErr) {
 
                         if (inventoryErr) {
                             reject(inventoryErr);
                             return;
                         }
 
-                        resolve();
+                        const inventoryTransactionId=this.lastID;
+                        const allocations=item.dynamic_mrp_cost_allocations||[];
+                        if(!item.mrp_bucket_id||!allocations.length){resolve();return;}
+                        db.run(`INSERT INTO stock_cost_allocation_batches(inventory_transaction_id,expected_quantity,status,created_at)
+                            VALUES(?,?,'OPEN',?)`,[inventoryTransactionId,item.quantity,createdAt],function(batchErr){
+                            if(batchErr){reject(batchErr);return;}
+                            const batchId=this.lastID;let at=0;
+                            const insertNext=()=>{
+                                if(at>=allocations.length){db.run("UPDATE stock_cost_allocation_batches SET status='COMPLETE',completed_at=? WHERE id=?",[createdAt,batchId],doneErr=>doneErr?reject(doneErr):resolve());return;}
+                                const allocation=allocations[at++];
+                                db.get("SELECT layer_id,unit_cost_paise,cost_basis_status FROM stock_cost_allocations WHERE id=?",[allocation.sourceAllocationId],(sourceErr,source)=>{
+                                    if(sourceErr||!source){reject(sourceErr||new Error("Return cost source layer was not found."));return;}
+                                    db.run(`INSERT INTO stock_cost_allocations(batch_id,inventory_transaction_id,return_item_id,layer_id,quantity,unit_cost_paise,cost_basis_status,source_allocation_id,created_at)
+                                        VALUES(?,?,?,?,?,?,?,?,?)`,[batchId,inventoryTransactionId,returnItemId,source.layer_id,allocation.quantity,source.unit_cost_paise,source.cost_basis_status,allocation.sourceAllocationId,createdAt],allocationErr=>allocationErr?reject(allocationErr):insertNext());
+                                });
+                            };
+                            insertNext();
+                        });
 
                     }
                 );

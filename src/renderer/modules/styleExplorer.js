@@ -10,6 +10,17 @@
     const normalized = value => String(value ?? "").trim().toLocaleLowerCase("en-IN");
     const currency = value => `₹${Number(value ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+    function mrpStockLabel(item) {
+        const parts = (Array.isArray(item.mrpBuckets) ? item.mrpBuckets : [])
+            .filter(bucket => Number(bucket.quantity) !== 0)
+            .map(bucket => `${currency(bucket.mrp)} × ${Number(bucket.quantity)}`);
+        if (Number(item.unallocatedStock) !== 0) {
+            parts.push(`MRP UNASSIGNED ${Number(item.unallocatedStock)} · COUNT REQUIRED`);
+        }
+        if (parts.length) return parts.join(" | ");
+        return item.mrp == null ? "MRP unavailable" : `Product Master MRP ${currency(item.mrp)}`;
+    }
+
     function isOpen() {
         return Boolean(drawerShell?.isOpen());
     }
@@ -94,10 +105,11 @@
             badge.className = "inventory-style-scanned-badge";
             badge.textContent = "SCANNED";
             const stock = document.createElement("b");
-            stock.textContent = Number(scanned.currentStock) < 0
-                ? `${scanned.currentStock} CURRENT STOCK`
-                : `${scanned.currentStock} IN STOCK`;
-            panel.replaceChildren(detail, badge, stock);
+            stock.textContent = `${Number(scanned.currentStock)} TOTAL IN STOCK`;
+            const mrpStock = document.createElement("span");
+            mrpStock.className = "inventory-style-scanned-mrp-stock";
+            mrpStock.textContent = mrpStockLabel(scanned);
+            panel.replaceChildren(detail, badge, stock, mrpStock);
         } else {
             byId("styleExplorerScanned").replaceChildren();
         }
@@ -153,7 +165,7 @@
                 const stock = document.createElement("b");
                 stock.textContent = String(item.currentStock);
                 const mrp = document.createElement("span");
-                mrp.textContent = item.mrp == null ? "—" : currency(item.mrp);
+                mrp.textContent = mrpStockLabel(item);
                 details.append(stock, document.createTextNode(" · "), mrp);
                 tile.append(size);
                 if (isScanned) {

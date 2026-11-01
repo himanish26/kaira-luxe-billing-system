@@ -970,7 +970,7 @@ async function exportProductSalesReport(
     storeIdentity
 ) {
 
-    const totalColumns = 19;
+    const totalColumns = 20;
 
     const lastColumn =
         String.fromCharCode(64 + totalColumns);
@@ -1016,6 +1016,7 @@ worksheet.getCell("B9").value =
 
         { key: "barcode", width: 18 },
         { key: "brand", width: 18 },
+        { key: "supplier", width: 26 },
         { key: "segment", width: 20 },
         { key: "business_segment", width: 20 },
         { key: "product_name", width: 30 },
@@ -1042,6 +1043,7 @@ worksheet.getCell("B9").value =
 
         "Barcode",
         "Brand",
+        "Supplier",
         "Segment",
         "Business Segment",
         "Product Name",
@@ -1075,6 +1077,7 @@ worksheet.getCell("B9").value =
 
             row.barcode,
             row.brand || null,
+            row.supplier || "Unassigned",
             row.segment || null,
             row.business_segment || null,
             row.product_name || null,
@@ -1111,7 +1114,7 @@ worksheet.getCell("B9").value =
 
     "TOTAL",
 
-    null, null, null, null, null, null, null, null, totalQtySold,
+    null, null, null, null, null, null, null, null, null, totalQtySold,
     totalQtyReturned, totalNetQtySold,
     null, null, null, null, null, null,
     fromPaise(totalNetSalesAfterReturns)
@@ -1124,8 +1127,71 @@ worksheet.getRow(currentRow).font = {
 
 };
 
-    for (const column of [13, 14, 15, 16, 17, 18, 19]) {
+    for (const column of [14, 15, 16, 17, 18, 19, 20]) {
         worksheet.getColumn(column).numFmt =
+            '"₹"#,##0.00;[Red]("₹"#,##0.00);-';
+    }
+
+    const supplierTotals = new Map();
+    for (const row of data) {
+        const supplier = String(row.supplier || "").trim() || "Unassigned";
+        if (!supplierTotals.has(supplier)) {
+            supplierTotals.set(supplier, {
+                qtySold: 0, qtyReturned: 0, netQtySold: 0,
+                grossSales: 0, discount: 0, taxable: 0, gst: 0,
+                netSales: 0, returnValue: 0, netAfterReturns: 0
+            });
+        }
+        const total = supplierTotals.get(supplier);
+        total.qtySold += Number(row.qty_sold || 0);
+        total.qtyReturned += Number(row.qty_returned || 0);
+        total.netQtySold += Number(row.net_qty_sold || 0);
+        total.grossSales += Number(row.gross_sales || 0);
+        total.discount += Number(row.discount_amount || 0);
+        total.taxable += Number(row.taxable_value || 0);
+        total.gst += Number(row.gst_amount || 0);
+        total.netSales += Number(row.net_sales || 0);
+        total.returnValue += Number(row.return_cn_value || 0);
+        total.netAfterReturns += Number(row.net_sales_after_returns || 0);
+    }
+
+    const supplierSheet = workbook.addWorksheet("Sales by Supplier");
+    supplierSheet.columns = [
+        { width: 30 }, { width: 14 }, { width: 15 }, { width: 15 },
+        { width: 17 }, { width: 17 }, { width: 17 }, { width: 15 },
+        { width: 17 }, { width: 19 }, { width: 23 }
+    ];
+    supplierSheet.getCell("A1").value = "Sales by Supplier";
+    supplierSheet.getCell("A1").font = { bold: true, size: 16 };
+    supplierSheet.getCell("A2").value = "Supplier is based on the supplier currently assigned to each product in KLBS.";
+    supplierSheet.mergeCells("A2:K2");
+    supplierSheet.getRow(4).values = [
+        "Supplier", "Qty Sold", "Qty Returned", "Net Qty Sold", "Gross Sales",
+        "Discount Amount", "Taxable Value", "GST Amount", "Net Sales",
+        "Return / CN Value", "Net Sales After Returns"
+    ];
+    styleNewRegister(supplierSheet, 4);
+    let supplierRow = 5;
+    for (const [supplier, total] of [...supplierTotals.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+        supplierSheet.getRow(supplierRow++).values = [
+            supplier, total.qtySold, total.qtyReturned, total.netQtySold,
+            total.grossSales, total.discount, total.taxable, total.gst,
+            total.netSales, total.returnValue, total.netAfterReturns
+        ];
+    }
+    const supplierGrand = [...supplierTotals.values()].reduce((sum, total) => {
+        for (const key of Object.keys(sum)) sum[key] += total[key];
+        return sum;
+    }, { qtySold: 0, qtyReturned: 0, netQtySold: 0, grossSales: 0, discount: 0, taxable: 0, gst: 0, netSales: 0, returnValue: 0, netAfterReturns: 0 });
+    supplierSheet.getRow(supplierRow).values = [
+        "TOTAL", supplierGrand.qtySold, supplierGrand.qtyReturned, supplierGrand.netQtySold,
+        supplierGrand.grossSales, supplierGrand.discount, supplierGrand.taxable,
+        supplierGrand.gst, supplierGrand.netSales, supplierGrand.returnValue,
+        supplierGrand.netAfterReturns
+    ];
+    supplierSheet.getRow(supplierRow).font = { bold: true };
+    for (const column of [5, 6, 7, 8, 9, 10, 11]) {
+        supplierSheet.getColumn(column).numFmt =
             '"₹"#,##0.00;[Red]("₹"#,##0.00);-';
     }
 

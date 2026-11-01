@@ -185,13 +185,38 @@
             if(!readOnly&&contextReady)requestAnimationFrame(()=>el("soScanner")?.focus());
         }catch(error){showMessage(safeError(error,"Stock Outward could not be opened."),true);}
     }
+    async function openMrpAllocationDrawer(line){
+        if(!line||readOnly||reviewOpen)return;
+        try{
+            const detail=await api().stockOutwardMrpBuckets(line.barcode);
+            const existing=await api().stockOutwardMrpAllocations(documentData.document.id);
+            const prior=(Array.isArray(existing)?existing:[]).filter(row=>Number(row.movement_line_id)===Number(line.id));
+            const eligible=(detail?.buckets||[]).filter(bucket=>Number(bucket.quantity)>0||prior.some(row=>Number(row.bucket_id)===Number(bucket.id)));
+            if(!eligible.length){showMessage("No assigned MRP stock is available for this barcode.",true);return;}
+            const overlay=document.createElement("div");overlay.className="klbs-drawer-overlay";
+            overlay.innerHTML=`<aside class="klbs-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="soMrpTitle" tabindex="-1"><header class="klbs-drawer-header"><h2 id="soMrpTitle" class="klbs-drawer-title">SELECT MRP FOR OUTWARD</h2><button type="button" class="klbs-drawer-exit" data-close>EXIT</button></header><div class="klbs-drawer-body"><p>${esc(line.product_name_snapshot||line.barcode)} · quantity ${Number(line.recognized_quantity)}</p><div data-rows></div><p data-error role="alert"></p></div><footer class="klbs-drawer-footer"><button type="button" class="klbs-primary-btn" data-save>SAVE MRP ALLOCATION</button></footer></aside>`;
+            document.body.appendChild(overlay);
+            const drawer=window.KLBSDrawer.create({root:overlay,panel:overlay.querySelector(".klbs-drawer-panel"),labelledBy:"soMrpTitle",initialFocus:()=>overlay.querySelector("[data-quantity]"),exitButtons:[overlay.querySelector("[data-close]")],onExit:()=>drawer.close(),onEscape:()=>false,onClosed:()=>overlay.remove()});
+            const priorById=new Map(prior.map(row=>[Number(row.bucket_id),Number(row.quantity)]));
+            overlay.querySelector("[data-rows]").innerHTML=eligible.map(bucket=>`<label class="so-mrp-allocation"><span>MRP ₹${Number(bucket.mrp).toFixed(2)} · available ${Number(bucket.available)}</span><input type="number" min="0" step="1" inputmode="numeric" data-bucket="${Number(bucket.id)}" data-quantity value="${priorById.get(Number(bucket.id))||0}"></label>`).join("");
+            overlay.querySelector("[data-save]").onclick=async()=>{try{
+                const allocations=[...overlay.querySelectorAll("[data-bucket]")].map(input=>({bucketId:Number(input.dataset.bucket),quantity:Number(input.value||0)})).filter(row=>row.quantity>0).map(row=>{const bucket=eligible.find(item=>Number(item.id)===row.bucketId);return{mrpPaise:Number(bucket.mrpPaise),quantity:row.quantity};});
+                if(allocations.reduce((sum,row)=>sum+row.quantity,0)!==Number(line.recognized_quantity))throw new Error(`MRP quantities must total ${Number(line.recognized_quantity)}.`);
+                const byId=new Map(eligible.map(bucket=>[Number(bucket.mrpPaise),bucket]));
+                for(const row of allocations){const bucket=byId.get(row.mrpPaise);if(row.quantity>Number(bucket.available))throw new Error(`Not enough stock under MRP ₹${Number(bucket.mrp).toFixed(2)}.`);}
+                await api().stockOutwardMrpAllocate({movementId:documentData.document.id,lineId:Number(line.id),allocations});drawer.close();showMessage("MRP allocation saved.");
+            }catch(error){overlay.querySelector("[data-error]").textContent=error?.message||"Could not save MRP allocation.";}};
+            drawer.open({opener:document.activeElement});
+        }catch(error){showMessage(safeError(error,"Could not load MRP stock."),true);}
+    }
+
     function renderDocument(message="",isError=false){
         if(!documentData)return;
         const doc=documentData.document,lines=documentData.lines||[];
         pageMode="document";el("soHome").hidden=true;el("soWorkspace").hidden=false;el("soActions").hidden=false;el("soPageMessage").textContent="";
         setPageTitle(readOnly?"STOCK OUTWARD DETAILS":reviewOpen?"REVIEW STOCK OUTWARD":activeIsNew?"NEW STOCK OUTWARD":"EDIT STOCK OUTWARD");
         const locked=readOnly||reviewOpen;
-        const lineRows=lines.map((line,index)=>`<tr><td class="so-numeric">${index+1}</td><td>${esc(line.barcode)}</td><td><strong>${esc(line.product_name_snapshot||"Product")}</strong><small>${esc(line.sku_snapshot||"—")}</small></td><td>${esc(line.colour_snapshot||"—")}</td><td>${esc(line.size_snapshot||"—")}</td><td class="so-numeric">${Number(line.available_stock)||0}</td><td><input class="so-qty" type="number" min="1" step="1" inputmode="numeric" value="${Number(doc.status==="COMPLETE"?line.posted_quantity:line.recognized_quantity)||0}" data-qty="${Number(line.id)}" aria-label="Outward quantity for ${esc(line.barcode)}" ${locked?"disabled":""}></td><td>${readOnly?"—":`<button type="button" class="klbs-cancel-btn so-remove" data-remove="${Number(line.id)}">REMOVE</button>`}</td></tr>`).join("");
+        const lineRows=lines.map((line,index)=>`<tr><td class="so-numeric">${index+1}</td><td>${esc(line.barcode)}</td><td><strong>${esc(line.product_name_snapshot||"Product")}</strong><small>${esc(line.sku_snapshot||"—")}</small></td><td>${esc(line.colour_snapshot||"—")}</td><td>${esc(line.size_snapshot||"—")}</td><td class="so-numeric">${Number(line.available_stock)||0}</td><td><input class="so-qty" type="number" min="1" step="1" inputmode="numeric" value="${Number(doc.status==="COMPLETE"?line.posted_quantity:line.recognized_quantity)||0}" data-qty="${Number(line.id)}" aria-label="Outward quantity for ${esc(line.barcode)}" ${locked?"disabled":""}></td><td>${readOnly?"—":`<button type="button" class="klbs-cancel-btn" data-mrp="${Number(line.id)}">MRP</button> <button type="button" class="klbs-cancel-btn so-remove" data-remove="${Number(line.id)}">REMOVE</button>`}</td></tr>`).join("");
         const total=lines.reduce((sum,line)=>sum+Number(doc.status==="COMPLETE"?line.posted_quantity:line.recognized_quantity||0),0);
         el("soWorkspace").innerHTML=`<section class="so-document-head"><strong>${esc(doc.movement_no)}</strong><span class="si-status-badge ${esc(String(doc.status).toLowerCase())}">${esc(String(doc.status).replaceAll("_"," "))}</span>${readOnly?'<span class="si-read-only-banner">READ ONLY</span>':""}<span class="so-date-label">OUTWARD DATE</span><time>${esc(formatDate(doc.business_date))}</time></section>
           <section class="si-context-grid so-context-grid" aria-label="Stock Outward details"><label>OUTWARD DATE<input id="soDate" type="date" min="${esc(documentData.currentBusinessDate||doc.business_date)}" max="${esc(documentData.currentBusinessDate||doc.business_date)}" value="${esc(doc.business_date)}" ${locked?"disabled":""}></label><label>REASON<select id="soReason" required ${locked?"disabled":""}><option value="">Select reason</option>${Object.entries(REASON_LABELS).map(([value,label])=>`<option value="${value}" ${doc.reason===value?"selected":""}>${label}</option>`).join("")}</select></label><label class="so-remarks-field">REMARKS<input id="soRemarks" type="text" maxlength="2000" value="${esc(doc.remarks||"")}" placeholder="Optional remarks" ${locked?"disabled":""}></label></section>
@@ -203,6 +228,7 @@
         el("soActions").innerHTML=readOnly?`<button type="button" class="klbs-cancel-btn" id="soBackHistory">BACK TO HISTORY</button>${doc.status==="COMPLETE"?'<button type="button" class="print-btn" id="soReprint">🖨 Reprint</button>':""}`:reviewOpen?'<button type="button" class="klbs-cancel-btn" id="soEdit">BACK TO EDIT</button><button type="button" class="klbs-primary-btn" id="soPost">POST STOCK OUTWARD</button>':'<button type="button" class="klbs-cancel-btn" id="soCancel">CANCEL</button><button type="button" class="klbs-cancel-btn" id="soSave">SAVE DRAFT</button><button type="button" class="klbs-primary-btn so-review-btn" id="soReview" disabled aria-disabled="true">REVIEW &amp; POST</button>';
         el("soBackHistory")?.addEventListener("click",()=>showHome("soHistorySearch"));el("soReprint")?.addEventListener("click",()=>printDocument(doc.id));el("soEdit")?.addEventListener("click",()=>{reviewOpen=false;renderDocument();});
         el("soCancel")?.addEventListener("click",()=>cancelDraft(doc.id));el("soSave")?.addEventListener("click",saveDraft);el("soReview")?.addEventListener("click",openReview);el("soPost")?.addEventListener("click",postDocument);
+        el("soWorkspace").querySelectorAll("[data-mrp]").forEach(button=>button.addEventListener("click",()=>openMrpAllocationDrawer(lines.find(line=>Number(line.id)===Number(button.dataset.mrp)))));
         if(!locked){
             el("soDate").addEventListener("input",()=>{dirty=true;contextReady=false;contextRevision++;syncScannerGate();syncReviewGate();});
             el("soReason").addEventListener("input",()=>{dirty=true;contextReady=false;contextRevision++;syncScannerGate();syncReviewGate();});

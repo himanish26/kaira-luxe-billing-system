@@ -100,6 +100,13 @@ function makeDb() { return new Promise((resolve, reject) => { const db = new sql
     assert(diagnosticEvents.some(event => event.operation === "PUSH_START" && event.metadata.targetType === "GATEWAY"));
     assert(diagnosticEvents.some(event => event.operation === "SNAPSHOT_START" && event.metadata.targetType === "WEB_APP"));
     assert(!JSON.stringify(diagnosticEvents).includes("fictional-installation-secret"));
+    const immediateDayClose = { snapshot: { businessDate: "2026-09-26", closeSequence: 2, closedAt: snapshot.generated_at, netSalesAfterReturns: 450 } };
+    const callsBeforeImmediateClose = calls;
+    await service.queueDayClosed(immediateDayClose);
+    const immediateDelivery = await service.deliverDayClosedNow(immediateDayClose);
+    assert.strictEqual(immediateDelivery.status, "ACCEPTED", "Day Closed notification should be attempted immediately from the closing sequence");
+    assert.strictEqual(calls, callsBeforeImmediateClose + 1, "immediate Day Closed delivery should not wait for the background polling interval");
+    assert.strictEqual(requests[4].envelope.body.event_type, "DAY_CLOSED");
     const snapshotEnvelope = requests[3].envelope;
     const canonical = service._test.stableJson(snapshotEnvelope.body);
     const digest = crypto.createHash("sha256").update(canonical, "utf8").digest("hex");

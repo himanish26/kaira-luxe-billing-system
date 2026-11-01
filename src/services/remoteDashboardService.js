@@ -41,6 +41,7 @@ function createRemoteDashboardService(options = {}) {
     let drainInFlight = null;
     let snapshotInFlight = null;
     let timer = null;
+    const activeEventDeliveries = new Map();
 
     function config() {
         try {
@@ -210,6 +211,28 @@ function createRemoteDashboardService(options = {}) {
         log("retry", { eventType: row.event_type, delaySeconds });
         return false;
     }
+    function processOneOnce(row) {
+        if (activeEventDeliveries.has(row.id)) return activeEventDeliveries.get(row.id);
+        const delivery = processOne(row).finally(() => activeEventDeliveries.delete(row.id));
+        activeEventDeliveries.set(row.id, delivery);
+        return delivery;
+    }
+    async function deliverDayClosedNow(result) {
+        await queueDayClosed(result);
+        const snapshot = result && result.snapshot;
+        if (!snapshot) throw new Error("Closed Day Closing snapshot is unavailable.");
+        const key = eventKey("DAY_CLOSED", `day:${snapshot.businessDate}:${snapshot.closeSequence}`);
+        const row = await get("SELECT * FROM remote_dashboard_outbox WHERE idempotency_key = ?", [key]);
+        if (!row) throw new Error("Queued Day Closed notification is unavailable.");
+        if (row.status === "ACCEPTED" || row.status === "PERMANENT_FAILURE") return { status: row.status };
+        const nextAttemptAt = row.next_attempt_at ? Date.parse(row.next_attempt_at) : NaN;
+        if (row.status === "RETRYABLE_FAILURE" && Number.isFinite(nextAttemptAt) && nextAttemptAt > now().getTime()) {
+            return { status: row.status, retryScheduled: true };
+        }
+        await processOneOnce(row);
+        const delivered = await get("SELECT status, last_error FROM remote_dashboard_outbox WHERE id = ?", [row.id]);
+        return { status: delivered && delivered.status || "UNAVAILABLE", lastError: delivered && delivered.last_error || null };
+    }
     async function drain(options = {}) {
         if (drainInFlight) return drainInFlight;
         const force = options.force === true;
@@ -224,7 +247,7 @@ function createRemoteDashboardService(options = {}) {
                     WHERE status IN ('PENDING','RETRYABLE_FAILURE') AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
                     ORDER BY id LIMIT 10`, [current]);
             if (force && rows.length) log("manual-retry", { pendingEvents: rows.length });
-            for (const row of rows) await processOne(row);
+            for (const row of rows) await processOneOnce(row);
         })().catch(error => log("failed", { classification: String(error.message || "").slice(0, 200) })).finally(() => { drainInFlight = null; });
         return drainInFlight;
     }
@@ -303,7 +326,7 @@ function createRemoteDashboardService(options = {}) {
         return startup;
     }
     function stop() { if (timer) clearInterval(timer); timer = null; }
-    return { buildSnapshot: () => buildRemoteDashboardSnapshot({ database, now, sessionStartedAt, getStatus: options.getStatus }), queueBillSaved, queueStarted, queueDayClosed, start, stop, drain, syncSnapshot, testConnection, listOutbox: () => all("SELECT * FROM remote_dashboard_outbox ORDER BY id"), _test: { signedEnvelope, classify, isContentService404, retryableSnapshotError, sessionStartedAt, sessionId, stableJson } };
+    return { buildSnapshot: () => buildRemoteDashboardSnapshot({ database, now, sessionStartedAt, getStatus: options.getStatus }), queueBillSaved, queueStarted, queueDayClosed, deliverDayClosedNow, start, stop, drain, syncSnapshot, testConnection, listOutbox: () => all("SELECT * FROM remote_dashboard_outbox ORDER BY id"), _test: { signedEnvelope, classify, isContentService404, retryableSnapshotError, sessionStartedAt, sessionId, stableJson } };
 }
 
 module.exports = { createRemoteDashboardService, EVENT_CONTRACT_ID, IDENTITY, EVENT_TIMEOUT_MS, SNAPSHOT_TIMEOUT_MS, SNAPSHOT_MAX_ATTEMPTS, SNAPSHOT_RETRY_DELAY_MS, stableJson };

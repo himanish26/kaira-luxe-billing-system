@@ -116,14 +116,18 @@ function statusOfCost(row, warnings, type) {
     const status = row.cost_basis_status;
     if (status === "CAPTURED") {
         const unitCost = Number(row.unit_cost_paise);
-        const valid = row.unit_cost_paise != null && Number.isSafeInteger(unitCost) && unitCost >= 0 && Boolean(String(row.cost_source || "").trim()) &&
-            String(row.cost_method || "").trim() === "SALE_TIME_COST_PRICE_PAISE";
+        const dynamicCost = String(row.cost_method || "").trim() === "DYNAMIC_MRP_FIFO_LAYER_PAISE";
+        const valid = (dynamicCost
+                ? row.cost_total_paise != null && Number.isSafeInteger(Number(row.cost_total_paise)) && Number(row.cost_total_paise) >= 0
+                : row.unit_cost_paise != null && Number.isSafeInteger(unitCost) && unitCost >= 0) &&
+            Boolean(String(row.cost_source || "").trim()) &&
+            (dynamicCost || String(row.cost_method || "").trim() === "SALE_TIME_COST_PRICE_PAISE");
         if (valid) return "CAPTURED";
         addWarning(warnings, "COST_SNAPSHOT_INCONSISTENT", "ERROR", `A ${type} line marked CAPTURED has an incomplete or invalid immutable cost snapshot.`, 1);
         return "CONTRADICTORY";
     }
     if (status === "UNKNOWN" || status === "NOT_APPLICABLE") {
-        if (row.unit_cost_paise == null && row.cost_source == null && row.cost_method == null) return status;
+        if (row.unit_cost_paise == null && row.cost_total_paise == null && row.cost_source == null && row.cost_method == null) return status;
         addWarning(warnings, "COST_SNAPSHOT_INCONSISTENT", "ERROR", `A ${type} line marked ${status} contains cost values that should be absent.`, 1);
         return "CONTRADICTORY";
     }
@@ -199,7 +203,7 @@ function createManagementPnlService(database, options = {}) {
             SELECT b.id AS bill_id, b.bill_no, b.bill_date, b.payment_status,
                    bi.id AS bill_item_id, bi.qty, bi.business_segment,
                    bi.gross_amount, bi.discount_amount, bi.taxable_amount, bi.gst_amount, bi.net_amount,
-                   bi.unit_cost_paise, bi.cost_basis_status, bi.cost_source, bi.cost_method
+                   bi.unit_cost_paise, bi.cost_total_paise, bi.cost_basis_status, bi.cost_source, bi.cost_method
             FROM bills b
             JOIN bill_items bi ON bi.bill_no = b.bill_no
             WHERE b.bill_date >= ? AND b.bill_date <= ?
@@ -397,8 +401,17 @@ function createManagementPnlService(database, options = {}) {
                 if (result.missing || result.invalid) returnRevenueAvailable = false;
             }
             const status = row.return_cost_basis_status;
-            let validStatus = status === row.original_cost_basis_status && ["CAPTURED", "UNKNOWN", "NOT_APPLICABLE"].includes(status);
-            if (validStatus && status === "CAPTURED") {
+            const dynamicReturn=String(row.original_cost_method||"")==="DYNAMIC_MRP_FIFO_LAYER_PAISE";
+            let validStatus = (dynamicReturn || status === row.original_cost_basis_status) && ["CAPTURED", "UNKNOWN", "NOT_APPLICABLE"].includes(status);
+            if(dynamicReturn&&status==="CAPTURED"){
+                validStatus=row.return_cost_method==="DYNAMIC_MRP_MANAGER_SELECTED"&&row.return_cost_source==="DYNAMIC_MRP_MANAGER"&&
+                    Number(row.dynamic_return_allocated_quantity)===Number(row.returned_quantity)&&Number(row.dynamic_return_unknown_quantity)===0&&
+                    Number(row.return_cost_paise)===Number(row.dynamic_return_layer_cost_paise)&&Number(row.returned_quantity)>0;
+            } else if(dynamicReturn&&status==="UNKNOWN"){
+                validStatus=row.return_unit_cost_paise==null&&row.return_cost_paise==null&&row.return_cost_source==null&&row.return_cost_method==null&&
+                    Number(row.dynamic_return_allocated_quantity)===Number(row.returned_quantity)&&Number(row.dynamic_return_unknown_quantity)>0;
+            }
+            if (!dynamicReturn && validStatus && status === "CAPTURED") {
                 validStatus = row.original_unit_cost_paise != null && Number.isSafeInteger(Number(row.original_unit_cost_paise)) && Number(row.original_unit_cost_paise) >= 0 &&
                     row.return_unit_cost_paise != null && row.return_cost_paise != null &&
                     Number.isSafeInteger(Number(row.return_unit_cost_paise)) &&
@@ -414,7 +427,7 @@ function createManagementPnlService(database, options = {}) {
                     row.return_cost_source === row.original_cost_source &&
                     row.original_cost_method === "SALE_TIME_COST_PRICE_PAISE";
             }
-            if (validStatus && status !== "CAPTURED") {
+            if (!dynamicReturn && validStatus && status !== "CAPTURED") {
                 validStatus = row.return_unit_cost_paise == null && row.return_cost_paise == null &&
                     row.return_cost_source == null && row.return_cost_method == null &&
                     row.original_unit_cost_paise == null && row.original_cost_source == null && row.original_cost_method == null;
@@ -466,7 +479,7 @@ function createManagementPnlService(database, options = {}) {
             if (taxable === null) { revenue.available = false; continue; }
             if (status === "CAPTURED") {
                 const quantity = Number(row.qty);
-                const cost = Number(row.unit_cost_paise) * quantity;
+                const cost = row.cost_total_paise == null ? Number(row.unit_cost_paise) * quantity : Number(row.cost_total_paise);
                 if (!Number.isInteger(quantity) || quantity <= 0 || !Number.isSafeInteger(cost)) {
                     costContradictions += 1;
                     addWarning(warnings, "SALE_COGS_INCONSISTENT", "ERROR", "A captured sale line has invalid quantity or exceeds safe integer-paise cost limits.", 1);

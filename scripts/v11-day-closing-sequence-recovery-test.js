@@ -34,7 +34,7 @@ async function fixture() {
         backup_reference TEXT, email_status TEXT, updated_at TEXT)`);
     await run(db, "INSERT INTO day_closing_snapshots VALUES (1,'2026-10-01',1,'CLOSED','SUCCESS','fixture.zip','PENDING',NULL)");
     const payload = buildConsolidatedPayload({
-        metadata: { businessDate: "2026-10-01", closingId: "1", closeSequence: "1", closedAt: "2026-10-01T06:00:00.000Z", klbsVersion: "2.0.0" },
+        metadata: { businessDate: "2026-10-01", closingId: "1", closeSequence: "1", closedAt: "2026-10-01T06:00:00.000Z", klbsVersion: "2.1.0" },
         overall: { cashPaise: "0", upiPaise: "0", cardPaise: "0", storeCreditRedeemedPaise: "0",
             giftVoucherRedeemedPaise: "0", backupStatus: "SUCCESS", emailStatus: "PENDING" }, bills: []
     });

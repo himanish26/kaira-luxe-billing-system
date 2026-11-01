@@ -16,6 +16,13 @@
 .klbs-drawer-open .klbs-drawer-exit:focus-visible,.klbs-drawer-closing .klbs-drawer-exit:focus-visible { outline:3px solid rgba(139,0,75,.28); outline-offset:2px; }
 .klbs-drawer-overlay.klbs-drawer-open .klbs-drawer-body,.klbs-drawer-overlay.klbs-drawer-closing .klbs-drawer-body { min-height:0; flex:1 1 auto; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:18px 24px 28px; }
 .klbs-drawer-footer[hidden] { display:none!important; }
+.dynamic-mrp-choice-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-top:22px; }
+.dynamic-mrp-choice { display:flex; min-height:96px; flex-direction:column; align-items:flex-start; justify-content:center; gap:8px; padding:18px 22px; border:2px solid #eadfe4; border-radius:12px; background:#fff; color:#30252b; cursor:pointer; text-align:left; }
+.dynamic-mrp-choice:hover,.dynamic-mrp-choice:focus-visible { border-color:var(--primary-dark); outline:3px solid rgba(139,0,75,.16); }
+.dynamic-mrp-choice strong { font-size:26px; }
+.dynamic-mrp-choice span { font-size:17px; }
+.dynamic-return-cost-row { display:flex; min-height:54px; align-items:center; justify-content:space-between; gap:14px; border-bottom:1px solid #eadfe4; }
+.dynamic-return-cost-row input { width:100px; min-height:40px; padding:6px; border:1px solid #cfc4ca; border-radius:6px; font-size:16px; }
 .klbs-drawer-overlay.klbs-drawer-open .klbs-drawer-footer,.klbs-drawer-overlay.klbs-drawer-closing .klbs-drawer-footer { position:relative; z-index:2; display:flex; flex:0 0 auto; justify-content:flex-end; align-items:center; gap:10px; min-height:68px; padding:10px 24px; border-top:1px solid #eadfe4; background:#fff; }
 @media(max-width:1000px) { .klbs-drawer-overlay.klbs-drawer-open .klbs-drawer-panel,.klbs-drawer-overlay.klbs-drawer-closing .klbs-drawer-panel { width:min(720px,76vw); } }
 @media(max-width:700px) { .klbs-drawer-overlay.klbs-drawer-open .klbs-drawer-panel,.klbs-drawer-overlay.klbs-drawer-closing .klbs-drawer-panel { width:100vw; border-radius:0; } .klbs-drawer-overlay.klbs-drawer-open .klbs-drawer-header,.klbs-drawer-overlay.klbs-drawer-closing .klbs-drawer-header { padding:9px 16px; } .klbs-drawer-overlay.klbs-drawer-open .klbs-drawer-body,.klbs-drawer-overlay.klbs-drawer-closing .klbs-drawer-body { padding:16px 16px 26px; } }

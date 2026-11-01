@@ -26,6 +26,9 @@
     .item-meta { display: flex; justify-content: space-between; gap: 5px; }
     .item-meta span { min-width: 0; overflow-wrap: anywhere; }
     .item-meta strong { flex: 0 0 auto; }
+    .mrp-status { margin-top: 3px; font-size: 10px; font-weight: 800; overflow-wrap: anywhere; }
+    .mrp-status.changed { border: 1px solid #000; padding: 3px; text-align: center; }
+    .mrp-note { margin-top: 2px; font-size: 9px; overflow-wrap: anywhere; }
     .summary { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; }
     .summary b { text-align: right; }
     .state { margin-top: 6px; padding: 4px 2px; border-top: 1px solid #000; border-bottom: 1px solid #000; text-align: center; font-weight: 700; overflow-wrap: anywhere; }
@@ -59,7 +62,7 @@
           <div><b>INVOICE DATE</b>${esc(data.invoiceDate)}</div>
         </section>
         <div class="rule"></div><h2>${immediate?"ITEMS POSTED NOW":"ITEMS POSTED"}</h2>
-        ${items.map(item => `<article class="item"><div class="item-name">${esc(item.product)}</div><div class="sku">${esc(item.sku)}</div><div class="barcode">${esc(item.barcode)}</div><div class="item-meta"><span>${esc(item.colour)} · ${esc(item.size)}</span><strong>QTY: ${esc(item.quantity)}</strong></div></article>`).join("") || `<div>No items posted in this operation.</div>`}
+        ${items.map(item => `<article class="item"><div class="item-name">${esc(item.product)}</div><div class="sku">${esc(item.sku)}</div><div class="barcode">${esc(item.barcode)}</div><div class="item-meta"><span>${esc(item.colour)} · ${esc(item.size)}</span><strong>QTY: ${esc(item.quantity)}</strong></div>${item.mrpStatus?`<div class="mrp-status ${String(item.mrpStatus).startsWith("MRP CHANGE")?"changed":""}">${esc(item.mrpStatus)}</div><div class="mrp-note">Inward MRP is the printed MRP assigned to this received stock.</div>`:""}</article>`).join("") || `<div>No items posted in this operation.</div>`}
         <div class="rule"></div><h2>SUMMARY</h2>
         <section class="summary">
           ${immediate?`<span>SKUs POSTED NOW</span><b>${esc(data.postedNowSkuCount)}</b><span>POSTED NOW</span><b>${esc(data.postedNowQuantity)}</b>`:`<span>TOTAL SKUs POSTED</span><b>${esc(data.totalPostedSkuCount)}</b>`}

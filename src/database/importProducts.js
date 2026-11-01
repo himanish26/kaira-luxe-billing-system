@@ -309,7 +309,7 @@ function importProductsAttempt(filePath) {
             db.serialize(() => {
 
                 db.run(
-                    "BEGIN TRANSACTION",
+                    "BEGIN IMMEDIATE TRANSACTION",
                     (beginError) => {
 
                         if (beginError) {
@@ -586,6 +586,35 @@ function importProductsAttempt(filePath) {
                            PROCESS EACH PRODUCT
                         =========================================== */
 
+                        db.all(
+                            "SELECT sku FROM products WHERE sku IS NOT NULL AND TRIM(sku) <> ''",
+                            [],
+                            (skuError, existingSkus) => {
+                                if (skuError) {
+                                    failImport(skuError);
+                                    return;
+                                }
+
+                                const usedSkus = new Set((existingSkus || []).map(row => String(row.sku).trim()));
+                                for (const product of products) {
+                                    const suppliedSku = String(product.sku || "").trim();
+                                    if (suppliedSku) usedSkus.add(suppliedSku);
+                                }
+                                const latestSequence = (existingSkus || []).reduce((max, row) => {
+                                    const match = /^KL(\d+)$/i.exec(String(row.sku || "").trim());
+                                    return match ? Math.max(max, Number(match[1])) : max;
+                                }, 0);
+                                let nextSkuSequence = latestSequence;
+                                function allocateSku() {
+                                    let candidate;
+                                    do {
+                                        nextSkuSequence += 1;
+                                        candidate = `KL${String(nextSkuSequence).padStart(6, "0")}`;
+                                    } while (usedSkus.has(candidate));
+                                    usedSkus.add(candidate);
+                                    return candidate;
+                                }
+
                         products.forEach(
                             (product) => {
 
@@ -661,7 +690,8 @@ function importProductsAttempt(filePath) {
                                 db.get(
                                     `
                                     SELECT
-                                        id
+                                        id,
+                                        sku
                                     FROM products
                                     WHERE barcode = ?
                                     `,
@@ -697,6 +727,9 @@ function importProductsAttempt(filePath) {
                                         if (
                                             !existingProduct
                                         ) {
+
+                                            const sku = String(product.sku || "").trim() || allocateSku();
+                                            usedSkus.add(sku);
 
                                             db.run(
                                                 `
@@ -735,7 +768,7 @@ function importProductsAttempt(filePath) {
                                                 [
                                                     barcode,
 
-                                                    product.sku,
+                                                    sku,
 
                                                     product.brand,
 
@@ -845,77 +878,35 @@ function importProductsAttempt(filePath) {
                                                        Master import.
                                                     ======================= */
 
-                                                    db.run(
-                                                        `
-                                                        INSERT INTO
-                                                        inventory_transactions
-                                                        (
-                                                            product_id,
-                                                            barcode,
-                                                            transaction_type,
-                                                            quantity,
-                                                            reference_type,
-                                                            reference_id,
-                                                            remarks,
-                                                            created_by,
-                                                            created_at
-                                                        )
-                                                        VALUES
-                                                        (
-                                                            ?,
-                                                            ?,
-                                                            'OPENING',
-                                                            ?,
-                                                            'PRODUCT_IMPORT',
-                                                            ?,
-                                                            ?,
-                                                            'Administrator',
-                                                            ?
-                                                        )
-                                                        `,
-                                                        [
-                                                            productId,
-
-                                                            barcode,
-
-                                                            safeOpeningStock,
-
-                                                            path.basename(
-                                                                filePath
-                                                            ),
-
-                                                            "Initial opening stock from Product Master import",
-
-                                                            now
-                                                        ],
-
-                                                        (
-                                                            stockError
-                                                        ) => {
-
-                                                            if (
-                                                                stockError
-                                                            ) {
-
-                                                                failImport(
-                                                                    stockError
-                                                                );
-
-                                                                return;
-
-                                                            }
-
-
+                                                    const createOpeningTransaction = (bucketId = null) => {
+                                                        const columns = ["product_id", "barcode", "transaction_type", "quantity", "reference_type", "reference_id", "remarks", "created_by", "created_at"];
+                                                        const values = [productId, barcode, "OPENING", safeOpeningStock, "PRODUCT_IMPORT", path.basename(filePath), "Initial opening stock from Product Master import", "Administrator", now];
+                                                        if (bucketId) { columns.push("mrp_bucket_id"); values.push(bucketId); }
+                                                        const placeholders = values.map(() => "?").join(",");
+                                                        db.run(`INSERT INTO inventory_transactions(${columns.join(",")}) VALUES(${placeholders})`, values, stockError => {
+                                                            if (stockError) { failImport(stockError); return; }
                                                             openingTransactionsCreated++;
-
-                                                            openingQuantityCreated +=
-                                                                safeOpeningStock;
-
-
+                                                            openingQuantityCreated += safeOpeningStock;
                                                             finishNewProduct();
+                                                        });
+                                                    };
 
-                                                        }
-                                                    );
+                                                    const openingMrpPaise = Math.round((Number(product.mrp) + Number.EPSILON) * 100);
+                                                    if (Number(product.variable_value) === 1 || !Number.isSafeInteger(openingMrpPaise) || openingMrpPaise <= 0) {
+                                                        createOpeningTransaction();
+                                                        return;
+                                                    }
+                                                    const createdAt = new Date(now).toISOString();
+                                                    db.run(`INSERT INTO product_mrp_buckets(product_id,mrp_paise,status,source,created_by,created_at)
+                                                        VALUES(?,?,'ACTIVE','LEGACY_VERIFIED','PRODUCT_MASTER_IMPORT',?)`, [productId, openingMrpPaise, createdAt], function(bucketError) {
+                                                        if (bucketError) { failImport(bucketError); return; }
+                                                        const bucketId = this.lastID;
+                                                        db.run(`INSERT INTO stock_receipt_layers(bucket_id,quantity_received,unit_cost_paise,cost_basis_status,cost_source,received_at,created_by)
+                                                            VALUES(?,?,NULL,'UNKNOWN',NULL,?,'PRODUCT_MASTER_IMPORT')`, [bucketId, safeOpeningStock, createdAt], layerError => {
+                                                            if (layerError) { failImport(layerError); return; }
+                                                            createOpeningTransaction(bucketId);
+                                                        });
+                                                    });
 
                                                 }
                                             );
@@ -941,6 +932,11 @@ function importProductsAttempt(filePath) {
                                            Inventory ledger is the
                                            permanent source of truth.
                                         =================================== */
+
+                                        const sku = String(product.sku || "").trim() ||
+                                            String(existingProduct.sku || "").trim() ||
+                                            allocateSku();
+                                        usedSkus.add(sku);
 
                                         db.run(
                                             `
@@ -995,7 +991,7 @@ function importProductsAttempt(filePath) {
                                             WHERE barcode = ?
                                             `,
                                             [
-                                                product.sku,
+                                                sku,
 
                                                 product.brand,
 
@@ -1076,6 +1072,8 @@ function importProductsAttempt(filePath) {
                                     }
                                 );
 
+                            }
+                        );
                             }
                         );
 

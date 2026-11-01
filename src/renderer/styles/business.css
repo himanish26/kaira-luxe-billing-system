@@ -554,6 +554,28 @@
 .supplier-relationship-list-heading { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,.9fr) minmax(88px,auto); gap:8px; padding:0 4px 5px; color:#756b72; font-size:11px; font-weight:800; }
 .supplier-business-relationships>#supplierRelationshipAddBtn { margin-top:9px; }
 .supplier-business-relationships>h3,.supplier-relationship-editor>h4 { margin:0 0 10px; color:var(--primary); font-size:15px; }
+.supplier-invoice-layout-settings { margin-top:16px; padding:14px; border:1px solid #eadfe4; border-left:5px solid var(--primary); border-radius:10px; background:#fff; }
+.supplier-invoice-layout-settings>h3 { margin:0 0 7px; color:var(--primary); font-size:16px; }
+.supplier-invoice-layout-settings>p { margin:0 0 11px; color:#68636a; }
+.supplier-invoice-layout-tabs { display:flex; align-items:flex-end; gap:6px; overflow-x:auto; padding:4px 2px 0; border-bottom:1px solid #eadfe4; scrollbar-width:thin; }
+.supplier-invoice-layout-tab-wrap { display:flex; flex:0 0 auto; align-items:center; gap:2px; padding:3px 4px 3px 10px; border:1px solid #eadfe4; border-bottom:0; border-radius:9px 9px 0 0; background:#f8f5f7; cursor:grab; }
+.supplier-invoice-layout-tab-wrap:active { cursor:grabbing; }
+.supplier-invoice-layout-tab-wrap.is-dragging { opacity:.45; }
+.supplier-invoice-layout-tab-wrap.is-drop-target { outline:2px dashed var(--primary); outline-offset:2px; }
+.supplier-invoice-layout-tab { border:0; padding:8px 7px; background:transparent; color:#51464e; font-weight:700; white-space:nowrap; cursor:pointer; }
+.supplier-invoice-layout-tab[aria-selected="true"] { color:#fff; background:var(--primary); border-radius:6px 6px 0 0; }
+.supplier-invoice-layout-tab-remove { width:25px; height:25px; border:0; border-radius:50%; background:transparent; color:#716a72; font-size:20px; line-height:1; cursor:pointer; }
+.supplier-invoice-layout-tab-remove:hover { background:#f1dfe8; color:#8b004d; }
+.supplier-invoice-layout-add-tab { flex:0 0 auto; margin:0 0 4px 3px; padding:8px 12px; border:1px dashed #b97999; border-radius:8px; background:#fff; color:#8b004d; font-weight:700; cursor:pointer; }
+.supplier-invoice-layout-details { display:grid; gap:8px; min-height:76px; padding:14px; border:1px solid #eadfe4; border-top:0; border-radius:0 0 9px 9px; background:#fff; }
+.supplier-invoice-layout-details>strong { color:#39343a; }
+.supplier-invoice-layout-details>p { margin:0; color:#68636a; }
+.supplier-invoice-layout-details details summary { color:#8b004d; cursor:pointer; font-weight:700; }
+.supplier-invoice-layout-details details p { margin:6px 0 0; overflow-wrap:anywhere; color:#68636a; }
+.supplier-invoice-layout-actions { display:flex; flex-wrap:wrap; gap:9px; margin-top:11px; }
+.supplier-invoice-layout-reset-note,.supplier-invoice-layout-empty { margin:9px 0 0 !important; color:#716a72; font-size:13px; }
+.supplier-invoice-layout-empty.is-error { color:#a4003d; }
+@media(max-width:700px) { .supplier-invoice-layout-actions { align-items:stretch; } .supplier-invoice-layout-actions button { width:100%; } }
 .supplier-relationship-empty { margin:0 0 8px; color:#756b72; font-size:13px; }
 .supplier-mapping-modal-overlay { position:fixed; z-index:12020; inset:0; display:grid; place-items:center; box-sizing:border-box; padding:24px; background:rgba(27,22,25,.48); }
 .supplier-mapping-modal-overlay[hidden] { display:none!important; }

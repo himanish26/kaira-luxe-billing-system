@@ -1,4 +1,4 @@
-const CURRENT_DB_SCHEMA_VERSION = 18;
+const CURRENT_DB_SCHEMA_VERSION = 28;
 const SCHEMA_METADATA_TABLE = "klbs_schema_metadata";
 const { migrateV5Foundation } = require("./v5FoundationMigration");
 const { migrateStoreIdentity } = require("./storeIdentityMigration");
@@ -12,6 +12,16 @@ const { migrateSupplierInvoiceCapture } = require("./supplierInvoiceCaptureMigra
 const { migrateStockInwardV14 } = require("./stockInwardMigration");
 const { migrateStockInwardArchiveV15 } = require("./stockInwardArchiveMigration");
 const { migrateStockOutwardCompletionV16 } = require("./stockOutwardCompletionMigrationV16");
+const { migrateDynamicMrpV19 } = require("./dynamicMrpMigrationV19");
+const { migrateStockInwardInvoiceV20 } = require("./stockInwardInvoiceMigrationV20");
+const { migrateStockInwardProductCaptureV21 } = require("./stockInwardProductCaptureMigrationV21");
+const { migrateSupplierInvoiceFormatProfilesV22 } = require("./supplierInvoiceFormatProfileMigrationV22");
+const { migrateSupplierInvoiceFormatProfilesV23 } = require("./supplierInvoiceFormatProfileMigrationV23");
+const { migrateSupplierInvoiceFormatProfilesV24 } = require("./supplierInvoiceFormatProfileMigrationV24");
+const { migrateStockInwardIncrementalPostingV25 } = require("./stockInwardIncrementalPostingMigrationV25");
+const { migrateDynamicMrpReceiptAuditV26 } = require("./dynamicMrpReceiptAuditMigrationV26");
+const { migrateDynamicMrpLegacyStockV27 } = require("./dynamicMrpLegacyStockMigrationV27");
+const { migrateDynamicMrpLegacyStockV28 } = require("./dynamicMrpLegacyStockMigrationV28");
 
 function run(database, sql, params = []) {
     return new Promise((resolve, reject) => {
@@ -265,12 +275,56 @@ async function validateCurrentSchema(database, currentVersion = CURRENT_DB_SCHEM
         }
     }
     if (currentVersion >= 17) requiredTables.push("customer_crm_outbox");
+    if (currentVersion >= 19) requiredTables.push("product_mrp_buckets", "product_mrp_reconciliation", "product_mrp_reconciliation_lines",
+        "stock_receipt_layers", "stock_movement_mrp_allocations", "stock_cost_allocation_batches", "stock_cost_allocations");
+    if (currentVersion >= 20) requiredTables.push("stock_movement_invoice_lines");
+    if (currentVersion >= 21) {
+        const invoiceLineColumns = new Set((await all(database, "PRAGMA table_info(stock_movement_invoice_lines)")).map(column => column.name));
+        for (const name of ["brand", "segment", "business_segment", "category", "season", "collection", "style_code", "discount",
+            "selling_price_paise", "gst_rate", "hsn_code", "reorder_level", "supplier", "active", "variable_value"]) {
+            if (!invoiceLineColumns.has(name)) throw new Error(`KLBS V21 readiness validation failed: stock_movement_invoice_lines.${name} is missing.`);
+        }
+    }
+    if (currentVersion >= 22) requiredTables.push("supplier_invoice_format_profiles");
     const rows = await all(database, `
         SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${requiredTables.map(() => "?").join(",")})
     `, requiredTables);
     const present = new Set(rows.map(row => row.name));
     const missing = requiredTables.filter(name => !present.has(name));
     if (missing.length) throw new Error(`KLBS database readiness validation failed: required schema missing (${missing.join(", ")}).`);
+    if (currentVersion >= 23 && !(await all(database, "PRAGMA table_info(supplier_invoice_format_profiles)")).some(column => column.name === "is_default")) {
+        throw new Error("KLBS V23 readiness validation failed: supplier invoice default-layout column is missing.");
+    }
+    if (currentVersion >= 24 && !(await all(database, "PRAGMA table_info(supplier_invoice_format_profiles)")).some(column => column.name === "sort_order")) {
+        throw new Error("KLBS V24 readiness validation failed: supplier invoice layout order column is missing.");
+    }
+    if (currentVersion >= 26) {
+        const allocationColumns = new Set((await all(database, "PRAGMA table_info(stock_movement_mrp_allocations)")).map(column => column.name));
+        if (!allocationColumns.has("reference_mrp_paise") || !allocationColumns.has("mrp_change_status")) {
+            throw new Error("KLBS V26 readiness validation failed: inward MRP comparison fields are missing.");
+        }
+    }
+    if (currentVersion >= 19) {
+        const [transactionColumns, billItemColumns, returnItemColumns] = await Promise.all([
+            all(database, "PRAGMA table_info(inventory_transactions)"),
+            all(database, "PRAGMA table_info(bill_items)"),
+            all(database, "PRAGMA table_info(return_items)")
+        ]);
+        if (!transactionColumns.some(column => column.name === "mrp_bucket_id") ||
+            !billItemColumns.some(column => column.name === "mrp_bucket_id") ||
+            !billItemColumns.some(column => column.name === "cost_total_paise") ||
+            !returnItemColumns.some(column => column.name === "mrp_bucket_id")) {
+            throw new Error("KLBS V19 readiness validation failed: MRP bucket references are missing.");
+        }
+        const criticalTriggers = ["trg_inventory_mrp_bucket_product_insert", "trg_stock_mrp_allocation_post_guard",
+            "trg_stock_receipt_layer_source_guard", "trg_mrp_reconciliation_pair_guard", "trg_stock_cost_batch_complete_guard",
+            "trg_mrp_bucket_price_immutable", "trg_bill_item_mrp_bucket_insert", "trg_return_item_mrp_bucket_insert",
+            "trg_return_inventory_mrp_bucket_insert", "trg_stock_cost_allocation_immutable_delete"];
+        const triggers = await all(database, `SELECT name FROM sqlite_master WHERE type='trigger' AND name IN (${criticalTriggers.map(() => "?").join(",")})`, criticalTriggers);
+        const triggerNames = new Set(triggers.map(trigger => trigger.name));
+        const missingTriggers = criticalTriggers.filter(name => !triggerNames.has(name));
+        if (missingTriggers.length) throw new Error(`KLBS V19 readiness validation failed: required Dynamic MRP safeguards missing (${missingTriggers.join(", ")}).`);
+    }
     return true;
 }
 
@@ -295,7 +349,17 @@ async function prepareDatabaseSchema({ database, runCurrentMigrations, logger = 
         { from: 14, to: 15, name: "v2_1_stock_inward_cancelled_archive", up: migrateStockInwardArchiveV15 },
         { from: 15, to: 16, name: "v2_1_stock_outward_document_lifecycle", up: migrateStockOutwardCompletionV16 },
         { from: 16, to: 17, name: "v2_1_customer_crm_outbox", up: migrateCustomerCrmOutbox },
-        { from: 17, to: 18, name: "v2_1_pin_permission_settings", up: migratePinPermissionSettings }
+        { from: 17, to: 18, name: "v2_1_pin_permission_settings", up: migratePinPermissionSettings },
+        { from: 18, to: 19, name: "v2_1_dynamic_mrp_foundation", up: migrateDynamicMrpV19 },
+        { from: 19, to: 20, name: "v2_1_stock_inward_invoice_workbook", up: migrateStockInwardInvoiceV20 },
+        { from: 20, to: 21, name: "v2_1_stock_inward_invoice_product_capture", up: migrateStockInwardProductCaptureV21 },
+        { from: 21, to: 22, name: "v2_1_supplier_invoice_format_profiles", up: migrateSupplierInvoiceFormatProfilesV22 },
+        { from: 22, to: 23, name: "v2_1_supplier_invoice_default_layout", up: migrateSupplierInvoiceFormatProfilesV23 },
+        { from: 23, to: 24, name: "v2_1_supplier_invoice_layout_order", up: migrateSupplierInvoiceFormatProfilesV24 },
+        { from: 24, to: 25, name: "v2_1_stock_inward_incremental_receipts", up: migrateStockInwardIncrementalPostingV25, foreignKeysOff: true },
+        { from: 25, to: 26, name: "v2_1_dynamic_mrp_receipt_audit", up: migrateDynamicMrpReceiptAuditV26 },
+        { from: 26, to: 27, name: "v2_1_dynamic_mrp_legacy_stock_assignment", up: migrateDynamicMrpLegacyStockV27 },
+        { from: 27, to: 28, name: "v2_1_dynamic_mrp_unallocated_stock_assignment", up: migrateDynamicMrpLegacyStockV28 }
     ];
     if (detectedVersion === null) {
         logger?.info("DATABASE", "Legacy KLBS database detected; schema metadata is absent");
@@ -378,6 +442,7 @@ module.exports = {
     migrateVariableValueBillingFoundation,
     migrateV5Foundation,
     migrateStockInwardArchiveV15,
+    migrateDynamicMrpV19,
     migrateStockOutwardCompletionV16,
     migratePinPermissionSettings,
     _test: { run, get, all }

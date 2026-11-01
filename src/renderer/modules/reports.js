@@ -68,12 +68,13 @@ const reports = {
         title: "Product Sales Report",
 
         description:
-            "Product-wise sales and inventory analysis.",
+            "Product-wise and supplier-wise sales, returns, and revenue analysis.",
 
         features: [
 
             "Product Sales",
             "Quantity Sold",
+            "Sales by Supplier",
             "Brand Summary",
             "Category Summary",
             "Revenue Analysis"
