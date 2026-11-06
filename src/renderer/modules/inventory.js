@@ -4,6 +4,35 @@ let inventoryPage = 1;
 let inventoryKeyword = "";
 let inventoryTotalCount = 0;
 let inventoryTotalPages = 1;
+let inventoryResetPending = false;
+
+function applyInventoryInitializationState(status) {
+
+    inventoryResetPending = status === "RESET_PENDING";
+
+    const importBtn = document.getElementById("importBtn");
+    const stats = document.querySelector(".master-stats");
+    const lastImportCard = document.getElementById("lastImportCard");
+    const emptyTitle = document.getElementById("inventoryEmptyTitle");
+    const emptyMessage = document.getElementById("inventoryEmptyMessage");
+
+    if (importBtn) {
+        importBtn.textContent = inventoryResetPending
+            ? "📥 Upload Fresh Inventory"
+            : "📥 Import Product Master";
+    }
+
+    if (stats) stats.style.display = inventoryResetPending ? "none" : "";
+    if (lastImportCard) lastImportCard.style.display = inventoryResetPending ? "none" : "";
+
+    if (emptyTitle) {
+        emptyTitle.textContent = "Inventory Empty";
+    }
+    if (emptyMessage) {
+        emptyMessage.textContent = "Import a Product Master to begin billing.";
+    }
+
+}
 
 /* ===========================================
    OPEN PRODUCT MASTER
@@ -57,6 +86,11 @@ window.showInventory = showInventory;
 
 async function loadLastImport() {
     try {
+        const summary = await window.electronAPI.getInventorySummary();
+        applyInventoryInitializationState(summary.opening_stock_status);
+
+        if (inventoryResetPending) return;
+
         const info =
             await window.electronAPI.getLastImport();
 
@@ -90,6 +124,8 @@ async function loadInventorySummary() {
 
     const summary =
         await window.electronAPI.getInventorySummary();
+
+    applyInventoryInitializationState(summary.opening_stock_status);
 
     document.getElementById("inventoryTotalQuantity").textContent =
         Number(summary.total_inventory || 0).toLocaleString("en-IN");
@@ -126,6 +162,20 @@ async function loadProducts() {
 
     const requestId =
         ++inventoryProductsRequestId;
+
+    const summary = await window.electronAPI.getInventorySummary();
+    applyInventoryInitializationState(summary.opening_stock_status);
+
+    if (requestId !== inventoryProductsRequestId) return;
+
+    if (inventoryResetPending) {
+        inventoryPage = 1;
+        inventoryTotalCount = 0;
+        inventoryTotalPages = 1;
+        renderInventoryProducts([]);
+        updateInventoryPagination();
+        return;
+    }
 
     const result =
         await window.electronAPI.getProducts({
@@ -349,7 +399,9 @@ Rows Read : ${result.total}`
     }
     finally {
         importBtn.disabled = false;
-        importBtn.textContent = "📥 Import Product Master";
+        importBtn.textContent = inventoryResetPending
+            ? "📥 Upload Fresh Inventory"
+            : "📥 Import Product Master";
     }
 
 }
@@ -444,11 +496,9 @@ async function startInventoryReset(grant){
         hideProcessingDialog();
 
         await alert(
-`Inventory Reset Successful
+`Current stock was cleared successfully.
 
-The Product Master has been reset successfully.
-
-Please import a Product Master Excel file before creating new bills.`
+Product, bill, and stock-movement history was preserved. Import the reconciled Product Master into this same KLBS database to set the new opening quantities before billing.`
     + (result.activityWarning ? `\n\nWarning: ${result.activityWarning}` : "")
 );
 

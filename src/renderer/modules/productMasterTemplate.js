@@ -75,7 +75,7 @@ window.productMasterTemplate = `
 
 </div>
 
-<div class="product-master-card">
+<div class="product-master-card" id="lastImportCard">
 
     <h2>Last Import</h2>
 
@@ -239,9 +239,9 @@ window.productMasterTemplate = `
 
     <div class="empty-icon">📦</div>
 
-    <h2>Inventory Empty</h2>
+    <h2 id="inventoryEmptyTitle">Inventory Empty</h2>
 
-    <p>Import a Product Master to begin billing.</p>
+    <p id="inventoryEmptyMessage">Import a Product Master to begin billing.</p>
 
 </div>
 
@@ -289,16 +289,12 @@ window.productMasterTemplate = `
     <h2>⚠️ DANGER ZONE</h2>
 
     <p>
-        This will permanently delete ALL products from the Product Master.
+        This clears current stock and marks the existing Product Master inactive. It does not delete products, bills, or stock movement history.
     </p>
     <p>
         <strong>
-            Bills, Bill History and Settings will NOT be affected.
+            Import the reconciled Product Master immediately afterward to establish the new opening stock in this same database.
         </strong>
-    </p>
-
-    <p>
-        A backup of the inventory will be created automatically before deletion.
     </p>
 
     <p class="danger-warning">
@@ -309,7 +305,7 @@ window.productMasterTemplate = `
         id="resetInventoryBtn"
         class="danger-btn">
 
-        🗑 RESET INVENTORY
+        🧹 RESET STOCK FOR NEW MASTER
 
     </button>
 

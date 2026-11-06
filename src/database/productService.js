@@ -79,7 +79,12 @@ function getInventorySummary() {
                             ON live_products.id = it.product_id
                     ),
                     0
-                ) AS total_inventory
+                ) AS total_inventory,
+                COALESCE((
+                    SELECT status FROM inventory_initialization
+                    WHERE initialization_type='OPENING_STOCK'
+                    LIMIT 1
+                ), 'NOT_INITIALIZED') AS opening_stock_status
             FROM products
             `,
             [],

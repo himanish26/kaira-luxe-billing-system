@@ -5860,14 +5860,40 @@ async function showDynamicMrpDrawer(product, choices) {
     overlay.style.display = "none";
     overlay.innerHTML = `<section class="klbs-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="dynamicMrpTitle" tabindex="-1">
         <header class="klbs-drawer-header"><h2 id="dynamicMrpTitle" class="klbs-drawer-title">SELECT PRINTED MRP</h2><button type="button" class="klbs-drawer-exit" data-mrp-close>EXIT</button></header>
-        <div class="klbs-drawer-body"><p>${escapeHtml(product.product_name || "Product")} · ${escapeHtml(product.barcode || "")}</p><div class="dynamic-mrp-choice-list">${choices.map(bucket => `<button type="button" class="dynamic-mrp-choice" data-bucket-id="${Number(bucket.id)}"><strong>₹${Number(bucket.mrp).toFixed(2)}</strong><span>${Number(bucket.availableToAdd)} available</span></button>`).join("")}</div></div>
-        <footer class="klbs-drawer-footer"><span>Choose the MRP printed on the item.</span></footer></section>`;
+        <div class="klbs-drawer-body dynamic-mrp-body">
+            <section class="dynamic-mrp-identity" aria-label="Product details">
+                <h3>${escapeHtml(product.product_name || "Product")}</h3>
+                <div class="dynamic-mrp-attributes">
+                    <span><small>Category</small><strong>${escapeHtml(product.category || "Not recorded")}</strong></span>
+                    <span><small>Size</small><strong>${escapeHtml(product.size || "Not recorded")}</strong></span>
+                    <span><small>Colour</small><strong>${escapeHtml(product.colour || "Not recorded")}</strong></span>
+                </div>
+                <p class="dynamic-mrp-barcode">Barcode · ${escapeHtml(product.barcode || "")}</p>
+            </section>
+            <section class="dynamic-mrp-options" aria-label="Printed MRP choices">
+                <div class="dynamic-mrp-options-heading">
+                    <h3>SELECT THE PRINTED MRP</h3>
+                    <p class="dynamic-mrp-instruction">Check the MRP printed on the item and choose the matching card.</p>
+                </div>
+                <div class="dynamic-mrp-choice-list">${choices.map(bucket => `<button type="button" class="dynamic-mrp-choice" data-bucket-id="${Number(bucket.id)}"><strong>₹${Number(bucket.mrp).toFixed(2)}</strong><span>${Number(bucket.availableToAdd)} available</span></button>`).join("")}</div>
+            </section>
+        </div></section>`;
     document.body.appendChild(overlay);
     const panel = overlay.querySelector(".klbs-drawer-panel");
     let selected = false;
     let settle;
     const result = new Promise(resolve => { settle = resolve; });
     const drawer = window.KLBSDrawer.create({ root: overlay, panel, labelledBy: "dynamicMrpTitle", initialFocus: () => overlay.querySelector("[data-bucket-id]"), exitButtons: [overlay.querySelector("[data-mrp-close]")], onExit: () => drawer.close(), onEscape: () => false, onClosed: () => { overlay.remove(); if (!selected) settle(null); } });
+    panel.addEventListener("keydown", event => {
+        if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(event.key)) return;
+        const buttons = [...panel.querySelectorAll(".dynamic-mrp-choice[data-bucket-id]")];
+        const currentIndex = buttons.indexOf(document.activeElement);
+        if (currentIndex < 0 || buttons.length < 2) return;
+        const step = ["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1;
+        event.preventDefault();
+        buttons[(currentIndex + step + buttons.length) % buttons.length].focus();
+    });
+
     overlay.querySelectorAll("[data-bucket-id]").forEach(button => button.addEventListener("click", () => {
         const bucket = choices.find(row => Number(row.id) === Number(button.dataset.bucketId));
         if (!bucket || selected) return;

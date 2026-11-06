@@ -12,7 +12,7 @@ const headers = [
     "Opening Stock", "Reorder Level", "Supplier", "Active", "Variable Value"
 ];
 
-function writeFixture(filePath, rows, fixtureHeaders = headers) {
+function writeFixture(filePath, rows, fixtureHeaders = headers, allocations = null) {
     const selectedRows = rows.map(row => Object.fromEntries(
         fixtureHeaders.filter(header => Object.prototype.hasOwnProperty.call(row, header))
             .map(header => [header, row[header]])
@@ -20,6 +20,11 @@ function writeFixture(filePath, rows, fixtureHeaders = headers) {
     const sheet = XLSX.utils.json_to_sheet(selectedRows, { header: fixtureHeaders });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, "Product Master");
+    if (allocations) {
+        const allocationHeaders = ["Barcode", "MRP", "Opening Qty", "Allocation Type"];
+        const allocationSheet = XLSX.utils.json_to_sheet(allocations, { header: allocationHeaders });
+        XLSX.utils.book_append_sheet(workbook, allocationSheet, "Opening MRP Stock");
+    }
     XLSX.writeFile(workbook, filePath);
 }
 
@@ -63,9 +68,9 @@ async function child(tempRoot) {
     const { importProducts } = require("../src/database/importProducts");
     const { getProductByBarcode } = require("../src/database/productService");
     let sequence = 0;
-    const importRows = async (rows) => {
+    const importRows = async (rows, allocations = null) => {
         const filePath = path.join(tempRoot, `fixture-${++sequence}.xlsx`);
-        writeFixture(filePath, rows);
+        writeFixture(filePath, rows, headers, allocations);
         return importProducts(filePath);
     };
     const productCount = async () => (await get(db, "SELECT COUNT(*) AS count FROM products")).count;
@@ -174,6 +179,63 @@ async function child(tempRoot) {
     assert.strictEqual(templateRows[0]["Variable Value"], "NO");
     assert(XLSX.utils.sheet_to_json(templateWorkbook.Sheets.Instructions, { header: 1 }).flat().some(value => String(value).includes("Variable Value") && String(value).includes("YES or NO")));
     assert(XLSX.utils.sheet_to_json(templateWorkbook.Sheets.Instructions, { header: 1 }).flat().some(value => String(value).includes("KLBS assigns the SKU during import")));
+    assert.deepStrictEqual(XLSX.utils.sheet_to_json(templateWorkbook.Sheets["Opening MRP Stock"], { header: 1 })[0], ["Barcode", "MRP", "Opening Qty", "Allocation Type"]);
+    assert(XLSX.utils.sheet_to_json(templateWorkbook.Sheets.Instructions, { header: 1 }).flat().some(value => String(value).includes("quantities must exactly equal Opening Stock")));
+
+    const multiMrpImport = await importRows([
+        baseRow("8909900030", { SKU: "", MRP: 150, "Selling Price": 135, "Opening Stock": 3 })
+    ], [
+        { Barcode: "8909900030", MRP: 100, "Opening Qty": 2, "Allocation Type": "ASSIGNED" },
+        { Barcode: "8909900030", MRP: 150, "Opening Qty": 1, "Allocation Type": "ASSIGNED" }
+    ]);
+    assert.strictEqual(multiMrpImport.success, true);
+    const multiMrpProduct = await getProductByBarcode("8909900030");
+    assert.match(multiMrpProduct.sku, /^KL\d{6}$/);
+    assert.strictEqual(multiMrpProduct.current_stock, 3);
+    assert.strictEqual(multiMrpProduct.gst_rate, 5);
+    assert.strictEqual(multiMrpProduct.discount, 10);
+    const multiMrpBalances = await new Promise((resolve, reject) => db.all(`
+        SELECT b.mrp_paise, SUM(t.quantity) AS quantity
+        FROM product_mrp_buckets b
+        JOIN inventory_transactions t ON t.mrp_bucket_id = b.id
+        WHERE b.product_id = ? AND t.transaction_type = 'OPENING'
+        GROUP BY b.id ORDER BY b.mrp_paise
+    `, [multiMrpProduct.id], (error, rows) => error ? reject(error) : resolve(rows)));
+    assert.deepStrictEqual(multiMrpBalances.map(row => [row.mrp_paise, row.quantity]), [[10000, 2], [15000, 1]]);
+
+    const partlyUnassigned = await importRows([
+        baseRow("8909900031", { MRP: 150, "Opening Stock": 3 })
+    ], [
+        { Barcode: "8909900031", MRP: 100, "Opening Qty": 2, "Allocation Type": "ASSIGNED" },
+        { Barcode: "8909900031", MRP: "", "Opening Qty": 1, "Allocation Type": "UNASSIGNED" }
+    ]);
+    assert.strictEqual(partlyUnassigned.success, true);
+    const unassignedProduct = await getProductByBarcode("8909900031");
+    const unassignedCount = await get(db, "SELECT COUNT(*) AS count FROM inventory_transactions WHERE product_id = ? AND transaction_type = 'OPENING' AND mrp_bucket_id IS NULL", [unassignedProduct.id]);
+    assert.strictEqual(unassignedProduct.current_stock, 3);
+    assert.strictEqual(unassignedCount.count, 1);
+
+    const beforeBadScheduleProducts = await productCount();
+    const beforeBadScheduleOpening = await openingCount();
+    const badSchedule = await importRows([
+        baseRow("8909900032", { "Opening Stock": 3 })
+    ], [
+        { Barcode: "8909900032", MRP: 100, "Opening Qty": 2, "Allocation Type": "ASSIGNED" }
+    ]);
+    assert.strictEqual(badSchedule.success, false);
+    assert.match(badSchedule.error, /quantities total 2, but Product Master Opening Stock is 3/);
+    assert.strictEqual(await productCount(), beforeBadScheduleProducts);
+    assert.strictEqual(await openingCount(), beforeBadScheduleOpening);
+
+    assert.strictEqual((await importRows([baseRow("8909900033", { "Opening Stock": 5 })])).success, true);
+    const beforeDuplicateSchedule = await productCount();
+    await assert.rejects(importRows([
+        baseRow("8909900033", { "Opening Stock": 5 })
+    ], [
+        { Barcode: "8909900033", MRP: 100, "Opening Qty": 5, "Allocation Type": "ASSIGNED" }
+    ]), /already exist in KLBS/);
+    assert.strictEqual(await productCount(), beforeDuplicateSchedule);
+    assert.strictEqual((await getProductByBarcode("8909900033")).current_stock, 5);
 
     const beforeAtomicProducts = await productCount();
     const beforeAtomicOpening = await openingCount();

@@ -225,6 +225,33 @@ sheet.addRow({
 
 
 /* ===========================================
+   OPTIONAL OPENING MRP STOCK SCHEDULE
+=========================================== */
+
+const openingMrpSheet = workbook.addWorksheet("Opening MRP Stock");
+openingMrpSheet.columns = [
+    { header: "Barcode", key: "barcode", width: 20 },
+    { header: "MRP", key: "mrp", width: 16 },
+    { header: "Opening Qty", key: "opening_qty", width: 16 },
+    { header: "Allocation Type", key: "allocation_type", width: 20 }
+];
+openingMrpSheet.getColumn("barcode").numFmt = "@";
+openingMrpSheet.getColumn("mrp").numFmt = "₹#,##0.00";
+openingMrpSheet.getColumn("opening_qty").numFmt = "0";
+for (let row = 2; row <= 1000; row += 1) {
+    openingMrpSheet.getCell(row, 4).dataValidation = {
+        type: "list",
+        allowBlank: false,
+        formulae: ['"ASSIGNED,UNASSIGNED"'],
+        showErrorMessage: true,
+        errorTitle: "Choose an allocation type",
+        error: "Select ASSIGNED or UNASSIGNED."
+    };
+}
+openingMrpSheet.views = [{ state: "frozen", ySplit: 1 }];
+
+
+/* ===========================================
    INSTRUCTIONS SHEET
 =========================================== */
 
@@ -332,6 +359,48 @@ instructions.addRow([
 
 instructions.addRow([
     "• Variable Value (optional): enter YES or NO; blank means NO."
+]);
+
+instructions.addRow([]);
+
+instructions.addRow([
+    "Multiple MRP opening stock (fresh inventory only)"
+]);
+
+instructions.addRow([
+    "• Keep one Product Master row for each barcode/SKU. Do not create duplicate product rows for different MRPs."
+]);
+
+instructions.addRow([
+    "• Use the optional Opening MRP Stock sheet only when a barcode has opening stock at more than one printed MRP, or when some opening units still need physical MRP confirmation."
+]);
+
+instructions.addRow([
+    "• Enter one row per barcode and printed MRP. Allocation Type must be ASSIGNED; enter that printed MRP and its quantity."
+]);
+
+instructions.addRow([
+    "• For stock that is not yet physically confirmed, use Allocation Type UNASSIGNED, leave MRP blank, and enter the quantity."
+]);
+
+instructions.addRow([
+    "• For each scheduled barcode, Opening MRP Stock quantities must exactly equal Opening Stock in Product Master. KLBS checks this before importing anything."
+]);
+
+instructions.addRow([
+    "• Example: barcode 8901000001 has 3 units: ASSIGNED MRP 100 qty 2, ASSIGNED MRP 150 qty 1. Set its Product Master Opening Stock to 3."
+]);
+
+instructions.addRow([
+    "• A scheduled barcode must not already exist in KLBS. Load this schedule only when creating a fresh inventory; it never adds opening stock to existing items."
+]);
+
+instructions.addRow([
+    "• The schedule records opening quantity by MRP. It does not change SKU, GST, discount, selling price, or any other product master setting."
+]);
+
+instructions.addRow([
+    "• If a barcode has one MRP, leave it off Opening MRP Stock and use the normal Product Master row. Existing single-MRP imports continue to work."
 ]);
 
 instructions.addRow([]);

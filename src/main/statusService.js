@@ -93,11 +93,21 @@ async function getProductInventoryStatus() {
             SELECT name
             FROM sqlite_master
             WHERE type = 'table'
-              AND name IN ('products', 'inventory_transactions')
+              AND name IN ('products', 'inventory_transactions', 'inventory_initialization')
         `);
         const names = new Set(rows.map(row => row.name));
         if (!names.has("products") || !names.has("inventory_transactions")) {
             return { healthy: false };
+        }
+        let freshInventoryRequired = false;
+        if (names.has("inventory_initialization")) {
+            const initializationRows = await all(`
+                SELECT status
+                FROM inventory_initialization
+                WHERE initialization_type = 'OPENING_STOCK'
+                LIMIT 1
+            `);
+            freshInventoryRequired = initializationRows[0]?.status === "RESET_PENDING";
         }
         await all(`
             SELECT p.id, COALESCE(SUM(it.quantity), 0) AS current_stock
@@ -107,7 +117,11 @@ async function getProductInventoryStatus() {
             LIMIT 1
         `);
         const countRows = await all("SELECT COUNT(*) AS product_count FROM products");
-        return { healthy: true, productCount: Number(countRows[0].product_count) };
+        return {
+            healthy: true,
+            productCount: Number(countRows[0].product_count),
+            freshInventoryRequired
+        };
     }
     catch (error) {
         return { healthy: false };
@@ -146,6 +160,10 @@ async function getStartupCheck(checkName, dependencies = {}) {
             const status = await getProductInventoryStatus();
             if (!status.healthy) {
                 return result("failed", "Product or inventory layer unavailable");
+            }
+            if (status.freshInventoryRequired) {
+                return result("warning", "Fresh inventory not uploaded",
+                    { productCount: status.productCount });
             }
             return status.productCount === 0
                 ? result("warning", "Inventory setup required",

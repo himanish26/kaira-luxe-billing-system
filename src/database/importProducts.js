@@ -31,6 +31,8 @@ const PRODUCT_MASTER_FIELDS = new Set([
     "gst_rate",
     "hsn_code",
     "opening_stock",
+    "opening_qty",
+    "allocation_type",
     "reorder_level",
     "supplier",
     "active",
@@ -78,10 +80,9 @@ function importProductsAttempt(filePath) {
             const workbook =
                 XLSX.readFile(filePath);
 
-            const sheet =
-                workbook.Sheets[
-                    workbook.SheetNames[0]
-                ];
+            const productMasterSheetName = workbook.SheetNames.find(name =>
+                normalizeProductMasterHeader(name) === "product_master") || workbook.SheetNames[0];
+            const sheet = workbook.Sheets[productMasterSheetName];
 
             const headerRow = XLSX.utils.sheet_to_json(sheet, {
                 header: 1,
@@ -93,13 +94,33 @@ function importProductsAttempt(filePath) {
 
             const products =
                 XLSX.utils
-                    .sheet_to_json(sheet)
+                    .sheet_to_json(sheet, { defval: "" })
                     .map((row, index) => {
                         const normalized = normalizeProductMasterRow(row);
                         normalized.__rowNumber = index + 2;
                         normalized.__variableValueHeaderPresent = hasVariableValueHeader;
                         return normalized;
                     });
+
+            const openingMrpSheetName = workbook.SheetNames.find(name =>
+                normalizeProductMasterHeader(name) === "opening_mrp_stock");
+            const openingMrpAllocations = [];
+            if (openingMrpSheetName) {
+                const allocationSheet = workbook.Sheets[openingMrpSheetName];
+                const allocationRows = XLSX.utils.sheet_to_json(allocationSheet, { defval: "" });
+                allocationRows.forEach((row, index) => {
+                    const normalized = normalizeProductMasterRow(row);
+                    const allocation = {
+                        barcode: String(normalized.barcode || "").trim(),
+                        mrp: normalized.mrp,
+                        quantity: normalized.opening_qty,
+                        type: String(normalized.allocation_type || "").trim().toUpperCase().replace(/[\s-]+/g, "_"),
+                        rowNumber: index + 2
+                    };
+                    if (!allocation.barcode && isAllocationRowBlank(row)) return;
+                    openingMrpAllocations.push(allocation);
+                });
+            }
 
 
             /* ===========================================
@@ -138,6 +159,10 @@ function importProductsAttempt(filePath) {
                 return value === undefined ||
                     value === null ||
                     String(value).trim() === "";
+            }
+
+            function isAllocationRowBlank(row) {
+                return Object.values(row || {}).every(value => value === undefined || value === null || String(value).trim() === "");
             }
 
             function validateNonNegativeNumber(value, field, rowNumber) {
@@ -264,6 +289,79 @@ function importProductsAttempt(filePath) {
 
             });
 
+            const productsByBarcode = new Map(products.map(product => [String(product.barcode || "").trim(), product]));
+            const allocationTotals = new Map();
+            const allocationGroups = new Map();
+            const allocationKeys = new Set();
+            openingMrpAllocations.forEach(allocation => {
+                const row = allocation.rowNumber;
+                if (!allocation.barcode) {
+                    validationErrors.push(`Opening MRP Stock row ${row}: Barcode is required.`);
+                    return;
+                }
+                const product = productsByBarcode.get(allocation.barcode);
+                if (!product) {
+                    validationErrors.push(`Opening MRP Stock row ${row}: barcode ${allocation.barcode} is not in the Product Master sheet.`);
+                    return;
+                }
+                const quantity = Number(allocation.quantity);
+                if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+                    validationErrors.push(`Opening MRP Stock row ${row}: Opening Qty must be a positive whole number.`);
+                    return;
+                }
+                if (!new Set(["ASSIGNED", "UNASSIGNED"]).has(allocation.type)) {
+                    validationErrors.push(`Opening MRP Stock row ${row}: Allocation Type must be ASSIGNED or UNASSIGNED.`);
+                    return;
+                }
+                let mrpPaise = null;
+                if (allocation.type === "ASSIGNED") {
+                    const mrp = Number(allocation.mrp);
+                    mrpPaise = Math.round((mrp + Number.EPSILON) * 100);
+                    if (!Number.isFinite(mrp) || mrp <= 0 || !Number.isSafeInteger(mrpPaise) || mrpPaise <= 0) {
+                        validationErrors.push(`Opening MRP Stock row ${row}: an ASSIGNED row needs a valid MRP greater than zero.`);
+                        return;
+                    }
+                } else if (!isBlank(allocation.mrp)) {
+                    validationErrors.push(`Opening MRP Stock row ${row}: leave MRP blank when Allocation Type is UNASSIGNED.`);
+                    return;
+                }
+                if (Number(product.variable_value) === 1) {
+                    validationErrors.push(`Opening MRP Stock row ${row}: variable-value products cannot have printed-MRP stock allocations.`);
+                    return;
+                }
+                const key = `${allocation.barcode}|${allocation.type}|${mrpPaise ?? ""}`;
+                if (allocationKeys.has(key)) {
+                    validationErrors.push(`Opening MRP Stock row ${row}: duplicate allocation for barcode ${allocation.barcode} and ${allocation.type === "ASSIGNED" ? `MRP ₹${(mrpPaise / 100).toFixed(2)}` : "UNASSIGNED stock"}. Combine the quantities in one row.`);
+                    return;
+                }
+                allocationKeys.add(key);
+                allocation.quantity = quantity;
+                allocation.mrpPaise = mrpPaise;
+                allocationTotals.set(allocation.barcode, (allocationTotals.get(allocation.barcode) || 0) + quantity);
+                if (!allocationGroups.has(allocation.barcode)) allocationGroups.set(allocation.barcode, []);
+                allocationGroups.get(allocation.barcode).push(allocation);
+            });
+
+            allocationTotals.forEach((total, barcode) => {
+                const product = productsByBarcode.get(barcode);
+                const openingStock = Number(product?.opening_stock);
+                if (!Number.isSafeInteger(openingStock) || openingStock < 0) {
+                    validationErrors.push(`Product Master row ${product?.__rowNumber || "?"}: Opening Stock must be a whole number when Opening MRP Stock allocations are used.`);
+                } else if (total !== openingStock) {
+                    validationErrors.push(`Barcode ${barcode}: Opening MRP Stock quantities total ${total}, but Product Master Opening Stock is ${openingStock}. These totals must match exactly.`);
+                }
+            });
+
+            if (validationErrors.length > 0) {
+                resolve({
+                    success: false,
+                    error: "Product Master validation failed:\n" +
+                        validationErrors.slice(0, 50).join("\n") +
+                        (validationErrors.length > 50 ? "\n..." : "")
+                });
+                return;
+            }
+
 
             if (duplicateBarcodes.length > 0) {
 
@@ -324,6 +422,7 @@ function importProductsAttempt(filePath) {
 
 
                         let completed = 0;
+                        let resetPendingImport = false;
 
                         let transactionFailed =
                             false;
@@ -522,7 +621,7 @@ function importProductsAttempt(filePath) {
 
 
                                     if (
-                                        openingTransactionsCreated === 0
+                                        openingTransactionsCreated === 0 && !resetPendingImport
                                     ) {
 
                                         commitImport();
@@ -558,7 +657,7 @@ function importProductsAttempt(filePath) {
                                         `,
                                         [
                                             now,
-                                            `${openingTransactionsCreated} products / ${openingQuantityCreated} units from Product Master import`
+                                            `${resetPendingImport ? "Inventory rebaseline completed; " : ""}${openingTransactionsCreated} opening stock entries / ${openingQuantityCreated} units from Product Master import`
                                         ],
                                         (initializationError) => {
 
@@ -586,7 +685,16 @@ function importProductsAttempt(filePath) {
                            PROCESS EACH PRODUCT
                         =========================================== */
 
-                        db.all(
+                        db.get(
+                            "SELECT status FROM inventory_initialization WHERE initialization_type='OPENING_STOCK'",
+                            [],
+                            (stateError, initialization) => {
+                                if (stateError) {
+                                    failImport(stateError);
+                                    return;
+                                }
+                                resetPendingImport = initialization?.status === "RESET_PENDING";
+                                db.all(
                             "SELECT sku FROM products WHERE sku IS NOT NULL AND TRIM(sku) <> ''",
                             [],
                             (skuError, existingSkus) => {
@@ -615,6 +723,8 @@ function importProductsAttempt(filePath) {
                                     return candidate;
                                 }
 
+                                const scheduledBarcodes = [...allocationGroups.keys()];
+                                const processProducts = () => {
                         products.forEach(
                             (product) => {
 
@@ -878,22 +988,50 @@ function importProductsAttempt(filePath) {
                                                        Master import.
                                                     ======================= */
 
-                                                    const createOpeningTransaction = (bucketId = null) => {
+                                                const createOpeningTransaction = (quantity, bucketId = null, remarks = "Initial opening stock from Product Master import", done = finishNewProduct) => {
                                                         const columns = ["product_id", "barcode", "transaction_type", "quantity", "reference_type", "reference_id", "remarks", "created_by", "created_at"];
-                                                        const values = [productId, barcode, "OPENING", safeOpeningStock, "PRODUCT_IMPORT", path.basename(filePath), "Initial opening stock from Product Master import", "Administrator", now];
+                                                        const values = [productId, barcode, "OPENING", quantity, "PRODUCT_IMPORT", path.basename(filePath), remarks, "Administrator", now];
                                                         if (bucketId) { columns.push("mrp_bucket_id"); values.push(bucketId); }
                                                         const placeholders = values.map(() => "?").join(",");
                                                         db.run(`INSERT INTO inventory_transactions(${columns.join(",")}) VALUES(${placeholders})`, values, stockError => {
                                                             if (stockError) { failImport(stockError); return; }
                                                             openingTransactionsCreated++;
-                                                            openingQuantityCreated += safeOpeningStock;
-                                                            finishNewProduct();
+                                                            openingQuantityCreated += quantity;
+                                                            done();
                                                         });
                                                     };
 
+                                                    const scheduledAllocations = allocationGroups.get(barcode);
+                                                    if (scheduledAllocations?.length) {
+                                                        const postAllocation = index => {
+                                                            if (index >= scheduledAllocations.length) {
+                                                                finishNewProduct();
+                                                                return;
+                                                            }
+                                                            const allocation = scheduledAllocations[index];
+                                                            if (allocation.type === "UNASSIGNED") {
+                                                                createOpeningTransaction(allocation.quantity, null, "Opening stock intentionally left without a confirmed printed MRP", () => postAllocation(index + 1));
+                                                                return;
+                                                            }
+                                                            const createdAt = new Date(now).toISOString();
+                                                            db.run(`INSERT INTO product_mrp_buckets(product_id,mrp_paise,status,source,created_by,created_at)
+                                                                VALUES(?,?,'ACTIVE','RECONCILIATION','PRODUCT_MASTER_IMPORT',?)`, [productId, allocation.mrpPaise, createdAt], function(bucketError) {
+                                                                if (bucketError) { failImport(bucketError); return; }
+                                                                const bucketId = this.lastID;
+                                                                db.run(`INSERT INTO stock_receipt_layers(bucket_id,quantity_received,unit_cost_paise,cost_basis_status,cost_source,received_at,created_by)
+                                                                    VALUES(?,?,NULL,'UNKNOWN',NULL,?,'PRODUCT_MASTER_IMPORT')`, [bucketId, allocation.quantity, createdAt], layerError => {
+                                                                    if (layerError) { failImport(layerError); return; }
+                                                                    createOpeningTransaction(allocation.quantity, bucketId, `Opening stock allocated to printed MRP ₹${(allocation.mrpPaise / 100).toFixed(2)}`, () => postAllocation(index + 1));
+                                                                });
+                                                            });
+                                                        };
+                                                        postAllocation(0);
+                                                        return;
+                                                    }
+
                                                     const openingMrpPaise = Math.round((Number(product.mrp) + Number.EPSILON) * 100);
                                                     if (Number(product.variable_value) === 1 || !Number.isSafeInteger(openingMrpPaise) || openingMrpPaise <= 0) {
-                                                        createOpeningTransaction();
+                                                        createOpeningTransaction(safeOpeningStock);
                                                         return;
                                                     }
                                                     const createdAt = new Date(now).toISOString();
@@ -904,7 +1042,7 @@ function importProductsAttempt(filePath) {
                                                         db.run(`INSERT INTO stock_receipt_layers(bucket_id,quantity_received,unit_cost_paise,cost_basis_status,cost_source,received_at,created_by)
                                                             VALUES(?,?,NULL,'UNKNOWN',NULL,?,'PRODUCT_MASTER_IMPORT')`, [bucketId, safeOpeningStock, createdAt], layerError => {
                                                             if (layerError) { failImport(layerError); return; }
-                                                            createOpeningTransaction(bucketId);
+                                                        createOpeningTransaction(safeOpeningStock, bucketId);
                                                         });
                                                     });
 
@@ -933,9 +1071,9 @@ function importProductsAttempt(filePath) {
                                            permanent source of truth.
                                         =================================== */
 
-                                        const sku = String(product.sku || "").trim() ||
-                                            String(existingProduct.sku || "").trim() ||
-                                            allocateSku();
+                                        const sku = (resetPendingImport
+                                            ? String(existingProduct.sku || "").trim() || String(product.sku || "").trim()
+                                            : String(product.sku || "").trim() || String(existingProduct.sku || "").trim()) || allocateSku();
                                         usedSkus.add(sku);
 
                                         db.run(
@@ -986,6 +1124,11 @@ function importProductsAttempt(filePath) {
                                                 variable_value = CASE
                                                     WHEN ? = 1 THEN ?
                                                     ELSE variable_value
+                                                END,
+
+                                                opening_stock = CASE
+                                                    WHEN ? = 1 THEN ?
+                                                    ELSE opening_stock
                                                 END
 
                                             WHERE barcode = ?
@@ -1040,6 +1183,10 @@ function importProductsAttempt(filePath) {
 
                                                 product.variable_value,
 
+                                                resetPendingImport ? 1 : 0,
+
+                                                safeOpeningStock,
+
                                                 barcode
                                             ],
 
@@ -1060,11 +1207,66 @@ function importProductsAttempt(filePath) {
                                                 }
 
 
-                                                updated++;
+                                                const finishExistingProduct = () => {
+                                                    updated++;
+                                                    completed++;
+                                                    completeImport();
+                                                };
 
-                                                completed++;
+                                                if (!resetPendingImport || safeOpeningStock === 0) {
+                                                    finishExistingProduct();
+                                                    return;
+                                                }
 
-                                                completeImport();
+                                                const productId = Number(existingProduct.id);
+                                                const createdAt = new Date(now).toISOString();
+                                                const createOpeningTransaction = (quantity, bucketId, remarks, done) => {
+                                                    const columns = ["product_id", "barcode", "transaction_type", "quantity", "reference_type", "reference_id", "remarks", "created_by", "created_at"];
+                                                    const values = [productId, barcode, "OPENING", quantity, "PRODUCT_IMPORT", path.basename(filePath), remarks, "Administrator", now];
+                                                    if (bucketId) { columns.push("mrp_bucket_id"); values.push(bucketId); }
+                                                    db.run(`INSERT INTO inventory_transactions(${columns.join(",")}) VALUES(${values.map(() => "?").join(",")})`, values, openingError => {
+                                                        if (openingError) { failImport(openingError); return; }
+                                                        openingTransactionsCreated++;
+                                                        openingQuantityCreated += quantity;
+                                                        done();
+                                                    });
+                                                };
+                                                const createBucketOpening = (mrpPaise, quantity, source, done) => {
+                                                    db.run(`INSERT INTO product_mrp_buckets(product_id,mrp_paise,status,source,created_by,created_at)
+                                                        VALUES(?,?,'ACTIVE',?,'PRODUCT_MASTER_IMPORT',?)
+                                                        ON CONFLICT(product_id,mrp_paise) DO UPDATE SET status='ACTIVE'`,
+                                                        [productId, mrpPaise, source, createdAt], bucketError => {
+                                                            if (bucketError) { failImport(bucketError); return; }
+                                                            db.get("SELECT id FROM product_mrp_buckets WHERE product_id=? AND mrp_paise=?", [productId, mrpPaise], (findBucketError, bucket) => {
+                                                                if (findBucketError || !bucket) { failImport(findBucketError || new Error("Could not find the Product Master opening MRP bucket.")); return; }
+                                                                db.run(`INSERT INTO stock_receipt_layers(bucket_id,quantity_received,unit_cost_paise,cost_basis_status,cost_source,received_at,created_by)
+                                                                    VALUES(?,?,NULL,'UNKNOWN',NULL,?,'PRODUCT_MASTER_IMPORT')`, [bucket.id, quantity, createdAt], layerError => {
+                                                                        if (layerError) { failImport(layerError); return; }
+                                                                        createOpeningTransaction(quantity, bucket.id, `Opening stock allocated to printed MRP ₹${(mrpPaise / 100).toFixed(2)}`, done);
+                                                                    });
+                                                            });
+                                                        });
+                                                };
+                                                const scheduledAllocations = allocationGroups.get(barcode);
+                                                if (scheduledAllocations?.length) {
+                                                    const postAllocation = index => {
+                                                        if (index >= scheduledAllocations.length) { finishExistingProduct(); return; }
+                                                        const allocation = scheduledAllocations[index];
+                                                        if (allocation.type === "UNASSIGNED") {
+                                                            createOpeningTransaction(allocation.quantity, null, "Opening stock intentionally left without a confirmed printed MRP", () => postAllocation(index + 1));
+                                                        } else {
+                                                            createBucketOpening(allocation.mrpPaise, allocation.quantity, "RECONCILIATION", () => postAllocation(index + 1));
+                                                        }
+                                                    };
+                                                    postAllocation(0);
+                                                    return;
+                                                }
+                                                const openingMrpPaise = Math.round((Number(product.mrp) + Number.EPSILON) * 100);
+                                                if (Number(product.variable_value) === 1 || !Number.isSafeInteger(openingMrpPaise) || openingMrpPaise <= 0) {
+                                                    createOpeningTransaction(safeOpeningStock, null, "Opening stock from Product Master; printed MRP not assigned", finishExistingProduct);
+                                                    return;
+                                                }
+                                                createBucketOpening(openingMrpPaise, safeOpeningStock, "LEGACY_VERIFIED", finishExistingProduct);
 
                                             }
                                         );
@@ -1072,6 +1274,23 @@ function importProductsAttempt(filePath) {
                                     }
                                 );
 
+                            }
+                        );
+                                };
+                                const allocationParams = scheduledBarcodes;
+                                if (!allocationParams.length) {
+                                    processProducts();
+                                    return;
+                                }
+                                db.all(`SELECT barcode FROM products WHERE barcode IN (${allocationParams.map(() => "?").join(",")})`, allocationParams, (allocationError, existingAllocatedProducts) => {
+                                    if (allocationError) { failImport(allocationError); return; }
+                                    if ((existingAllocatedProducts || []).length && !resetPendingImport) {
+                                        const existingBarcodes = existingAllocatedProducts.map(row => row.barcode).join(", ");
+                                        failImport(new Error(`Opening MRP Stock can only be applied while creating a fresh inventory. These scheduled barcode(s) already exist in KLBS: ${existingBarcodes}. No stock was changed.`));
+                                        return;
+                                    }
+                                    processProducts();
+                                });
                             }
                         );
                             }
