@@ -385,6 +385,115 @@ function saveSettings(settings, options = {}) {
 
 }
 
+function saveStockDocumentPrintSettings(settings = {}) {
+    const allowedFields = [
+        "stock_inward_printer",
+        "stock_inward_print_profile",
+        "stock_outward_printer",
+        "stock_outward_print_profile"
+    ];
+    const update = {};
+    for (const field of allowedFields) {
+        if (Object.prototype.hasOwnProperty.call(settings, field)) update[field] = settings[field];
+    }
+    if (!Object.keys(update).length) throw new Error("Choose a Stock Inward or Stock Outward print setting to save.");
+    for (const field of ["stock_inward_print_profile", "stock_outward_print_profile"]) {
+        if (Object.prototype.hasOwnProperty.call(update, field) && !["THERMAL", "A4"].includes(update[field])) {
+            throw new Error("Unsupported stock document print layout.");
+        }
+    }
+    for (const field of ["stock_inward_printer", "stock_outward_printer"]) {
+        if (Object.prototype.hasOwnProperty.call(update, field) &&
+            (typeof update[field] !== "string" || update[field].trim().length > 300)) {
+            throw new Error("Choose a valid printer for the stock document.");
+        }
+        if (Object.prototype.hasOwnProperty.call(update, field)) update[field] = update[field].trim() || null;
+    }
+    return new Promise((resolve, reject) => {
+        db.get("SELECT * FROM settings WHERE id = 1", [], (getError, current) => {
+            if (getError) return reject(getError);
+            if (!current) return reject(new Error("KLBS settings could not be loaded."));
+            const columns = Object.keys(update);
+            const changed = columns.filter(column => comparable(current[column]) !== comparable(update[column]));
+            if (!changed.length) {
+                return resolve({ success: true, changed: false, activityWarning: null });
+            }
+            const assignments = columns.map(column => `${column} = ?`).join(", ");
+            db.run(`UPDATE settings SET ${assignments}, last_updated = ? WHERE id = 1`,
+                [...columns.map(column => update[column]), new Date().toISOString()], async error => {
+                    if (error) return reject(error);
+                    let activityWarning = null;
+                    const details = changed.map(column => {
+                        const label = column.includes("inward") ? "Stock Inward" : "Stock Outward";
+                        return `${label} ${column.endsWith("printer") ? "printer" : "paper layout"}: ${update[column] || "KLBS default"}`;
+                    }).join("; ");
+                    try {
+                        await logActivity({ category: "PRINTING", action: "STOCK_DOCUMENT_PRINTER_SETTINGS_UPDATED",
+                            details, user_name: "OPERATOR", status: "SUCCESS", entity_type: "PRINT_SETTINGS",
+                            reference_no: "STOCK_DOCUMENT_PRINT_SETTINGS" });
+                    } catch (logError) {
+                        activityWarning = "Print routing was saved, but its Activity Log entry could not be recorded.";
+                    }
+                    resolve({ success: true, changed: true, activityWarning });
+                });
+        });
+    });
+}
+
+const DEVICE_PREVIEW_TYPES = new Set([
+    "tax-invoice", "store-credit", "day-closing", "printer-test", "credit-note",
+    "stock-inward", "stock-outward", "stock-inward-a4", "stock-outward-a4"
+]);
+const DEVICE_PREVIEW_FONTS = new Set(["arial", "georgia", "trebuchet", "verdana", "times", "courier"]);
+
+function saveDevicePrintPreviewSettings(input = {}) {
+    const documentType = String(input.documentType || "");
+    if (!DEVICE_PREVIEW_TYPES.has(documentType)) throw new Error("Unsupported print preview document.");
+    const source = input.settings || {};
+    if (!DEVICE_PREVIEW_FONTS.has(source.font)) throw new Error("Unsupported print preview font.");
+    const size = Number(source.size);
+    if (!Number.isFinite(size) || size < 9 || size > 18) throw new Error("Preview text size must be between 9 and 18 pixels.");
+    const margins = {};
+    for (const side of ["top", "right", "bottom", "left"]) {
+        const margin = Number(source.margins?.[side]);
+        if (!Number.isFinite(margin) || margin < 0 || margin > 12) throw new Error("Preview margins must be between 0 and 12 millimetres.");
+        margins[side] = margin;
+    }
+    const preference = { font: source.font, size, margins };
+    return new Promise((resolve, reject) => {
+        db.get("SELECT device_print_preview_settings FROM settings WHERE id = 1", [], (getError, row) => {
+            if (getError) return reject(getError);
+            let allPreferences = {};
+            try {
+                const parsed = JSON.parse(row?.device_print_preview_settings || "{}");
+                if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) allPreferences = parsed;
+            } catch { allPreferences = {}; }
+            const existing = allPreferences[documentType];
+            const unchanged = existing && existing.font === preference.font && Number(existing.size) === preference.size &&
+                ["top", "right", "bottom", "left"].every(side => Number(existing.margins?.[side]) === margins[side]);
+            if (unchanged) {
+                return resolve({ success: true, changed: false, preference: existing, allPreferences, activityWarning: null });
+            }
+            allPreferences[documentType] = preference;
+            const serialized = JSON.stringify(allPreferences);
+            db.run("UPDATE settings SET device_print_preview_settings = ?, last_updated = ? WHERE id = 1",
+                [serialized, new Date().toISOString()], async error => {
+                    if (error) return reject(error);
+                    let activityWarning = null;
+                    try {
+                        await logActivity({ category: "PRINTING", action: "PRINT_PREVIEW_SETTINGS_SAVED",
+                            details: `Saved ${documentType} preview: ${preference.font}, ${size}px text, margins ${margins.top}/${margins.right}/${margins.bottom}/${margins.left} mm (top/right/bottom/left).`,
+                            user_name: "OPERATOR", status: "SUCCESS", entity_type: "PRINT_PREVIEW",
+                            reference_no: documentType.toUpperCase().replace(/-/g, "_") });
+                    } catch {
+                        activityWarning = "Preview settings were saved, but their Activity Log entry could not be recorded.";
+                    }
+                    resolve({ success: true, changed: true, preference, allPreferences, activityWarning });
+                });
+        });
+    });
+}
+
 function formatAutomaticBackupDetails(settings) {
     if (Number(settings.auto_backup_enabled) !== 1) return "Automatic Backup: OFF";
     const labels = {
@@ -427,6 +536,10 @@ module.exports = {
     getRendererSettings,
 
     saveSettings,
+
+    saveStockDocumentPrintSettings,
+
+    saveDevicePrintPreviewSettings,
 
     recordScheduledBackupSuccess,
 

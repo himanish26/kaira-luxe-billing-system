@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("assert");
+const packageVersion = require("../package.json").version;
 const fs = require("fs");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
@@ -326,7 +327,7 @@ async function main() {
         });
         assert.deepStrictEqual((await reinitialized.getManagementPnl({ fromDate: "2026-04-01", toDate: "2026-04-30" })).selected, g,
             "reinitializing the service against the same persisted facts is deterministic");
-        const workbook = await createManagementPnlWorkbook(goldenFy, { version: "2.1.0", schemaVersion: 9 });
+        const workbook = await createManagementPnlWorkbook(goldenFy, { version: packageVersion, schemaVersion: 9 });
         const pnlSheet = workbook.getWorksheet("Management P&L");
         const findRow = label => {
             for (let row = 9; row <= pnlSheet.rowCount; row += 1) if (pnlSheet.getCell(row, 1).value === label) return row;
@@ -536,7 +537,7 @@ async function main() {
             fs.mkdirSync(outputDirectory, { recursive: true });
             const filename = managementPnlFilename(goldenFy.metadata.store.storeCode, goldenFy.metadata.financialYearLabel, goldenFy.metadata.asOfDate);
             const outputPath = path.join(outputDirectory, filename);
-            const exported = await exportManagementPnlFinancialYear(goldenFy, outputPath, { version: "2.1.0", schemaVersion: 9 });
+            const exported = await exportManagementPnlFinancialYear(goldenFy, outputPath, { version: packageVersion, schemaVersion: 9 });
             assert.strictEqual(exported.success, true);
             console.log(`OWNER RETEST WORKBOOK ${exported.filePath}`);
         }

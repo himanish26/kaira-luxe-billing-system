@@ -68,7 +68,7 @@ async function main() {
     );
     assert.equal(packageInfo.build.nsis.license, "EULA.txt", "NSIS uses authoritative EULA.txt");
     assert.ok(packageInfo.build.files.includes("EULA.txt"), "packaged application includes EULA.txt");
-    assert.equal(packageInfo.version, "2.1.0", "package version identifies the V2.1.0 release");
+    assert.equal(packageInfo.version, "3.0.0", "package version identifies the V3.0.0 release");
     assert.doesNotMatch(settingsSource, /This copy of the Kaira Luxe Billing System is licensed|1\. License Grant|3\. Ownership/, "old independent EULA text is absent from About renderer");
     assert.match(settingsSource, /window\.electronAPI\.getEulaText\(\)/, "About retrieves EULA through the bridge");
     assert.match(settingsSource, /eulaElement\.textContent\s*=/, "EULA is displayed as inert text, not HTML");

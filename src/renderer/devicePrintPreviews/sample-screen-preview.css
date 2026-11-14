@@ -1,0 +1,5 @@
+/* Screen-only framing so the 80 mm sample can be inspected in a normal browser. Print styles remain from the KLBS templates. */
+@media screen {
+  html { display: flex; justify-content: center; align-items: flex-start; width: 100% !important; min-height: 100vh; background: #ece9e6; }
+  body { flex: 0 0 80mm; width: 80mm !important; min-height: 100vh; margin: 24px 0 !important; background: #fff; box-shadow: 0 2px 18px rgba(0,0,0,.18); }
+}

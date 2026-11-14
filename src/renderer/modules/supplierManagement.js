@@ -150,6 +150,11 @@
         const supplierCode=String(supplier?.supplier_code||"").trim();
         section.hidden=!$("supplierEditingCode").value||!supplierCode;
         if(section.hidden)return;
+        if(supplierInvoiceLayoutContext?.supplierCode && supplierInvoiceLayoutContext.supplierCode!==supplierCode){
+            const editor=$("supplierInvoiceLayoutEditor");
+            if(editor){editor.hidden=true;editor.replaceChildren();}
+            supplierInvoiceLayoutContext=null;
+        }
         host.replaceChildren();details.replaceChildren();
         try{
             const layouts=await window.electronAPI.getSupplierInvoiceLayoutsForEdit(supplierCode);

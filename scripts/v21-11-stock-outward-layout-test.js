@@ -19,7 +19,7 @@ function sourceChecks(){
     const main=read("src/main/main.js");
     const preload=read("src/main/preload.js");
     const schema=read("src/database/schemaVersion.js");
-    assert.match(schema,/CURRENT_DB_SCHEMA_VERSION = 16/,"guarded deletion migration is authoritative schema V16");
+    assert.ok(Number(schema.match(/CURRENT_DB_SCHEMA_VERSION = (\d+)/)?.[1]) >= 16,"guarded deletion migration is included in the current schema");
     assert.match(schema,/from: 15, to: 16, name: "v2_1_stock_outward_document_lifecycle"/);
     assert.equal((productMaster.match(/id="stockOutwardV21Btn"/g)||[]).length,1,"one V2.1 Stock Outward Product Master entry point");
     assert(!productMaster.includes('id="stockOutwardBtn"'),"legacy single-product outward button is retired");
@@ -37,11 +37,11 @@ function sourceChecks(){
     assert.match(renderer,/<th>VIEW<\/th><th>PRINT<\/th>/);
     assert.match(renderer,/Enter a valid Outward Date and select a reason before scanning/);
     assert.match(renderer,/Scan at least one product before saving the draft/);
-    assert.match(renderer,/Product not found\. Contact ADMINISTRATOR\./);
+    assert.match(renderer,/Unable to add product\. Please contact ADMINISTRATOR\./);
     assert(!renderer.includes("Review is available after the current business date"),"permanent review guidance is removed");
     assert.match(renderer,/STOCK_OUTWARD_ZERO_STOCK/);
     assert.match(renderer,/STOCK_OUTWARD_PRODUCT_INACTIVE/);
-    assert.match(renderer,/Cannot add product\. Current available stock: 0 units\./);
+    assert.match(renderer,/Insufficient stock\. Available: 0 units\./);
     assert.match(renderer,/Insufficient stock\. Available:/);
     assert.match(renderer,/class="so-draft-field so-draft-number"/);
     assert.match(renderer,/activeIsNew\?"NEW STOCK OUTWARD":"EDIT STOCK OUTWARD"/);
@@ -112,7 +112,7 @@ async function child(){
             stockOutwardPost:async()=>{window.__calls.posts++;return postedDetail;},
             stockOutwardPrintReceipt:async()=>{window.__calls.prints++;return {success:false,error:"offline"};}
           };
-          window.__alerts=[];window.showNativeAlert=async message=>{window.__alerts.push(message);return {response:0};};
+          window.__alerts=[];window.showNativeAlert=async message=>{window.__alerts.push(message);return {response:0};};window.__productNotFoundDialogs=[];window.showStockOutwardProductNotFoundDialog=async barcode=>{window.__productNotFoundDialogs.push(barcode);};
           window.showInventory=()=>{};
         </script><script>${moduleSource}</script><script>window.__outwardReady=window.openStockOutwardPage("layout-test");</script></body></html>`;
         const file=path.join(temp,"layout.html");fs.writeFileSync(file,html,"utf8");await win.loadFile(file);await win.webContents.executeJavaScript("window.__outwardReady");
@@ -172,14 +172,14 @@ async function child(){
         await win.webContents.executeJavaScript("document.getElementById('soNew').click()");await new Promise(resolve=>setTimeout(resolve,80));
         await win.webContents.executeJavaScript("const r=document.getElementById('soReason');r.value='DAMAGE';r.dispatchEvent(new Event('input',{bubbles:true}));r.dispatchEvent(new Event('change',{bubbles:true}));");await new Promise(resolve=>setTimeout(resolve,80));
         await win.webContents.executeJavaScript("document.getElementById('soScanner').value='UNKNOWN';document.getElementById('soScanner').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));");await new Promise(resolve=>setTimeout(resolve,80));
-        const unknown=await win.webContents.executeJavaScript(`(()=>({alerts:window.__alerts,rows:document.querySelectorAll('.so-items-table tbody tr').length,scannerValue:document.getElementById('soScanner').value,scannerFocused:document.activeElement===document.getElementById('soScanner')}))()`);
-        assert.deepEqual(unknown.alerts,["Product not found. Contact ADMINISTRATOR."]);assert.equal(unknown.rows,1);assert.equal(unknown.scannerValue,"");assert(unknown.scannerFocused);
+        const unknown=await win.webContents.executeJavaScript(`(()=>({dialogs:window.__productNotFoundDialogs,rows:document.querySelectorAll('.so-items-table tbody tr').length,scannerValue:document.getElementById('soScanner').value,scannerFocused:document.activeElement===document.getElementById('soScanner')}))()`);
+        assert.deepEqual(unknown.dialogs,["UNKNOWN"],"unknown product invokes the dedicated not-found dialog with the scanned barcode");assert.equal(unknown.rows,1);assert.equal(unknown.scannerValue,"");assert(unknown.scannerFocused);
         await win.webContents.executeJavaScript("document.getElementById('soScanner').value='00123';document.getElementById('soScanner').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));");await new Promise(resolve=>setTimeout(resolve,80));
         await win.webContents.executeJavaScript("document.getElementById('soScanner').value='UNKNOWN';document.getElementById('soScanner').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));");await new Promise(resolve=>setTimeout(resolve,80));
-        const preserved=await win.webContents.executeJavaScript("JSON.stringify({alerts:window.__alerts.length,lines:document.querySelectorAll('.so-items-table tbody tr [data-qty]').length,scannerValue:document.getElementById('soScanner').value})");
-        assert.deepEqual(JSON.parse(preserved),{alerts:2,lines:1,scannerValue:""},"unknown barcode alerts once per scan and preserves earlier valid items");
+        const preserved=await win.webContents.executeJavaScript("JSON.stringify({dialogs:window.__productNotFoundDialogs.length,lines:document.querySelectorAll('.so-items-table tbody tr [data-qty]').length,scannerValue:document.getElementById('soScanner').value})");
+        assert.deepEqual(JSON.parse(preserved),{dialogs:2,lines:1,scannerValue:""},"unknown barcode opens the not-found dialog once per scan and preserves earlier valid items");
         await win.webContents.executeJavaScript("document.getElementById('soScanner').value='ZERO';document.getElementById('soScanner').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));document.getElementById('soScanner').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));");await new Promise(resolve=>setTimeout(resolve,80));
-        assert.equal(await win.webContents.executeJavaScript("document.getElementById('soMessage').textContent"),"Cannot add product. Current available stock: 0 units.");
+        assert.equal(await win.webContents.executeJavaScript("document.getElementById('soMessage').textContent"),"Insufficient stock. Available: 0 units.");
         assert.equal(await win.webContents.executeJavaScript("window.__calls.scans.filter(value=>value==='ZERO').length"),1,"rapid duplicate Enter while request is pending invokes one scan");
         assert.equal(await win.webContents.executeJavaScript("document.activeElement===document.getElementById('soScanner')"),true,"scanner focus returns after zero-stock rejection");
         await win.webContents.executeJavaScript("document.getElementById('soScanner').value='SHORT';document.getElementById('soScanner').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));");await new Promise(resolve=>setTimeout(resolve,80));
@@ -220,7 +220,7 @@ async function child(){
         assert.equal(printFailure.posts,1);assert.equal(printFailure.prints,1);assert.match(printFailure.message,/posted.*could not be printed/i);assert(printFailure.reprint,"committed document remains available for reprint after printer failure");
         const inwardModule=read("src/renderer/modules/stockInward.js");
         const inwardHtml=`<!doctype html><html><head><meta charset="utf-8"><style>${cssBundle()}</style><style>html,body{min-height:100%;margin:0}body{padding:40px;overflow-x:hidden}#settingsPage:has(.stock-inward-page)>.bill-top-bar{width:calc(100% - 56px);margin:0 auto 18px;padding:20px 0 0}#settingsPageContent:has(.stock-inward-page){width:calc(100% - 56px);max-width:none;margin:0 auto}</style></head><body><div id="settingsScreen"></div><div id="settingsPage" style="display:none"><div class="topbar"><button id="settingsPageBackBtn" class="back-btn">BACK</button></div><main id="settingsPageContent"></main></div><script>
-          window.requestAdminAuthorization=async purpose=>purpose==="INVENTORY_INWARD"?"isolated-test-grant":null;window.setSettingsPageBackToSettings=()=>{};window.discardStockAuthorization=()=>{};window.initializeStyleExplorer=()=>{};window.showNativeAlert=async()=>{};window.confirm=()=>true;window.alert=message=>{window.__unexpectedAlerts=(window.__unexpectedAlerts||[]).concat(String(message))};window.KLBSDrawer={create:()=>({open(){},close(){},destroy(){}})};
+          window.requestAdminAuthorization=async purpose=>purpose==="INVENTORY_INWARD"?"isolated-test-grant":null;window.requestOptionalManagerAuthorization=async()=>"isolated-test-grant";window.setSettingsPageBackToSettings=()=>{};window.discardStockAuthorization=()=>{};window.initializeStyleExplorer=()=>{};window.showNativeAlert=async()=>{};window.confirm=()=>true;window.alert=message=>{window.__unexpectedAlerts=(window.__unexpectedAlerts||[]).concat(String(message))};window.KLBSDrawer={create:()=>({open(){},close(){},destroy(){}})};
           const detail={document:{id:101,movement_no:"KLINW000101",direction:"INWARD",status:"DRAFT",business_date:"2026-10-10",created_at:"2026-10-10T01:00:00.000Z",supplier_id:null,supplier_invoice_id:null,invoice_number_snapshot:null,invoice_no:null,invoice_date:null,invoice_total_quantity:null,reference_text:null},lines:[],meaningful:false,currentBusinessDate:"2026-10-10",summary:{knownSkus:0,knownUnits:0,unresolvedBarcodes:0,unresolvedUnits:0,scannedQty:0,eligibleToPost:0,postedUnits:0,reconciliation:{state:"NO_INVOICE_QTY",difference:null,text:"SCANNED QTY 0"}}};
           window.electronAPI={getLastImport:async()=>null,getInventorySummary:async()=>({total_inventory:0,products:0,brands:0,segments:0,categories:0,seasons:0,collections:0,latest_sku:"-"}),getProducts:async()=>({products:[],page:1,totalCount:0,totalPages:1}),stockInwardEnter:async()=>true,stockInwardListDrafts:async()=>[{id:102,movement_no:"KLINW000102",business_date:"2026-10-10",supplier_name:"A Supplier With an Exceptionally Long Supplier Name for Responsive Layout Checks",invoice_no:"SUPPLIER-INVOICE-REFERENCE-2026-EXTREMELY-LONG-000102",status:"DRAFT",sku_count:2,units:4,posted_units:0,unresolved_count:1,updated_at:"2026-10-10T01:00:00Z"},{id:103,movement_no:"KLINW000103",business_date:"2026-10-09",supplier_name:"Second Supplier",invoice_no:"INV-103",status:"PARTIALLY_POSTED",sku_count:1,units:2,posted_units:1,unresolved_count:0,updated_at:"2026-10-09T01:00:00Z"}],stockInwardHistory:async()=>({rows:[],page:1,totalCount:0,totalPages:1,pageSize:100}),stockInwardCreate:async()=>({movementId:101,movementNo:"KLINW000101"}),stockInwardLoad:async()=>detail,stockInwardSuppliers:async()=>[],stockInwardInvoices:async()=>[],stockInwardFindDuplicateInvoice:async()=>({duplicate:false})};
           </script><script>${read("src/renderer/modules/productMasterTemplate.js")}</script><script>${inwardModule}</script><script>${read("src/renderer/modules/inventory.js")}</script><script>window.showInventory();window.__inwardReady=new Promise(resolve=>setTimeout(resolve,80));</script></body></html>`;
@@ -234,7 +234,7 @@ async function child(){
             const measured=await rendererEval(win,`(()=>{const rows=[...document.querySelectorAll('.si-current-card')],rect=x=>{const r=x.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};return {viewport:innerWidth,page:document.documentElement.scrollWidth,rows:rows.map(row=>{const fields=[...row.querySelectorAll('.si-open-field')],actions=row.querySelector('.si-card-actions'),buttons=[...actions.querySelectorAll('button')];return {row:rect(row),fieldCount:fields.length,fieldRects:fields.map(rect),actions:rect(actions),buttons:buttons.map(button=>({text:button.textContent.trim(),...rect(button)})),status:row.querySelector('.si-status-badge')?.textContent.trim(),supplier:row.querySelector('.si-open-supplier span')?.textContent,invoice:row.querySelector('.si-open-invoice span')?.textContent};})};})()`,`Stock Inward geometry at ${width}px`);
             assert.equal(measured.rows.length,2,`multiple open inward drafts render at ${width}px`);
             assert(measured.page<=measured.viewport,`no horizontal overflow at ${width}px: ${measured.page}/${measured.viewport}`);
-            assert.equal(measured.rows[0].fieldCount,7);assert.equal(measured.rows[1].fieldCount,7);
+            assert.equal(measured.rows[0].fieldCount,8);assert.equal(measured.rows[1].fieldCount,8);
             assert(measured.rows.every(row=>row.actions.right<=row.row.right+1&&row.buttons.every(button=>button.left>=row.row.left&&button.right<=row.row.right+1)),`draft actions stay within rows at ${width}px`);
             assert.deepEqual(measured.rows.map(row=>row.buttons.length),[2,2],"Resume/Delete and Resume/Reprint actions remain available");
             assert.equal(measured.rows[0].status,"DRAFT");assert.equal(measured.rows[1].status,"PARTIALLY POSTED");
@@ -269,7 +269,7 @@ async function parent(){
     for(const value of results)console.log(`${value.viewport}px: table ${value.tableWidth}/${value.tableScrollWidth}px, 8 columns, VIEW cell ${value.viewIndex}, PRINT cell ${value.printIndex}, row ${value.rowHeight}px, page ${value.pageWidth}px`);
     console.log(`Entry at ${entry.viewport}px: date/reason/remarks/scanner and 8 item columns present; print failure left document posted (${printFailure.posts} post, ${printFailure.prints} print attempt)`);
     const inwardLine=result.stdout.split(/\r?\n/).find(value=>value.startsWith(`${prefix}INWARD:`));assert(inwardLine,`Stock Inward Electron evidence missing\n${result.stdout}\n${result.stderr}`);console.log(`Electron navigation: ${inwardLine.slice(`${prefix}INWARD:`.length)}`);
-    const inwardGeometryLine=result.stdout.split(/\r?\n/).find(value=>value.startsWith(`${prefix}INWARD_GEOMETRY:`));assert(inwardGeometryLine,`Stock Inward geometry evidence missing\n${result.stdout}\n${result.stderr}`);for(const value of JSON.parse(inwardGeometryLine.slice(`${prefix}INWARD_GEOMETRY:`.length)))console.log(`Stock Inward ${value.viewport}px: ${value.rows.length} drafts × 7 fields; Resume/Delete and Resume/Reprint remain in-row; page ${value.page}px; long supplier and invoice retained`);
+    const inwardGeometryLine=result.stdout.split(/\r?\n/).find(value=>value.startsWith(`${prefix}INWARD_GEOMETRY:`));assert(inwardGeometryLine,`Stock Inward geometry evidence missing\n${result.stdout}\n${result.stderr}`);for(const value of JSON.parse(inwardGeometryLine.slice(`${prefix}INWARD_GEOMETRY:`.length)))console.log(`Stock Inward ${value.viewport}px: ${value.rows.length} drafts × 8 fields; Resume/Delete and Resume/Reprint remain in-row; page ${value.page}px; long supplier and invoice retained`);
 }
 
 if(process.versions.electron&&process.argv.includes("--child"))child().catch(error=>{console.error(error);try{require("electron").app.quit();}catch(_){}process.exitCode=1;});

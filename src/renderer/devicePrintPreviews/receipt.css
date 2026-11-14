@@ -1,0 +1,346 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+@page {
+    size: 80mm auto;
+    margin: 0;
+}
+
+html,
+body {
+    width: 80mm;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 12px;
+    color: #000;
+    -webkit-font-smoothing: antialiased;
+}
+
+#logo {
+    display: block;
+    width: 40mm;
+    height: auto;
+    max-height: 14mm;
+    object-fit: contain;
+    margin: 0 auto 2mm auto;
+}
+
+.receipt {
+    width: 72mm;
+    margin-left: 1mm;
+    margin-right: 1mm;
+    padding: 2mm;
+    font-size: 13px;
+    line-height: 1.25;
+}
+
+.header{
+
+    text-align:center;
+
+}
+
+
+.header h1{
+
+    font-size:22px;
+
+    margin:5px 0;
+
+    font-weight:700;
+
+}
+
+.invoice-title{
+
+    text-align:center;
+
+    font-size:14px;
+
+    font-weight:700;
+
+    padding:4px 0;
+
+    margin:5px 0;
+
+    border-top:1px solid #000;
+
+    border-bottom:1px solid #000;
+
+}
+
+.header p{
+
+    margin:2px 0;
+
+    line-height:1.4;
+
+}
+
+hr{
+
+    border:none;
+
+    border-top:1px dashed #000;
+
+    margin:5px 0;
+
+}
+
+.billInfo{
+
+    line-height:1.45;
+
+}
+
+table{
+
+    width:100%;
+
+    border-collapse:collapse;
+
+    table-layout:fixed;
+
+    overflow-y:auto;
+
+}
+
+/* Keep the four thermal receipt columns stable as values grow. */
+.receipt > table th:first-child,
+.receipt > table td:first-child{
+
+    width:42%;
+
+}
+
+.receipt > table th:nth-child(2),
+.receipt > table td:nth-child(2){
+
+    width:12%;
+
+}
+
+.receipt > table th:nth-child(3),
+.receipt > table td:nth-child(3){
+
+    width:22%;
+
+    padding-left:3px;
+
+}
+
+.receipt > table th:nth-child(4),
+.receipt > table td:nth-child(4){
+
+    width:24%;
+
+    padding-left:3px;
+
+}
+
+/* Fine-tune Rate and Net header position only. */
+.receipt > table th:nth-child(3),
+.receipt > table th:nth-child(4){
+
+    position:relative;
+    left:5px;
+
+}
+
+.receipt > table th:first-child{
+
+    position:relative;
+    left:-5px;
+
+}
+
+th{
+
+    border-bottom:1px solid #000;
+
+    padding-bottom:4px;
+
+}
+
+td{
+
+    padding:2px 0;
+
+    vertical-align:top;
+
+}
+
+th:nth-child(2),
+th:nth-child(3),
+th:nth-child(4),
+
+td:nth-child(2){
+
+    text-align:center;
+
+}
+
+td:nth-child(3),
+td:nth-child(4){
+
+    text-align:right;
+
+}
+
+.totals div{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    margin:4px 0;
+
+}
+
+.net{
+
+    font-size:22px;
+
+    font-weight:bold;
+
+    border-top:2px solid #000;
+
+    border-bottom:2px solid #000;
+
+    padding:8px 0;
+
+    margin-top:6px;
+
+}
+
+.payment div{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    margin:4px 0;
+
+}
+
+.footer{
+
+    text-align:center;
+
+    margin-top:4px;
+
+    line-height:1.15;
+
+    font-size:12px;
+
+}
+
+.footer strong{
+
+    display:block;
+
+    margin:6px 0 4px;
+
+    font-size:12px;
+
+}
+
+.return-note{
+
+    margin-top:2px;
+
+    font-size:11px;
+
+    line-height:1.2;
+
+    text-align:center;
+
+}
+
+/* =====================================
+   STORE CREDIT RECEIPT
+===================================== */
+
+.details-section {
+    width: 100%;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 4px 0;
+    line-height: 1.35;
+}
+
+.detail-row span:first-child {
+    flex-shrink: 0;
+}
+
+.detail-row span:last-child,
+.detail-row strong {
+    text-align: right;
+    word-break: break-word;
+}
+
+.valid-until-row {
+    font-weight: 700;
+}
+
+.section-heading {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 6px 0;
+}
+
+.credit-value-section {
+    text-align: center;
+    padding: 4px 0;
+}
+
+.credit-label {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.credit-amount {
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.terms-conditions {
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.terms-conditions ol {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.terms-conditions li {
+    margin-bottom: 4px;
+}
+
+.receipt-footer {
+    text-align: center;
+    font-size: 11px;
+    line-height: 1.35;
+    margin-top: 4px;
+}
+
+.thank-you {
+    margin-top: 6px;
+    font-size: 12px;
+    font-weight: 700;
+}

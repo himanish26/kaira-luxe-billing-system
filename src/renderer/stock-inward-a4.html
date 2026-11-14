@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Stock Inward — A4</title>
+  <style>
+    @page { size: A4 portrait; margin: 28mm 14mm 18mm; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #fff; color: #171717; font: 10pt/1.35 Arial, Helvetica, sans-serif; }
+    .running-header { position: static; display: flex; align-items: flex-end; justify-content: space-between; gap: 12mm; padding: 0 0 3mm; border-bottom: 1px solid #333; }
+    .brand { font-size: 15pt; font-weight: 800; letter-spacing: .5px; }
+    .brand small { display: block; margin-top: 1mm; font-size: 7.5pt; font-weight: 500; letter-spacing: .1px; }
+    .running-document { text-align: right; }
+    .running-document strong { display: block; font-size: 12pt; letter-spacing: .3px; }
+    .running-document span { font-size: 9pt; }
+    .document-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 8mm; margin: 5mm 0; padding: 4mm; border: 1px solid #999; border-radius: 2mm; }
+    .field { min-width: 0; }
+    .field label { display: block; margin-bottom: 1mm; color: #555; font-size: 8pt; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; }
+    .field strong { display: block; overflow-wrap: anywhere; font-size: 10pt; }
+    .section-title { margin: 5mm 0 2mm; font-size: 10pt; font-weight: 800; letter-spacing: .4px; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8.5pt; }
+    thead { display: table-header-group; }
+    th { padding: 2.4mm 1.5mm; border: 1px solid #555; background: #f0f0f0; text-align: left; font-size: 7.5pt; letter-spacing: .2px; }
+    td { padding: 2.1mm 1.5mm; border: 1px solid #aaa; vertical-align: top; overflow-wrap: anywhere; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
+    .col-no { width: 8mm; text-align: center; }
+    .col-product { width: 52mm; }
+    .col-barcode { width: 29mm; }
+    .col-variant { width: 25mm; }
+    .col-qty { width: 15mm; text-align: right; }
+    .col-mrp { width: auto; }
+    .product-name { font-weight: 700; }
+    .subline { display: block; margin-top: .7mm; color: #444; font-size: 7.5pt; }
+    .qty { text-align: right; font-weight: 700; white-space: nowrap; }
+    .mrp-status { font-size: 7.5pt; font-weight: 700; }
+    .after-table { margin-top: 5mm; break-inside: avoid; page-break-inside: avoid; }
+    .summary { display: flex; flex-wrap: wrap; gap: 3mm 10mm; padding: 3mm 0; border-top: 1px solid #333; border-bottom: 1px solid #333; }
+    .summary-item { min-width: 32mm; }
+    .summary-item span { display: block; color: #555; font-size: 7.5pt; font-weight: 700; }
+    .summary-item strong { display: block; margin-top: .5mm; font-size: 11pt; }
+    .reconciliation { margin-top: 3mm; font-size: 8.5pt; }
+    .signatures { display: grid; grid-template-columns: repeat(3,1fr); gap: 12mm; margin-top: 18mm; }
+    .signature { padding-top: 2mm; border-top: 1px solid #333; text-align: center; font-size: 8pt; font-weight: 700; }
+    .print-footer { display: none; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .running-header { position: fixed; top: -20mm; left: 0; right: 0; }
+      .print-footer { position: fixed; right: 0; bottom: -13mm; left: 0; display: flex; justify-content: space-between; padding-top: 2mm; border-top: .3mm solid #777; color: #444; font-size: 7.5pt; }
+      .page-number::after { content: counter(page) " of " counter(pages); }
+    }
+    @media screen {
+      html { display: flex; justify-content: center; align-items: flex-start; }
+      body { flex: 0 0 182mm; width: 182mm; min-height: 257mm; margin: 16px 0; padding: 0; }
+      .running-header { margin-bottom: 4mm; }
+      .print-footer { display: flex; justify-content: space-between; margin-top: 12mm; padding-top: 2mm; border-top: .3mm solid #777; color: #444; font-size: 7.5pt; }
+    }
+  </style>
+</head>
+<body>
+  <header class="running-header">
+    <div class="brand">KAIRA LUXE<small>Innerwear • Jewellery • Cosmetics</small></div>
+    <div class="running-document"><strong>STOCK INWARD</strong><span id="runningDocumentNumber">— · —</span></div>
+  </header>
+  <main id="document"></main>
+  <footer class="print-footer"><span id="printedAt"></span><span>Page <span class="page-number"></span></span></footer>
+  <script>
+    window.renderStockInwardA4 = function () {
+      const data = window.stockInwardReceipt || {};
+      const esc = value => String(value ?? "—").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+      const items = Array.isArray(data.items) ? data.items : [];
+      document.getElementById("runningDocumentNumber").textContent = `${data.movementNo || "—"} · ${data.businessDate || "—"}`;
+      document.getElementById("printedAt").textContent = `Printed ${data.printedAt || "—"}`;
+      document.getElementById("document").innerHTML = `
+        <section class="document-meta">
+          <div class="field"><label>Inward Number</label><strong>${esc(data.movementNo)}</strong></div>
+          <div class="field"><label>Inward Date</label><strong>${esc(data.businessDate)}</strong></div>
+          <div class="field"><label>Supplier</label><strong>${esc(data.supplierName)} · ${esc(data.supplierCode)}</strong></div>
+          <div class="field"><label>Supplier Invoice</label><strong>${esc(data.invoiceNumber)}</strong></div>
+          <div class="field"><label>Invoice Date</label><strong>${esc(data.invoiceDate)}</strong></div>
+          <div class="field"><label>Document Status</label><strong>${esc(String(data.documentStatus || "—").replaceAll("_", " "))}</strong></div>
+        </section>
+        <h2 class="section-title">POSTED ITEMS</h2>
+        <table><thead><tr><th class="col-no">No.</th><th class="col-product">Product</th><th class="col-barcode">Item Code / Barcode</th><th class="col-variant">Colour / Size</th><th class="col-qty">Qty</th><th class="col-mrp">Inward MRP</th></tr></thead>
+          <tbody>${items.map((item,index)=>`<tr><td class="col-no">${index+1}</td><td><span class="product-name">${esc(item.product)}</span><span class="subline">SKU: ${esc(item.sku)}</span></td><td>${esc(item.barcode)}</td><td>${esc(item.colour)} / ${esc(item.size)}</td><td class="qty">${esc(item.quantity)}</td><td class="mrp-status">${esc(item.mrpStatus || "—")}</td></tr>`).join("") || `<tr><td colspan="6">No items posted.</td></tr>`}</tbody>
+        </table>
+        <section class="after-table">
+          <div class="summary">
+            <div class="summary-item"><span>ITEM LINES POSTED</span><strong>${esc(data.totalPostedSkuCount ?? items.length)}</strong></div>
+            <div class="summary-item"><span>POSTED UNITS</span><strong>${esc(data.totalPostedQuantity ?? items.reduce((sum,item)=>sum+(Number(item.quantity)||0),0))}</strong></div>
+            <div class="summary-item"><span>SCANNED UNITS</span><strong>${esc(data.scannedQuantity)}</strong></div>
+            <div class="summary-item"><span>INVOICE UNITS</span><strong>${esc(data.invoiceQuantity)}</strong></div>
+            <div class="summary-item"><span>UNRESOLVED UNITS</span><strong>${esc(data.unresolvedQuantity)}</strong></div>
+          </div>
+          <div class="reconciliation"><strong>Physical quantity check:</strong> ${esc(data.reconciliation)}</div>
+          ${Number(data.unresolvedQuantity)>0?`<div class="reconciliation"><strong>Attention:</strong> ${esc(data.unresolvedQuantity)} unresolved unit(s) are recorded for this inward.</div>`:""}
+          <div class="signatures"><div class="signature">Prepared By</div><div class="signature">Checked By</div><div class="signature">Authorized By</div></div>
+        </section>`;
+    };
+    if (!window.stockInwardReceipt) {
+      window.stockInwardReceipt = {
+        movementNo:"KLINW-SAMPLE-001",businessDate:"14/11/2026",supplierName:"Sample Distributor",supplierCode:"SUP-SAMPLE",
+        invoiceNumber:"INV-SAMPLE-2026",invoiceDate:"14/11/2026",documentStatus:"POSTED",printedAt:"14/11/2026 02:30 PM",
+        totalPostedSkuCount:2,totalPostedQuantity:3,scannedQuantity:3,invoiceQuantity:3,unresolvedQuantity:0,reconciliation:"MATCHED",
+        items:[
+          {product:"Everyday Comfort Bra",sku:"BRA-034B",barcode:"8900000000012",colour:"Black",size:"34B",quantity:2,mrpStatus:"MRP UNCHANGED"},
+          {product:"Soft Lace Brief",sku:"BRF-M",barcode:"8900000000029",colour:"Rose",size:"M",quantity:1,mrpStatus:"MRP UNCHANGED"}
+        ]
+      };
+    }
+    window.renderStockInwardA4();
+  </script>
+  <script src="devicePrintPreviews/preview-tuning.js"></script>
+</body>
+</html>

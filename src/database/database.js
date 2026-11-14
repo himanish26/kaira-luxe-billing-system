@@ -342,6 +342,16 @@ function createTables() {
 
                 default_printer TEXT,
 
+                stock_inward_printer TEXT,
+
+                stock_inward_print_profile TEXT,
+
+                stock_outward_printer TEXT,
+
+                stock_outward_print_profile TEXT,
+
+                device_print_preview_settings TEXT,
+
                 backup_location TEXT,
 
                 auto_backup_time TEXT DEFAULT '21:30',
@@ -514,6 +524,26 @@ function runDatabaseMigrations() {
                     {
                         name: "default_printer",
                         sql: `ALTER TABLE settings ADD COLUMN default_printer TEXT`
+                    },
+                    {
+                        name: "stock_inward_printer",
+                        sql: `ALTER TABLE settings ADD COLUMN stock_inward_printer TEXT`
+                    },
+                    {
+                        name: "stock_inward_print_profile",
+                        sql: `ALTER TABLE settings ADD COLUMN stock_inward_print_profile TEXT`
+                    },
+                    {
+                        name: "stock_outward_printer",
+                        sql: `ALTER TABLE settings ADD COLUMN stock_outward_printer TEXT`
+                    },
+                    {
+                        name: "stock_outward_print_profile",
+                        sql: `ALTER TABLE settings ADD COLUMN stock_outward_print_profile TEXT`
+                    },
+                    {
+                        name: "device_print_preview_settings",
+                        sql: `ALTER TABLE settings ADD COLUMN device_print_preview_settings TEXT`
                     },
                     {
                         name: "smtp_host",

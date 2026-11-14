@@ -121,7 +121,7 @@ async function main() {
         assert.strictEqual(activeSameDate.dsrStatus, "PENDING", "a real pending row remains visible beside a retired same-date row");
         assert.strictEqual(activeSameDate.dsrRetired, undefined);
         assert.strictEqual(activeSameDate.emailStatus, "SUCCESS");
-        assert.strictEqual(status.deliveries.find(item => item.businessDate === "2026-09-29").dsrRetired, true, "retired row is explicitly marked in status details");
+        assert.strictEqual(status.deliveries.find(item => item.businessDate === "2026-09-29"), undefined, "retired historical rows remain stored but are omitted from the active outbox view");
 
         const integrationUiSource = fs.readFileSync(path.join(__dirname, "../src/renderer/modules/system/integrations.js"), "utf8");
         assert(integrationUiSource.includes("item.dsrRetired ? \"RETIRED - NOT SENT\""), "retired status renders as NOT SENT rather than SYNCED/PENDING");

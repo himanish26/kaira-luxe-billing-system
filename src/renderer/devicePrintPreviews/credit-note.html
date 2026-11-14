@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Credit Note</title>
+    <link rel="stylesheet" href="creditNote.css">
+    <link rel="stylesheet" href="sample-screen-preview.css">
+</head>
+<body>
+    <main class="credit-note">
+        <header>
+            <h1 id="storeName">KAIRA LUXE</h1>
+            <div id="storeAddress"></div>
+            <div id="storePhone"></div>
+            <div>GSTIN: <span id="storeGstin"></span></div>
+            <h2>CREDIT NOTE</h2>
+        </header>
+
+        <section class="metadata">
+            <div><b>Credit Note:</b> <span id="creditNoteNo"></span></div>
+            <div><b>Date:</b> <span id="creditNoteDate"></span></div>
+            <div><b>Linked Return No:</b> <span id="returnNo"></span></div>
+            <div><b>Original Tax Invoice No:</b> <span id="originalBillNo"></span></div>
+            <div><b>Original Tax Invoice Date:</b> <span id="originalBillDate"></span></div>
+            <div><b>Customer:</b> <span id="customerName"></span></div>
+            <div><b>Mobile:</b> <span id="customerMobile"></span></div>
+        </section>
+
+        <section id="creditNoteItems"></section>
+
+        <section class="totals">
+            <div><span>Gross reversal</span><span id="grossReversal"></span></div>
+            <div><span>Discount reversal</span><span id="discountReversal"></span></div>
+            <div><span>Taxable reversal</span><span id="taxableReversal"></span></div>
+            <div><span>CGST reversal</span><span id="cgstReversal"></span></div>
+            <div><span>SGST reversal</span><span id="sgstReversal"></span></div>
+            <div><span>GST reversal</span><span id="gstReversal"></span></div>
+            <div class="net"><span>NET CREDIT NOTE</span><span id="netReversal"></span></div>
+        </section>
+
+        <section class="notes">
+            <div><b>Reason:</b> <span id="returnReason"></span></div>
+            <div><b>Remarks:</b> <span id="remarks"></span></div>
+            <div id="settlementLine"><b>Settlement:</b> Store Credit <span id="storeCreditNo"></span></div>
+        </section>
+
+        <footer>
+            This Credit Note records the value and GST reversal for the completed return.
+        </footer>
+    </main>
+    <script src="creditNote.js"></script>
+
+<script>
+window.storeSettings = { store_name: "KAIRA LUXE", address: "Shop No - 3, Shree Towers, Berhampur - 760001, Odisha", phone: "0680-3596443", gstin: "21BBLPP6327G1ZO" };
+window.creditNoteData = {
+  credit_note_no: "KLCN-SAMPLE-008", credit_note_date: "2026-11-14", return_no: "KLR-SAMPLE-044",
+  original_bill_no: "KL-SAMPLE-0988", original_bill_date: "2026-11-12",
+  customer_name: "Sample Customer", customer_mobile: "9000000001", return_reason: "SIZE EXCHANGE",
+  remarks: "Sample credit note only", store_credit_no: "KLSC-SAMPLE-010",
+  gross_reversal: 750, discount_reversal: 0, taxable_reversal: 635.59,
+  cgst_reversal: 57.20, sgst_reversal: 57.21, gst_reversal: 114.41, net_reversal: 750,
+  items: [{ product_name: "Everyday Comfort Bra", barcode: "8900000000012", quantity: 1, mrp: 750, discount_percent: 0, taxable_reversal: 635.59, gst_rate: 18, net_reversal: 750 }]
+};
+window.loadCreditNote();
+</script>
+<script src="preview-tuning.js"></script>
+</body>
+</html>

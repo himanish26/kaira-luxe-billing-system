@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>KLBS Store Credit · Margin-Matched Sample</title>
+
+<link rel="stylesheet" href="receipt.css">
+
+    <link rel="stylesheet" href="sample-screen-preview.css">
+    <link rel="stylesheet" href="sample-receipt-polish.css">
+</head>
+
+<body>
+
+<div class="receipt">
+
+<div class="header">
+
+<h1>KAIRA LUXE</h1>
+
+<p>Innerwear • Jewellery • Cosmetics</p>
+
+<p>
+Shop No - 3, Shree Towers<br>
+Near Khallikote University<br>
+Berhampur - 760001, Odisha
+</p>
+
+<p>
+Contact : 0680-3596443
+</p>
+
+<p>
+Email : kairaluxe@gmail.com
+</p>
+
+<p>
+GSTIN : 21BBLPP6327G1ZO
+</p>
+
+<div class="invoice-title">
+    STORE CREDIT
+</div>
+
+</div>
+
+<hr>
+
+
+        <!-- =========================
+             STORE CREDIT DETAILS
+        ========================== -->
+
+        <div class="details-section">
+
+            <div class="detail-row">
+
+                <span>Store Credit No.</span>
+
+                <strong
+                    id="storeCreditNo"
+                >
+                    -
+                </strong>
+
+            </div>
+
+
+            <div class="detail-row">
+
+                <span>Return No.</span>
+
+                <span
+                    id="returnNo"
+                >
+                    -
+                </span>
+
+            </div>
+
+
+            <div class="detail-row">
+
+                <span>Original Bill No.</span>
+
+                <span
+                    id="originalBillNo"
+                >
+                    -
+                </span>
+
+            </div>
+
+
+            <div class="detail-row">
+
+                <span>Issued On</span>
+
+                <span
+                    id="issueDate"
+                >
+                    -
+                </span>
+
+            </div>
+
+
+            <div class="detail-row valid-until-row">
+
+                <span>Valid Until</span>
+
+                <strong
+                    id="validUntil"
+                >
+                    -
+                </strong>
+
+            </div>
+
+        </div>
+
+
+        <hr>
+
+
+        <!-- =========================
+             CUSTOMER DETAILS
+        ========================== -->
+
+        <div class="section-heading">
+
+            CUSTOMER DETAILS
+
+        </div>
+
+
+        <div class="details-section">
+
+            <div class="detail-row">
+
+                <span>Name</span>
+
+                <span
+                    id="customerName"
+                >
+                    -
+                </span>
+
+            </div>
+
+
+            <div class="detail-row">
+
+                <span>Mobile</span>
+
+                <span
+                    id="customerMobile"
+                >
+                    -
+                </span>
+
+            </div>
+
+        </div>
+
+
+        <hr>
+
+
+        <!-- =========================
+             CREDIT VALUE
+        ========================== -->
+
+        <div class="credit-value-section">
+
+            <div class="credit-label">
+
+                STORE CREDIT VALUE
+
+            </div>
+
+
+            <div
+                id="storeCreditAmount"
+                class="credit-amount"
+            >
+                ₹0.00
+            </div>
+
+        </div>
+
+
+        <hr>
+
+
+        <!-- =========================
+             TERMS & CONDITIONS
+        ========================== -->
+
+        <div class="section-heading">
+
+            TERMS & CONDITIONS
+
+        </div>
+
+
+        <div
+            id="termsConditions"
+            class="terms-conditions"
+        >
+
+            <!--
+                Terms will be inserted
+                by JavaScript.
+            -->
+
+        </div>
+
+
+        <hr>
+
+
+        <!-- =========================
+             FOOTER
+        ========================== -->
+
+        <div class="receipt-footer">
+
+            <div>
+
+                This is a system generated receipt.
+
+            </div>
+
+            <div class="thank-you">
+
+                Thank You!
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <script
+        src="storeCreditReceipt.js"
+    ></script>
+
+
+<script>
+window.storeCreditData = {
+  store_credit_no: "KLSC-SAMPLE-010", return_no: "KLR-SAMPLE-044",
+  original_bill_no: "KL-SAMPLE-0988", issue_date: "2026-11-14",
+  valid_until: "2027-05-14", customer_name: "Sample Customer",
+  customer_mobile: "9000000001", amount: 750
+};
+window.loadStoreCreditReceipt();
+</script>
+<script src="preview-tuning.js"></script>
+</body>
+
+</html>

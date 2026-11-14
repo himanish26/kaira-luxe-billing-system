@@ -883,25 +883,26 @@ async function printStockInwardReceipt(receiptData) {
     let printWindow = null;
     try {
         const settings = await getSettings();
-        if (!settings.default_printer) throw new Error("No default KLBS receipt printer is configured.");
+        const printerName = settings.stock_inward_printer || settings.default_printer;
+        if (!printerName) throw new Error("No KLBS printer is configured for Stock Inward.");
+        const useA4 = settings.stock_inward_print_profile === "A4";
         printWindow = new BrowserWindow({
             show: false,
-            width: 302,
-            height: 800,
+            width: useA4 ? 794 : 302,
+            height: useA4 ? 1123 : 800,
             webPreferences: { nodeIntegration: true, contextIsolation: false }
         });
-        await printWindow.loadFile(path.join(__dirname,"../renderer/stock-inward-receipt.html"));
+        await printWindow.loadFile(path.join(__dirname, useA4 ? "../renderer/stock-inward-a4.html" : "../renderer/stock-inward-receipt.html"));
         const serialized=JSON.stringify(receiptData).replace(/</g,"\\u003c");
-        await printWindow.webContents.executeJavaScript(`window.stockInwardReceipt=${serialized}; if(window.renderStockInwardReceipt) window.renderStockInwardReceipt();`);
+        await printWindow.webContents.executeJavaScript(`window.stockInwardReceipt=${serialized}; if(window.renderStockInwardA4) window.renderStockInwardA4(); if(window.renderStockInwardReceipt) window.renderStockInwardReceipt();`);
         await new Promise(resolve=>setTimeout(resolve,300));
         await new Promise((resolve,reject)=>printWindow.webContents.print({
             silent:true,
             printBackground:true,
-            deviceName:settings.default_printer,
-            margins:{marginType:"none"},
+            deviceName:printerName,
+            ...(useA4 ? { pageSize:"A4" } : { margins:{marginType:"none"}, usePrinterDefaultPageSize:true }),
             landscape:false,
-            scaleFactor:100,
-            usePrinterDefaultPageSize:true
+            scaleFactor:100
         },(success,error)=>success?resolve():reject(new Error(error||"Printer rejected Stock Inward output."))));
         return {success:true};
     } catch(error) {
@@ -916,25 +917,26 @@ async function printStockOutwardReceipt(receiptData) {
     let printWindow = null;
     try {
         const settings = await getSettings();
-        if (!settings.default_printer) throw new Error("No default KLBS receipt printer is configured.");
+        const printerName = settings.stock_outward_printer || settings.default_printer;
+        if (!printerName) throw new Error("No KLBS printer is configured for Stock Outward.");
+        const useA4 = settings.stock_outward_print_profile === "A4";
         printWindow = new BrowserWindow({
             show: false,
-            width: 302,
-            height: 800,
+            width: useA4 ? 794 : 302,
+            height: useA4 ? 1123 : 800,
             webPreferences: { nodeIntegration: true, contextIsolation: false }
         });
-        await printWindow.loadFile(path.join(__dirname,"../renderer/stock-outward-receipt.html"));
+        await printWindow.loadFile(path.join(__dirname, useA4 ? "../renderer/stock-outward-a4.html" : "../renderer/stock-outward-receipt.html"));
         const serialized=JSON.stringify(receiptData).replace(/</g,"\\u003c");
-        await printWindow.webContents.executeJavaScript(`window.stockOutwardReceipt=${serialized}; if(window.renderStockOutwardReceipt) window.renderStockOutwardReceipt();`);
+        await printWindow.webContents.executeJavaScript(`window.stockOutwardReceipt=${serialized}; if(window.renderStockOutwardA4) window.renderStockOutwardA4(); if(window.renderStockOutwardReceipt) window.renderStockOutwardReceipt();`);
         await new Promise(resolve=>setTimeout(resolve,300));
         await new Promise((resolve,reject)=>printWindow.webContents.print({
             silent:true,
             printBackground:true,
-            deviceName:settings.default_printer,
-            margins:{marginType:"none"},
+            deviceName:printerName,
+            ...(useA4 ? { pageSize:"A4" } : { margins:{marginType:"none"}, usePrinterDefaultPageSize:true }),
             landscape:false,
-            scaleFactor:100,
-            usePrinterDefaultPageSize:true
+            scaleFactor:100
         },(success,error)=>success?resolve():reject(new Error(error||"Printer rejected Stock Outward output."))));
         return {success:true};
     } catch(error) {
@@ -942,6 +944,66 @@ async function printStockOutwardReceipt(receiptData) {
         throw new Error("Stock Outward receipt could not be printed.");
     } finally {
         if(printWindow&&!printWindow.isDestroyed())printWindow.close();
+    }
+}
+
+const DEVICE_SETTINGS_PREVIEW_FILES = Object.freeze({
+    "tax-invoice": "tax-invoice.html",
+    "store-credit": "store-credit.html",
+    "day-closing": "day-closing.html",
+    "printer-test": "printer-test.html",
+    "credit-note": "credit-note.html",
+    "stock-inward": "stock-inward.html",
+    "stock-outward": "stock-outward.html",
+    "stock-inward-a4": "stock-inward-a4.html",
+    "stock-outward-a4": "stock-outward-a4.html"
+});
+
+async function printLayoutPreview(previewType) {
+    const fileName = DEVICE_SETTINGS_PREVIEW_FILES[String(previewType || "")];
+    if (!fileName) throw new Error("Unsupported print preview type.");
+
+    const settings = await getSettings();
+    const isInwardA4 = previewType === "stock-inward-a4";
+    const isOutwardA4 = previewType === "stock-outward-a4";
+    const printerName = isInwardA4
+        ? (settings?.stock_inward_printer || settings?.default_printer)
+        : isOutwardA4
+            ? (settings?.stock_outward_printer || settings?.default_printer)
+            : settings?.default_printer;
+    if (!printerName) throw new Error("No default KLBS printer is configured.");
+
+    let printWindow = null;
+    try {
+        printWindow = new BrowserWindow({
+            show: false,
+            width: isInwardA4 || isOutwardA4 ? 794 : 302,
+            height: isInwardA4 || isOutwardA4 ? 1123 : 1200,
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: true
+            }
+        });
+        const previewPath = (isInwardA4 || isOutwardA4)
+            ? path.join(__dirname, "../renderer", fileName)
+            : path.join(__dirname, "../renderer/devicePrintPreviews", fileName);
+        await printWindow.loadFile(previewPath);
+        await new Promise(resolve => setTimeout(resolve, 150));
+        await new Promise((resolve, reject) => printWindow.webContents.print({
+            silent: true,
+            printBackground: true,
+            deviceName: printerName,
+            ...(isInwardA4 || isOutwardA4 ? { pageSize: "A4" } : { margins: { marginType: "none" }, usePrinterDefaultPageSize: true }),
+            landscape: false,
+            scaleFactor: 100
+        }, (success, error) => success ? resolve() : reject(new Error(error || "Printer rejected sample output."))));
+        return { success: true };
+    } catch (error) {
+        technicalLogger.error("PRINTER", "Device Settings sample print failed", error, { previewType });
+        throw new Error(error.message || "The print sample could not be sent.");
+    } finally {
+        if (printWindow && !printWindow.isDestroyed()) printWindow.close();
     }
 }
 
@@ -961,6 +1023,7 @@ module.exports = {
 
     printDayClosingReceipt,
     printStockInwardReceipt,
-    printStockOutwardReceipt
+    printStockOutwardReceipt,
+    printLayoutPreview
 
 };

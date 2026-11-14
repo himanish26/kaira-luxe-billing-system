@@ -15,6 +15,8 @@ function createIntegrationStatusService({ database, legacyOutbox }) {
                      WHERE newer.business_date=s.business_date AND newer.close_status='CLOSED'
                        AND newer.close_sequence>s.close_sequence
                    )
+                   AND (j.sheet_status IN ('PENDING','PROCESSING','FAILED')
+                     OR j.email_status IN ('PENDING','PROCESSING','FAILED'))
                  ORDER BY j.business_date DESC,j.id DESC`),
             get(`SELECT dsr_synced_at AS at FROM day_closing_snapshots
                  WHERE close_status='CLOSED' AND dsr_sync_status='SYNCED' AND dsr_synced_at IS NOT NULL
@@ -30,15 +32,15 @@ function createIntegrationStatusService({ database, legacyOutbox }) {
             const delivery = byDate.get(job.business_date) || {
                 businessDate: job.business_date, emailStatus: "SUCCESS", dsrStatus: "SUCCESS"
             };
+            for (const status of [job.sheet_status, job.email_status]) {
+                if (status === "PENDING" || status === "PROCESSING") consolidatedPending += 1;
+                else if (status === "FAILED") consolidatedFailed += 1;
+            }
             delivery.consolidatedJobId = job.id;
             delivery.consolidatedSheetStatus = job.sheet_status;
             delivery.consolidatedEmailStatus = job.email_status;
             delivery.consolidatedSheetDeliveredAt = job.sheet_delivered_at;
             delivery.consolidatedEmailDeliveredAt = job.email_delivered_at;
-            for (const status of [job.sheet_status, job.email_status]) {
-                if (status === "PENDING" || status === "PROCESSING") consolidatedPending += 1;
-                else if (status === "FAILED") consolidatedFailed += 1;
-            }
             byDate.set(job.business_date, delivery);
         }
         const pendingCount = Number(legacy.pendingCount || 0) + consolidatedPending;

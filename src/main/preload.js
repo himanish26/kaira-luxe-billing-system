@@ -494,6 +494,10 @@ saveSettings: (settings, grant) =>
         grant
     ),
 
+saveStockDocumentPrintSettings: settings => ipcRenderer.invoke("stock-document-print-settings:save", settings || {}),
+
+saveDevicePrintPreviewSettings: input => ipcRenderer.invoke("device-print-preview-settings:save", input || {}),
+
 getIntegrationConfig: () => ipcRenderer.invoke("integrations:get-config"),
 getIntegrationOutboxStatus: () => ipcRenderer.invoke("integrations:get-outbox-status"),
 getIntegrationDetails: (kind, grant) => ipcRenderer.invoke("integrations:get-details", kind, grant),
@@ -520,6 +524,8 @@ testPrinter: (printerName) =>
         "printer:test",
         printerName
     ),
+
+printLayoutPreview: previewType => ipcRenderer.invoke("printer:print-layout-preview", previewType),
 
 createBackup: () =>
     ipcRenderer.invoke(

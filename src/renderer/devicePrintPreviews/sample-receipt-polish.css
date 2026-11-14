@@ -1,0 +1,2 @@
+/* Sample-only layout option: match Day Closing's 72 mm centered receipt and 1 mm print-side inset. */
+.receipt { margin: 0 auto 2mm !important; padding: 2mm 1mm !important; }

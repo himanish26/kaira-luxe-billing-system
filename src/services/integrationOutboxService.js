@@ -179,7 +179,7 @@ function createIntegrationOutboxService(options = {}) {
             }
         }
         for (const item of byDate.values()) if (!item.dsrStatus) item.dsrStatus = "PENDING";
-        const deliveries = [...byDate.values()].filter(item => item.emailStatus !== "SUCCESS" || item.dsrStatus !== "SUCCESS" || item.dsrRetired);
+        const deliveries = [...byDate.values()].filter(item => item.emailStatus !== "SUCCESS" || item.dsrStatus !== "SUCCESS");
         return { pendingCount: rows.filter(row => row.status !== "SUCCESS").length, deliveries };
     }
     return { enqueue, drain, list: () => all("SELECT * FROM integration_outbox ORDER BY business_date, id"), getStatusView, retireLegacyDsrBacklog };

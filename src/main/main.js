@@ -330,7 +330,9 @@ const {
 
     getRendererSettings,
 
-    saveSettings
+    saveSettings,
+    saveStockDocumentPrintSettings,
+    saveDevicePrintPreviewSettings
 
 } = require("../database/settingsService");
 
@@ -444,7 +446,8 @@ const {
     printStockInwardReceipt,
     printStockOutwardReceipt,
     printCreditNote,
-    saveCreditNotePdf
+    saveCreditNotePdf,
+    printLayoutPreview
 
 } = require("./printer");
 
@@ -2977,6 +2980,17 @@ ipcMain.handle(
 
 );
 
+ipcMain.handle("printer:print-layout-preview", async (event, previewType) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) {
+        throw new Error("Unauthorized renderer for print preview.");
+    }
+    try {
+        return await printLayoutPreview(previewType);
+    } catch (error) {
+        return { success: false, error: error.message || "The sample could not be printed." };
+    }
+});
+
 ipcMain.handle(
     "save-bill-pdf",
     async (event, billData) => {
@@ -3361,6 +3375,20 @@ ipcMain.handle(
     }
 
 );
+
+ipcMain.handle("stock-document-print-settings:save", async (event, settings) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) {
+        throw new Error("Stock document printer settings request rejected.");
+    }
+    return saveStockDocumentPrintSettings(settings || {});
+});
+
+ipcMain.handle("device-print-preview-settings:save", async (event, input) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) {
+        throw new Error("Print preview settings request rejected.");
+    }
+    return saveDevicePrintPreviewSettings(input || {});
+});
 
 ipcMain.handle(
     "export-inventory",

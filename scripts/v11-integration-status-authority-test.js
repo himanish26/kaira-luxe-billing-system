@@ -9,8 +9,8 @@ async function createDb(sheetState = "PENDING") {
     const db = new sqlite3.Database(":memory:");
     await run(db, "CREATE TABLE consolidated_reporting_jobs (id INTEGER,closing_id INTEGER,business_date TEXT,sheet_status TEXT,email_status TEXT,sheet_delivered_at TEXT,email_delivered_at TEXT)");
     await run(db, "CREATE TABLE day_closing_snapshots (id INTEGER,business_date TEXT,close_sequence INTEGER,close_status TEXT,dsr_sync_status TEXT,dsr_synced_at TEXT)");
-    await run(db, "INSERT INTO day_closing_snapshots VALUES (14,'2026-09-27',3,'CLOSED','SYNCED','2026-09-27T10:00:00.000Z'),(13,'2026-09-26',2,'REOPENED','FAILED',NULL)");
-    await new Promise((resolve, reject) => db.run("INSERT INTO consolidated_reporting_jobs VALUES (3,14,'2026-09-27',?,'DELIVERED',?,NULL),(2,13,'2026-09-26','FAILED','FAILED',NULL,NULL)", [sheetState, sheetState === "DELIVERED" ? "2026-09-27T12:13:04.589Z" : null], error => error ? reject(error) : resolve()));
+    await run(db, "INSERT INTO day_closing_snapshots VALUES (14,'2026-09-27',3,'CLOSED','SYNCED','2026-09-27T10:00:00.000Z'),(13,'2026-09-26',2,'REOPENED','FAILED',NULL),(12,'2026-09-20',1,'CLOSED','SYNCED','2026-09-20T10:00:00.000Z')");
+    await new Promise((resolve, reject) => db.run("INSERT INTO consolidated_reporting_jobs VALUES (3,14,'2026-09-27',?,'DELIVERED',?,NULL),(2,13,'2026-09-26','FAILED','FAILED',NULL,NULL),(1,12,'2026-09-20','DELIVERED','DELIVERED','2026-09-21T12:13:04.589Z','2026-09-21T12:13:04.589Z')", [sheetState, sheetState === "DELIVERED" ? "2026-09-27T12:13:04.589Z" : null], error => error ? reject(error) : resolve()));
     let writes = 0;
     db.run = () => { writes += 1; throw new Error("status query must be read-only"); };
     const legacyOutbox = { getStatusView: async () => ({ pendingCount: 1, deliveries: [{ businessDate: "2026-09-27", emailStatus: "SUCCESS", dsrStatus: "PENDING" }] }) };
@@ -40,6 +40,7 @@ async function createDb(sheetState = "PENDING") {
     assert.strictEqual(status.failedCount, 0);
     assert.strictEqual(status.pendingCount, 0);
     assert.strictEqual(status.upToDate, true);
+    assert.strictEqual(status.deliveries.find(row => row.businessDate === "2026-09-20"), undefined, "completed historical deliveries are retained in storage but omitted from the active outbox view");
     assert.strictEqual(status.lastDsrSync.at, "2026-09-27T12:13:04.589Z");
     assert.strictEqual(fixture.getWrites(), 0);
     assert.strictEqual(healthyFixture.getWrites(), 0);

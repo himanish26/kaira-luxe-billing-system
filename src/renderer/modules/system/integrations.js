@@ -407,7 +407,7 @@ function showCustomerCrmForm(crm, crmStatus = {}) {
             <div class="integration-info-row crm-sync-status"><span class="integration-status-label">Customer Sync</span><strong id="crmSyncStatus" class="${integrationStatusClass(crm.enabled ? "ENABLED" : "DISABLED")}">${crm.enabled ? "ENABLED" : "DISABLED"}</strong></div>
             <div class="integration-info-row"><span class="integration-status-label">Pending Customers</span><strong class="${integrationStatusClass(Number(crmStatus.pendingCount || 0) > 0 ? "PENDING" : "")}">${Number(crmStatus.pendingCount || 0)}</strong></div>
             <div class="integration-info-row"><span class="integration-status-label">Last Successful Sync</span><strong class="${integrationStatusClass(crmStatus.lastSuccessAt ? "SUCCESS" : "")}">${integrationEscape(crmStatus.lastSuccessAt ? integrationTime(crmStatus.lastSuccessAt) : "Never")}</strong></div>
-            <div class="integration-info-row"><span class="integration-status-label">Last Connection Test</span><strong class="${integrationStatusClass(crm.lastTestResult)}">${integrationEscape(crm.lastTestAt ? integrationTime(crm.lastTestAt) + " · " + integrationLabel(crm.lastTestResult) : "Never")}</strong></div>
+            <div class="integration-info-row"><span class="integration-status-label">Last Connection Test</span><strong id="crmLastConnectionTest" class="${integrationStatusClass(crm.lastTestResult)}">${integrationEscape(crm.lastTestAt ? integrationTime(crm.lastTestAt) + " · " + integrationLabel(crm.lastTestResult) : "Never")}</strong></div>
             <div class="crm-sync-actions"><button id="syncNow" class="integration-button integration-button-primary">SYNC NOW</button><button id="syncExisting" class="integration-button integration-button-secondary">SYNC EXISTING CUSTOMERS</button></div>
             <p id="crmSyncDisabledReason" class="crm-sync-unavailable" aria-live="polite"></p>
             <p id="message" class="security-message" aria-live="polite"></p>
@@ -453,7 +453,12 @@ function showCustomerCrmForm(crm, crmStatus = {}) {
         const button = document.getElementById("testConnection"); button.disabled = true; msg("Testing the saved CRM destination...");
         try {
             const r = await window.electronAPI.testCustomerCrmIntegration();
-            await loadCustomerCrmForm();
+            crm.lastTestAt = new Date().toISOString();
+            crm.lastTestResult = r.success ? "SUCCESS" : "FAILED";
+            const status = document.getElementById("crmLastConnectionTest");
+            status.textContent = `${integrationTime(crm.lastTestAt)} · ${integrationLabel(crm.lastTestResult)}`;
+            status.className = integrationStatusClass(crm.lastTestResult);
+            updateSyncAvailability();
             msg(r.success ? "Connection Successful. Customer synchronization is available." : "Connection test failed. Deploy the CRM receiver and verify its URL, secret, Spreadsheet ID, and worksheet.");
         } catch (error) { msg(error.message || "Connection test failed."); }
         finally { const current = document.getElementById("testConnection"); if (current) current.disabled = false; }
