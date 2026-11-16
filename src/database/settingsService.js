@@ -481,12 +481,23 @@ function saveDevicePrintPreviewSettings(input = {}) {
                     if (error) return reject(error);
                     let activityWarning = null;
                     try {
+                        const previewTitles = {
+                            "tax-invoice": "Tax Invoice",
+                            "store-credit": "Store Credit",
+                            "day-closing": "Day Closing",
+                            "printer-test": "Printer Test",
+                            "credit-note": "Credit Note",
+                            "stock-inward": "Stock Inward",
+                            "stock-outward": "Stock Outward",
+                            "stock-inward-a4": "Stock Inward A4",
+                            "stock-outward-a4": "Stock Outward A4"
+                        };
                         await logActivity({ category: "PRINTING", action: "PRINT_PREVIEW_SETTINGS_SAVED",
-                            details: `Saved ${documentType} preview: ${preference.font}, ${size}px text, margins ${margins.top}/${margins.right}/${margins.bottom}/${margins.left} mm (top/right/bottom/left).`,
+                            details: `Saved ${previewTitles[documentType]} print settings.`,
                             user_name: "OPERATOR", status: "SUCCESS", entity_type: "PRINT_PREVIEW",
                             reference_no: documentType.toUpperCase().replace(/-/g, "_") });
                     } catch {
-                        activityWarning = "Preview settings were saved, but their Activity Log entry could not be recorded.";
+                        activityWarning = "Settings saved; Activity Log entry failed.";
                     }
                     resolve({ success: true, changed: true, preference, allPreferences, activityWarning });
                 });

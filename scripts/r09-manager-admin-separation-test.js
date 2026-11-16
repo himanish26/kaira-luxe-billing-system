@@ -83,6 +83,7 @@ async function main() {
         "GIFT_VOUCHER",
         "INVENTORY_INWARD",
         "INVENTORY_OUTWARD",
+        "DYNAMIC_MRP_RETURN_COST",
         "DAY_REOPEN",
         "EXPENSE_POST",
         "P_AND_L_ENTRY_POST",
@@ -90,14 +91,20 @@ async function main() {
         "SUPPLIER_INVOICE_POST",
         "SUPPLIER_PAYMENT_POST",
         "SUPPLIER_OPENING_BALANCE_POST",
-        "SUPPLIER_CREDIT_NOTE_POST"
+        "SUPPLIER_CREDIT_NOTE_POST",
+        "CUSTOMERS_MODULE_ACCESS",
+        "SUPPLIERS_MODULE_ACCESS",
+        "ACCOUNTING_DATA_MODULE_ACCESS"
     ];
     for (const purpose of managerPurposes) {
         assert.strictEqual(AUTHORIZATION_POLICY[purpose], AUTHORIZATION_LEVELS.MANAGER);
     }
     for (const purpose of [...AUTHORIZATION_PURPOSES].filter(purpose =>
         !managerPurposes.includes(purpose))) {
-        assert.strictEqual(AUTHORIZATION_POLICY[purpose], AUTHORIZATION_LEVELS.ADMINISTRATOR);
+        const expectedLevel = purpose === "PIN_MANAGEMENT_MASTER"
+            ? AUTHORIZATION_LEVELS.MASTER
+            : AUTHORIZATION_LEVELS.ADMINISTRATOR;
+        assert.strictEqual(AUTHORIZATION_POLICY[purpose], expectedLevel);
     }
 
     let clock = 1000;
@@ -211,16 +218,16 @@ async function main() {
     assert(sources.renderer.includes('.getAuthorizationRole(purpose)'));
     assert(sources.renderer.includes('role !== "ADMINISTRATOR" && role !== "MANAGER"'));
     assert(!/managerPurpose\s*=\s*\[[\s\S]{0,700}\.includes\(purpose\)/.test(sources.renderer));
-    assert(sources.renderer.includes('requestAdminAuthorization("FF")'));
-    assert(sources.renderer.includes('requestAdminAuthorization("GIFT_VOUCHER")'));
+    assert(sources.renderer.includes('requestOptionalManagerAuthorization("FF")'));
+    assert(sources.renderer.includes('requestOptionalManagerAuthorization("GIFT_VOUCHER")'));
     assert(sources.renderer.includes('adminDialog.querySelector(".modal-content")'));
     assert(!sources.renderer.includes('ffPinDialog'));
     assert(!sources.shortcuts.includes('ffPinDialog'));
     assert(sources.main.includes('"security:get-authorization-role"'));
     assert(sources.preload.includes('getAuthorizationRole: purpose => ipcRenderer.invoke("security:get-authorization-role", purpose)'));
-    assert(sources.renderer.includes('const roleLabel = managerPurpose ? "Manager" : "Administrator"'));
+    assert(sources.renderer.includes('const roleLabel = managerPurpose ? "Manager" : role === "MASTER" ? "Master" : "Administrator"'));
     assert(sources.renderer.includes('title.textContent = `${roleLabel} Access`'));
-    assert(sources.renderer.includes('Enter 4-digit ${roleLabel} PIN'));
+    assert(sources.renderer.includes('Enter ${pinLength}-digit ${roleLabel} PIN'));
     assert(sources.renderer.includes('authorization.error || "Authorization failed."'));
     assert(sources.securityService.includes('`Incorrect ${label} PIN.`'));
     assert(sources.renderer.includes('adminPin.focus()'));
@@ -234,9 +241,12 @@ async function main() {
         assert.strictEqual(AUTHORIZATION_POLICY[purpose], AUTHORIZATION_LEVELS.MANAGER);
     }
     for (const purpose of [...AUTHORIZATION_PURPOSES].filter(item => !managerPurposes.includes(item))) {
-        assert.strictEqual(AUTHORIZATION_POLICY[purpose], AUTHORIZATION_LEVELS.ADMINISTRATOR);
+        const expectedLevel = purpose === "PIN_MANAGEMENT_MASTER"
+            ? AUTHORIZATION_LEVELS.MASTER
+            : AUTHORIZATION_LEVELS.ADMINISTRATOR;
+        assert.strictEqual(AUTHORIZATION_POLICY[purpose], expectedLevel);
     }
-    assert(sources.dayClosing.includes('requestAdminAuthorization("DAY_REOPEN")'));
+    assert(sources.dayClosing.includes('requestOptionalManagerAuthorization("DAY_REOPEN")'));
     assert(sources.main.includes('authorizePin(pin, "DAY_REOPEN")'));
     assert(sources.splash.includes("4-digit Manager PIN"));
     assert(sources.settings.includes("manager_pin_hash"));

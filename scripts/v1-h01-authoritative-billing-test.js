@@ -27,6 +27,38 @@ function close(db) {
     return new Promise((resolve, reject) => db.close(error => error ? reject(error) : resolve()));
 }
 
+async function seedOpeningStock(db, barcode, quantity, referenceId) {
+    const product = await get(db, "SELECT id,mrp FROM products WHERE barcode=?", [barcode]);
+    const bucket = await run(db, `INSERT INTO product_mrp_buckets
+        (product_id,mrp_paise,status,source,created_by,created_at)
+        VALUES(?,?,'ACTIVE','LEGACY_VERIFIED','TEST',datetime('now'))`,
+    [product.id, Math.round(Number(product.mrp) * 100)]);
+    await run(db, `INSERT INTO inventory_transactions
+        (product_id,barcode,transaction_type,quantity,reference_type,reference_id,remarks,created_by,created_at,mrp_bucket_id)
+        VALUES(?,?,'OPENING',?,'H01_TEST',?,'Disposable H-01 opening stock','TEST',datetime('now'),?)`,
+    [product.id, barcode, quantity, referenceId, bucket.lastID]);
+    await run(db, `INSERT INTO stock_receipt_layers
+        (bucket_id,quantity_received,unit_cost_paise,cost_basis_status,cost_source,received_at,created_by)
+        VALUES(?,?,NULL,'UNKNOWN',NULL,datetime('now'),'TEST')`, [bucket.lastID, quantity]);
+    return bucket.lastID;
+}
+
+async function seedAdditionalMrpStock(db, barcode, mrp, quantity, referenceId) {
+    const product = await get(db, "SELECT id FROM products WHERE barcode=?", [barcode]);
+    const bucket = await run(db, `INSERT INTO product_mrp_buckets
+        (product_id,mrp_paise,status,source,created_by,created_at)
+        VALUES(?,?,'ACTIVE','STOCK_MOVEMENT','TEST',datetime('now'))`,
+    [product.id, Math.round(Number(mrp) * 100)]);
+    await run(db, `INSERT INTO inventory_transactions
+        (product_id,barcode,transaction_type,quantity,reference_type,reference_id,remarks,created_by,created_at,mrp_bucket_id)
+        VALUES(?,?,'INWARD',?,'H01_TEST',?,'Disposable additional MRP test stock','TEST',datetime('now'),?)`,
+    [product.id, barcode, quantity, referenceId, bucket.lastID]);
+    await run(db, `INSERT INTO stock_receipt_layers
+        (bucket_id,quantity_received,unit_cost_paise,cost_basis_status,cost_source,received_at,created_by)
+        VALUES(?,?,NULL,'UNKNOWN',NULL,datetime('now'),'TEST')`, [bucket.lastID, quantity]);
+    return bucket.lastID;
+}
+
 async function child(tempRoot) {
     const { app } = require("electron");
     app.setPath("userData", path.join(tempRoot, "user data"));
@@ -34,17 +66,14 @@ async function child(tempRoot) {
     const db = require("../src/database/database");
     await db.databaseReady;
 
+    let h01MrpBucketId = null;
+    let h01BMrpBucketId = null;
     await run(db, `
         INSERT INTO products
             (barcode, sku, brand, product_name, mrp, discount, selling_price, gst_rate, opening_stock, active, business_segment)
         VALUES ('890-H01', 'H01-A', 'H01', 'H-01 Product', 1200, 20, 1100, 12, 10, 1, 'KL')
     `);
-    await run(db, `
-        INSERT INTO inventory_transactions
-            (product_id, barcode, transaction_type, quantity, reference_type, reference_id, remarks, created_by, created_at)
-        SELECT id, barcode, 'OPENING', 10, 'H01_TEST', 'H01', 'H-01 disposable test', 'TEST', datetime('now')
-        FROM products WHERE barcode = '890-H01'
-    `);
+    h01MrpBucketId = await seedOpeningStock(db, "890-H01", 10, "H01");
     const product = await get(db, "SELECT mrp, discount, gst_rate, active FROM products WHERE barcode = '890-H01'");
     assert.deepStrictEqual(product, { mrp: 1200, discount: 20, gst_rate: 12, active: 1 });
 
@@ -71,6 +100,7 @@ async function child(tempRoot) {
         store_credit: null,
         items: [{
             barcode: "890-H01",
+            mrp_bucket_id: h01MrpBucketId,
             product_name: "Forged renderer name",
             brand: "Forged",
             category: "Forged",
@@ -128,10 +158,12 @@ async function child(tempRoot) {
         "billing the selected old MRP must not deduct the new-MRP batch");
 
     await run(db, "UPDATE products SET mrp = 1300, discount = 15, gst_rate = 18, business_segment = 'MENS' WHERE barcode = '890-H01'");
+    h01MrpBucketId = await seedAdditionalMrpStock(db, "890-H01", 1300, 10, "H01-1300");
     await saveBill(payload("H01-003", {
         cash_amount: 1105,
         items: [{
             barcode: "890-H01",
+            mrp_bucket_id: h01MrpBucketId,
             product_name: "Old cart name",
             qty: 1,
             mrp: 1200,
@@ -152,6 +184,7 @@ async function child(tempRoot) {
         cash_amount: 975,
         items: [{
             barcode: "890-H01",
+            mrp_bucket_id: h01MrpBucketId,
             product_name: "Forged renderer name",
             qty: 1,
             mrp: 1,
@@ -177,17 +210,12 @@ async function child(tempRoot) {
             (barcode, sku, brand, product_name, mrp, discount, selling_price, gst_rate, opening_stock, active, business_segment)
         VALUES ('890-H01-B', 'H01-B', 'H01', 'H-01 Product B', 1000, 0, 900, 5, 1, 1, 'KIDS')
     `);
-    await run(db, `
-        INSERT INTO inventory_transactions
-            (product_id, barcode, transaction_type, quantity, reference_type, reference_id, remarks, created_by, created_at)
-        SELECT id, barcode, 'OPENING', 1, 'H01_TEST', 'H01-B', 'H-01 disposable test', 'TEST', datetime('now')
-        FROM products WHERE barcode = '890-H01-B'
-    `);
+    h01BMrpBucketId = await seedOpeningStock(db, "890-H01-B", 1, "H01-B");
     await saveBill(payload("H01-006", {
         cash_amount: 2105,
         items: [
-            { barcode: "890-H01", qty: 1, mrp: 1, discount: 1, gst_rate: 1, ff_discount: null },
-            { barcode: "890-H01-B", qty: 1, mrp: 1, discount: 1, gst_rate: 1, ff_discount: null }
+            { barcode: "890-H01", mrp_bucket_id: h01MrpBucketId, qty: 1, mrp: 1, discount: 1, gst_rate: 1, ff_discount: null },
+            { barcode: "890-H01-B", mrp_bucket_id: h01BMrpBucketId, qty: 1, mrp: 1, discount: 1, gst_rate: 1, ff_discount: null }
         ]
     }));
     const mixed = await get(db, "SELECT COUNT(*) AS count FROM bill_items WHERE bill_no = 'H01-006'");

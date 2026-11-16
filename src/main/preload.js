@@ -525,7 +525,7 @@ testPrinter: (printerName) =>
         printerName
     ),
 
-printLayoutPreview: previewType => ipcRenderer.invoke("printer:print-layout-preview", previewType),
+printLayoutPreview: (previewType, previewSettings) => ipcRenderer.invoke("printer:print-layout-preview", previewType, previewSettings || {}),
 
 createBackup: () =>
     ipcRenderer.invoke(

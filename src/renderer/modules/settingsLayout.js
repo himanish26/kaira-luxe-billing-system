@@ -325,10 +325,10 @@ autocomplete="off"
     </div>
     <span class="print-preview-only-badge">Thermal receipts + A4 stock sheets</span>
   </div>
-  <p class="print-preview-note">Font and margin controls adjust the on-screen sample only. Stock Inward and Stock Outward each have separate A4 sheet and POS thermal layouts; choose the matching printer and paper layout above.</p>
+  <p class="print-preview-note">Saved Tax Invoice font, size and margins apply to new bills, Bill History reprints and 80 mm PDF exports. Print Sample uses the current selections. Stock Inward and Stock Outward keep separate A4 sheet and POS thermal layouts.</p>
   <div class="print-layout-workbench">
-    <div class="print-layout-controls" aria-label="Preview controls">
-      <label>Print preview
+    <div class="print-layout-controls" aria-label="Print layout controls">
+      <label>Print layout
         <select id="printPreviewType">
           <option value="tax-invoice">Tax Invoice</option>
           <option value="store-credit">Store Credit</option>
@@ -341,7 +341,7 @@ autocomplete="off"
           <option value="stock-outward-a4">Stock Outward · A4 sheet</option>
         </select>
       </label>
-      <label>Preview font
+      <label>Document font
         <select id="printPreviewFont">
           <option value="arial">Arial / Helvetica</option>
           <option value="trebuchet">Trebuchet MS</option>
@@ -354,14 +354,14 @@ autocomplete="off"
       <label>Body text size
         <span class="print-preview-number"><input id="printPreviewFontSize" type="number" min="9" max="18" step="1" value="13"><span>px</span></span>
       </label>
-      <div class="print-preview-margin-group" role="group" aria-label="Preview page margins in millimetres">
+      <div class="print-preview-margin-group" role="group" aria-label="Print page margins in millimetres">
         <span class="print-preview-control-title">Page margins <small>mm</small></span>
         <label>Top<input id="printPreviewMarginTop" type="number" min="0" max="12" step="1" value="2"></label>
         <label>Right<input id="printPreviewMarginRight" type="number" min="0" max="12" step="1" value="5"></label>
         <label>Bottom<input id="printPreviewMarginBottom" type="number" min="0" max="12" step="1" value="2"></label>
         <label>Left<input id="printPreviewMarginLeft" type="number" min="0" max="12" step="1" value="5"></label>
       </div>
-      <button id="savePrintPreviewSettings" type="button" class="integration-button integration-button-primary" disabled>💾 SAVE PREVIEW SETTINGS</button>
+      <button id="savePrintPreviewSettings" type="button" class="integration-button integration-button-primary" disabled>💾 SAVE PRINT SETTINGS</button>
       <button id="printPreviewReset" type="button" class="integration-button integration-button-neutral">RESTORE DOCUMENT PRESET</button>
       <p id="printPreviewSaveStatus" class="print-preview-print-status" role="status" aria-live="polite"></p>
     </div>
@@ -846,9 +846,14 @@ document.getElementById("savePrintPreviewSettings").addEventListener("click", as
         const result = await window.electronAPI.saveDevicePrintPreviewSettings({ documentType, settings });
         savedPrintPreviewSettings = result?.allPreferences || { ...savedPrintPreviewSettings, [documentType]: settings };
         updatePrintPreviewSaveButton();
-        status.textContent = result?.activityWarning || `Saved ${printPreviewDocuments[documentType]?.title || documentType} preview choices and recorded the save in Activity Log.`;
+        const statusTitles = {
+            "tax-invoice": "Tax Invoice", "store-credit": "Store Credit", "day-closing": "Day Closing",
+            "printer-test": "Printer Test", "credit-note": "Credit Note", "stock-inward": "Stock Inward",
+            "stock-outward": "Stock Outward", "stock-inward-a4": "Stock Inward A4", "stock-outward-a4": "Stock Outward A4"
+        };
+        status.textContent = result?.activityWarning || `Saved ${statusTitles[documentType] || "print"} print settings.`;
     } catch (error) {
-        status.textContent = error.message || "Could not save preview choices.";
+        status.textContent = error.message || "Could not save print settings.";
     } finally {
         updatePrintPreviewSaveButton();
     }
@@ -861,7 +866,7 @@ printPreviewPrintButton.addEventListener("click", async () => {
     printPreviewPrintButton.disabled = true;
     printPreviewPrintStatus.textContent = `Sending ${selected.title} sample to the saved printer…`;
     try {
-        const result = await window.electronAPI.printLayoutPreview(selectedType);
+        const result = await window.electronAPI.printLayoutPreview(selectedType, currentPrintPreviewPreference());
         printPreviewPrintStatus.textContent = result?.success
             ? `${selected.title} sample sent to the saved printer.`
             : (result?.error || "The sample could not be printed.");

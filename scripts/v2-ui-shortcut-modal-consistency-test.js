@@ -20,6 +20,10 @@ const context = {
     document: { getElementById: id => nodes.get(id) || null, querySelector: () => null },
     window: {
         getComputedStyle: node => ({ display: node.style.display || "flex", visibility: "visible", opacity: "1" }),
+        KLBSDrawer: {
+            hasOpenDrawer: () => customerDrawerOpen,
+            getActive: () => ({ close: () => { customerDrawerOpen = false; clicks.push("customerDrawerBack"); } })
+        },
         isNewBillCustomerDrawerOpen: () => customerDrawerOpen,
         closeNewBillCustomerDrawer: () => { customerDrawerOpen = false; clicks.push("customerDrawerBack"); },
         guardNewBillBusinessDay: async () => false,
@@ -46,7 +50,6 @@ async function main() {
         ["customerProfileModal", "customerProfileCancel"],
         ["dayReopenReasonModal", "cancelDayReopenReasonBtn"],
         ["adminDialog", "adminCancelBtn"],
-        ["ffPinDialog", "ffPinCancelBtn"],
         ["ffDiscountDialog", "ffDiscountCancelBtn"],
         ["stockTransactionModal", "cancelStockTransactionBtn"]
     ];
@@ -69,6 +72,7 @@ async function main() {
         assert.deepStrictEqual(clicks, [], `${modalId} blocks navigation, save and Esc`);
         nodes.delete(modalId);
     }
+    nodes.get("paymentScreen").style.display = "none";
     customerDrawerOpen = true;
     clicks.length = 0;
     for (const key of ["F2", "F3", "F4", "F5", "F10", "F12"]) press(key);

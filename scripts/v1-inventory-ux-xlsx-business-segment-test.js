@@ -139,9 +139,9 @@ async function run() {
         const inventoryHeaders = headerIndex(inventorySheet.getRow(1));
         assert.strictEqual(
             inventoryHeaders.get("Business Segment"),
-            4
+            5
         );
-        assert.strictEqual(inventoryHeaders.get("Segment"), 5);
+        assert.strictEqual(inventoryHeaders.get("Segment"), 4);
         assert(inventoryHeaders.has("Variable Value"));
         assert(inventoryHeaders.has("HSN Code"));
         assert.strictEqual(
@@ -156,23 +156,23 @@ async function run() {
             INVENTORY_EXPORT_COLUMNS.filter(column => column.header === "Business Segment").length,
             1
         );
-        assert.strictEqual(cellText(inventorySheet.getRow(2), 4), "KL");
+        assert.strictEqual(cellText(inventorySheet.getRow(2), 5), "KL");
         assert.strictEqual(cellText(inventorySheet.getRow(2), inventoryHeaders.get("Variable Value")), "YES");
         assert.strictEqual(cellText(inventorySheet.getRow(3), inventoryHeaders.get("Variable Value")), "NO");
         assert.strictEqual(cellText(inventorySheet.getRow(4), inventoryHeaders.get("Variable Value")), "NO");
         assert.strictEqual(cellText(inventorySheet.getRow(2), inventoryHeaders.get("HSN Code")), "6109");
-        assert.strictEqual(cellText(inventorySheet.getRow(3), 4), "KL");
-        assert.strictEqual(cellText(inventorySheet.getRow(4), 4), "KL");
-        assert.strictEqual(cellText(inventorySheet.getRow(5), 4), "KL");
-        assert.strictEqual(cellText(inventorySheet.getRow(6), 4), "MENS");
-        assert.strictEqual(cellText(inventorySheet.getRow(7), 4), "KIDS");
-        assert.strictEqual(cellText(inventorySheet.getRow(8), 4), null);
-        assert.strictEqual(cellText(inventorySheet.getRow(9), 4), "KL");
-        assert.strictEqual(cellText(inventorySheet.getRow(2), 5), "L'Oréal Men");
-        assert.strictEqual(cellText(inventorySheet.getRow(3), 5), "L'Oréal Woman");
-        assert.strictEqual(cellText(inventorySheet.getRow(4), 5), "Perfumes");
-        assert.strictEqual(cellText(inventorySheet.getRow(8), 5), "Perfumes");
-        assert.strictEqual(cellText(inventorySheet.getRow(9), 5), null);
+        assert.strictEqual(cellText(inventorySheet.getRow(3), 5), "KL");
+        assert.strictEqual(cellText(inventorySheet.getRow(4), 5), "KL");
+        assert.strictEqual(cellText(inventorySheet.getRow(5), 5), "KL");
+        assert.strictEqual(cellText(inventorySheet.getRow(6), 5), "MENS");
+        assert.strictEqual(cellText(inventorySheet.getRow(7), 5), "KIDS");
+        assert.strictEqual(cellText(inventorySheet.getRow(8), 5), null);
+        assert.strictEqual(cellText(inventorySheet.getRow(9), 5), "KL");
+        assert.strictEqual(cellText(inventorySheet.getRow(2), 4), "L'Oréal Men");
+        assert.strictEqual(cellText(inventorySheet.getRow(3), 4), "L'Oréal Woman");
+        assert.strictEqual(cellText(inventorySheet.getRow(4), 4), "Perfumes");
+        assert.strictEqual(cellText(inventorySheet.getRow(8), 4), "Perfumes");
+        assert.strictEqual(cellText(inventorySheet.getRow(9), 4), null);
 
         const businessRows = [
             ["A", "L'Oréal Men", "KL", 100],
@@ -321,9 +321,9 @@ async function run() {
         const productWorkbook = await readWorkbook(productSalesPath);
         const productSheet = productWorkbook.getWorksheet("Product Sales Report");
         const productHeaders = headerIndex(productSheet.getRow(11));
-        assert.strictEqual(productHeaders.get("Segment"), 3);
-        assert.strictEqual(productHeaders.get("Business Segment"), 4);
-        assert.strictEqual(productHeaders.get("Product Name"), 5);
+        assert.strictEqual(productHeaders.get("Segment"), 4);
+        assert.strictEqual(productHeaders.get("Business Segment"), 5);
+        assert.strictEqual(productHeaders.get("Product Name"), 6);
         assert.strictEqual(
             productSheet.getRow(11).values.filter(value => value === "Segment").length,
             1
@@ -332,26 +332,27 @@ async function run() {
             productSheet.getRow(11).values.filter(value => value === "Business Segment").length,
             1
         );
-        assert.strictEqual(cellText(productSheet.getRow(12), 3), "L'Oréal Men");
-        assert.strictEqual(cellText(productSheet.getRow(12), 4), "KL");
-        assert.strictEqual(cellText(productSheet.getRow(13), 3), "L'Oréal Woman");
-        assert.strictEqual(cellText(productSheet.getRow(13), 4), "KL");
-        assert.strictEqual(cellText(productSheet.getRow(14), 3), "Perfumes");
-        assert.strictEqual(cellText(productSheet.getRow(14), 4), "KL");
-        assert.strictEqual(cellText(productSheet.getRow(15), 3), "Men");
-        assert.strictEqual(cellText(productSheet.getRow(15), 4), "KL");
-        assert.strictEqual(cellText(productSheet.getRow(16), 3), "Men");
-        assert.strictEqual(cellText(productSheet.getRow(16), 4), "MENS");
-        assert.strictEqual(cellText(productSheet.getRow(17), 3), "Kids");
-        assert.strictEqual(cellText(productSheet.getRow(17), 4), "KIDS");
-        assert.strictEqual(cellText(productSheet.getRow(18), 3), "Perfumes");
-        assert.strictEqual(cellText(productSheet.getRow(18), 4), null);
-        assert.strictEqual(cellText(productSheet.getRow(19), 3), null);
-        assert.strictEqual(cellText(productSheet.getRow(19), 4), "KL");
-        assert.strictEqual(cellText(productSheet.getRow(12), 5), "Product A");
-        assert.strictEqual(cellText(productSheet.getRow(20), 10), 8);
-        assert.strictEqual(cellText(productSheet.getRow(20), 12), 8);
-        assert.strictEqual(cellText(productSheet.getRow(20), 19), 3600);
+        assert.strictEqual(cellText(productSheet.getRow(12), 4), "L'Oréal Men");
+        assert.strictEqual(cellText(productSheet.getRow(12), 5), "KL");
+        assert.strictEqual(cellText(productSheet.getRow(13), 4), "L'Oréal Woman");
+        assert.strictEqual(cellText(productSheet.getRow(13), 5), "KL");
+        assert.strictEqual(cellText(productSheet.getRow(14), 4), "Perfumes");
+        assert.strictEqual(cellText(productSheet.getRow(14), 5), "KL");
+        assert.strictEqual(cellText(productSheet.getRow(15), 4), "Men");
+        assert.strictEqual(cellText(productSheet.getRow(15), 5), "KL");
+        assert.strictEqual(cellText(productSheet.getRow(16), 4), "Men");
+        assert.strictEqual(cellText(productSheet.getRow(16), 5), "MENS");
+        assert.strictEqual(cellText(productSheet.getRow(17), 4), "Kids");
+        assert.strictEqual(cellText(productSheet.getRow(17), 5), "KIDS");
+        assert.strictEqual(cellText(productSheet.getRow(18), 4), "Perfumes");
+        assert.strictEqual(cellText(productSheet.getRow(18), 5), null);
+        assert.strictEqual(cellText(productSheet.getRow(19), 4), null);
+        assert.strictEqual(cellText(productSheet.getRow(19), 5), "KL");
+        assert.strictEqual(cellText(productSheet.getRow(12), 6), "Product A");
+        assert.strictEqual(cellText(productSheet.getRow(20), 11), 8);
+        assert.strictEqual(cellText(productSheet.getRow(20), 12), 0);
+        assert.strictEqual(cellText(productSheet.getRow(20), 13), 8);
+        assert.strictEqual(cellText(productSheet.getRow(20), 20), 3600);
 
         process.stdout.write("Inventory UX/XLSX Business Segment test: PASS (38 assertions)\n");
     }

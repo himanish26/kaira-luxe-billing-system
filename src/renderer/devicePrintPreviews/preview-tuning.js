@@ -21,6 +21,8 @@ window.addEventListener("message", event => {
     };
     const fontFamily = fontFamilies[event.data.font] || "Arial, Helvetica, sans-serif";
     const fontSize = Math.max(9, Math.min(18, Number(event.data.fontSize) || 13));
+    const detailSize = Math.max(8, Math.round(fontSize * 11 / 13 * 100) / 100);
+    const footerSize = Math.max(8, Math.round(fontSize * 12 / 13 * 100) / 100);
     const margins = {};
     for (const side of ["top", "right", "bottom", "left"]) {
         margins[side] = Math.max(0, Math.min(12, Number(event.data.margins?.[side]) || 0));
@@ -52,6 +54,10 @@ window.addEventListener("message", event => {
                 font-family: ${fontFamily} !important;
                 font-size: ${fontSize}px !important;
             }
+            .receipt .billInfo, .receipt > table, .receipt .totals, .receipt .payment,
+            .receipt td div[style*="font-size:13px"] { font-size: ${fontSize}px !important; }
+            .receipt td div[style*="font-size:11px"], .receipt .return-note { font-size: ${detailSize}px !important; }
+            .receipt .footer, .receipt .footer strong { font-size: ${footerSize}px !important; }
         }
     `;
 });

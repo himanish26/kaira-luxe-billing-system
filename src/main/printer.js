@@ -1,4 +1,5 @@
 const {
+    app,
     BrowserWindow,
     dialog
 } = require("electron");
@@ -8,114 +9,117 @@ const fs = require("fs/promises");
 const { getSettings } = require("../database/settingsService");
 const technicalLogger = require("../services/technicalLogger");
 
-async function printBill(billData){
+const TAX_INVOICE_DEFAULT_PROFILE = Object.freeze({
+    font: "arial",
+    size: 13,
+    margins: Object.freeze({ top: 2, right: 5, bottom: 2, left: 5 })
+});
 
-    return new Promise((resolve, reject)=>{
+const DEVICE_PREVIEW_FONT_FAMILIES = Object.freeze({
+    arial: "Arial, Helvetica, sans-serif",
+    trebuchet: "'Trebuchet MS', Arial, sans-serif",
+    verdana: "Verdana, Geneva, sans-serif",
+    georgia: "Georgia, 'Times New Roman', serif",
+    times: "'Times New Roman', Times, serif",
+    courier: "'Courier New', monospace"
+});
 
-        const printWindow = new BrowserWindow({
+function savedTaxInvoiceProfile(settings) {
+    try {
+        const allPreferences = JSON.parse(settings?.device_print_preview_settings || "{}");
+        const saved = allPreferences?.["tax-invoice"];
+        return saved ? normalizeDevicePreviewSettings(saved) : normalizeDevicePreviewSettings(TAX_INVOICE_DEFAULT_PROFILE);
+    } catch {
+        return normalizeDevicePreviewSettings(TAX_INVOICE_DEFAULT_PROFILE);
+    }
+}
 
+function receiptTypographyRules(size) {
+    const detailSize = Math.max(8, Math.round(size * 11 / 13 * 100) / 100);
+    const footerSize = Math.max(8, Math.round(size * 12 / 13 * 100) / 100);
+    return `
+        .receipt .billInfo, .receipt > table, .receipt .totals, .receipt .payment { font-size: ${size}px !important; }
+        .receipt td div[style*="font-size:13px"] { font-size: ${size}px !important; }
+        .receipt td div[style*="font-size:11px"] { font-size: ${detailSize}px !important; }
+        .receipt .footer, .receipt .footer strong { font-size: ${footerSize}px !important; }
+        .receipt .return-note { font-size: ${detailSize}px !important; }
+    `;
+}
+
+function taxInvoicePrintCss(profile) {
+    const fontFamily = DEVICE_PREVIEW_FONT_FAMILIES[profile.font];
+    const { top, right, bottom, left } = profile.margins;
+    return `
+        @page { size: 80mm auto !important; margin: 0 !important; }
+        html, body { box-sizing: border-box !important; width: 80mm !important; margin: 0 !important; background: #fff !important; }
+        body { padding: ${top}mm ${right}mm ${bottom}mm ${left}mm !important; font-family: ${fontFamily} !important; font-size: ${profile.size}px !important; }
+        .receipt { box-sizing: border-box !important; width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; font-family: ${fontFamily} !important; font-size: ${profile.size}px !important; }
+        .receipt, .receipt * { font-family: ${fontFamily} !important; }
+        ${receiptTypographyRules(profile.size)}
+    `;
+}
+
+function previewPrintCss(profile) {
+    const fontFamily = DEVICE_PREVIEW_FONT_FAMILIES[profile.font];
+    const { top, right, bottom, left } = profile.margins;
+    return `
+        html, body { box-sizing: border-box !important; }
+        body { padding: ${top}mm ${right}mm ${bottom}mm ${left}mm !important; font-family: ${fontFamily} !important; font-size: ${profile.size}px !important; }
+        .receipt, .credit-note { box-sizing: border-box !important; width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; font-family: ${fontFamily} !important; font-size: ${profile.size}px !important; }
+        .receipt *, .credit-note * { font-family: ${fontFamily} !important; }
+        ${receiptTypographyRules(profile.size)}
+    `;
+}
+
+async function applyPrintCss(printWindow, cssText, styleId) {
+    await printWindow.webContents.executeJavaScript(`(() => {
+        let style = document.getElementById(${JSON.stringify(styleId)});
+        if (!style) { style = document.createElement('style'); style.id = ${JSON.stringify(styleId)}; document.head.appendChild(style); }
+        style.textContent = ${JSON.stringify(cssText)};
+    })()`);
+}
+
+async function prepareBillReceipt(printWindow, billData, settings) {
+    await printWindow.loadFile(path.join(__dirname, "../renderer/receipt.html"));
+    await printWindow.webContents.executeJavaScript(
+        `window.receiptData = ${JSON.stringify(billData)}; window.storeSettings = ${JSON.stringify(settings)};`
+    );
+    await printWindow.webContents.executeJavaScript("if (window.loadReceipt) { window.loadReceipt(); }");
+    await applyPrintCss(printWindow, taxInvoicePrintCss(savedTaxInvoiceProfile(settings)), "klbs-tax-invoice-print-profile");
+    await printWindow.webContents.executeJavaScript("document.fonts ? document.fonts.ready : Promise.resolve()");
+}
+
+async function printBill(billData) {
+    const settings = await getSettings();
+    let printWindow = null;
+    try {
+        printWindow = new BrowserWindow({
             show: false,
-
             width: 302,
-
-            height: 800,
-
-            webPreferences: {
-
-                nodeIntegration: true,
-
-                contextIsolation: false
-
-            }
-
+            height: 1200,
+            webPreferences: { nodeIntegration: true, contextIsolation: false }
         });
-
-        printWindow.loadFile(
-
-            path.join(
-                __dirname,
-                "../renderer/receipt.html"
-            )
-
-        );
-
-        printWindow.webContents.once(
-
-            "did-finish-load",
-
-            async () => {
-
-                const settings = await getSettings();
-
-                const printerName = settings.default_printer;
-
-                await printWindow.webContents.executeJavaScript(
-    `window.receiptData = ${JSON.stringify(billData)};
-     window.storeSettings = ${JSON.stringify(settings)};`
-);
-
-                await printWindow.webContents.executeJavaScript(
-
-                    "if(window.loadReceipt){ loadReceipt(); }"
-                );
-
-                setTimeout(() => {
-
-                    printWindow.webContents.print(
-
-                        {
-    silent: true,
-
-    printBackground: true,
-
-    deviceName: printerName,
-
-    margins: {
-        marginType: "none"
-    },
-
-    landscape: false,
-
-    scaleFactor: 100,
-
-    usePrinterDefaultPageSize: true
-},
-
-                        (success, error) => {
-
-                            printWindow.close();
-
-                            if (success) {
-
-                                resolve({
-                                    success: true
-                                });
-
-                            } else {
-
-                                technicalLogger.error(
-                                    "PRINTER",
-                                    "Bill printing failed",
-                                    new Error(error || "Printer rejected bill output"),
-                                    { documentType: "BILL" }
-                                );
-
-                                reject(error);
-
-                            }
-
-                        }
-
-                    );
-
-                }, 300);
-
-            }
-
-        );
-
-    });
-
+        await prepareBillReceipt(printWindow, billData, settings);
+        await new Promise((resolve, reject) => {
+            printWindow.webContents.print({
+                silent: true,
+                printBackground: true,
+                deviceName: settings.default_printer,
+                margins: { marginType: "none" },
+                landscape: false,
+                scaleFactor: 100,
+                usePrinterDefaultPageSize: true
+            }, (success, error) => success
+                ? resolve()
+                : reject(new Error(error || "Printer rejected bill output.")));
+        });
+        return { success: true };
+    } catch (error) {
+        technicalLogger.error("PRINTER", "Bill printing failed", error, { documentType: "BILL" });
+        throw error;
+    } finally {
+        if (printWindow && !printWindow.isDestroyed()) printWindow.close();
+    }
 }
 
 /* =====================================
@@ -318,108 +322,60 @@ async function printStoreCredit(storeCreditData) {
     }
 
 }
-async function saveBillPdf(billData){
+function safeBillPdfName(billData) {
+    const billNo = String(billData?.bill_no || "Kaira-Luxe-Bill")
+        .trim().replace(/[<>:"/\\|?*\x00-\x1f]/g, "-").replace(/[. ]+$/g, "");
+    return `${billNo || "Kaira-Luxe-Bill"}.pdf`;
+}
 
-    return new Promise((resolve, reject)=>{
+async function saveBillPdf(billData, parentWindow = null) {
+    const saveOptions = {
+        title: "Save Tax Invoice as PDF",
+        defaultPath: path.join(app.getPath("downloads"), safeBillPdfName(billData)),
+        filters: [{ name: "PDF Documents", extensions: ["pdf"] }]
+    };
+    const destination = parentWindow
+        ? await dialog.showSaveDialog(parentWindow, saveOptions)
+        : await dialog.showSaveDialog(saveOptions);
+    if (destination.canceled || !destination.filePath) {
+        return { success: false, error: "PDF generation cancelled." };
+    }
 
-        const printWindow = new BrowserWindow({
-
+    const settings = await getSettings();
+    let printWindow = null;
+    try {
+        printWindow = new BrowserWindow({
             show: false,
-
             width: 302,
-
-            height: 800,
-
-            webPreferences: {
-
-                nodeIntegration: true,
-
-                contextIsolation: false
-
-            }
-
+            height: 1200,
+            webPreferences: { nodeIntegration: true, contextIsolation: false }
         });
-
-        printWindow.loadFile(
-
-            path.join(
-                __dirname,
-                "../renderer/receipt.html"
-            )
-
-        );
-
-        printWindow.webContents.once(
-
-            "did-finish-load",
-
-            async () => {
-
-                const settings = await getSettings();
-
-await printWindow.webContents.executeJavaScript(
-    `window.receiptData = ${JSON.stringify(billData)};
-     window.storeSettings = ${JSON.stringify(settings)};`
-);
-
-                await printWindow.webContents.executeJavaScript(
-
-                    "if(window.loadReceipt){ loadReceipt(); }"
-
-                );
-
-                setTimeout(() => {
-
-                    printWindow.webContents.print(
-
-                        {
-
-                            silent: false,
-
-                            printBackground: true
-
-                        },
-
-                        (success,error)=>{
-
-                            printWindow.close();
-
-                            if(success){
-
-                                resolve({
-                                    success:true
-                                });
-
-                            }
-
-                            else{
-
-                                technicalLogger.warn(
-                                    "PRINTER",
-                                    "Bill PDF generation did not complete",
-                                    { documentType: "BILL_PDF" }
-                                );
-
-                                resolve({
-                                    success:false,
-                                    error:error || "PDF generation cancelled."
-
-                                });
-
-                            }
-
-                        }
-
-                    );
-
-                },300);
-
-            }
-
-        );
-
-    });
-
+        await prepareBillReceipt(printWindow, billData, settings);
+        const pageHeightInches = await printWindow.webContents.executeJavaScript(`(() => {
+            const receipt = document.querySelector('.receipt');
+            if (!receipt) throw new Error('Tax Invoice content could not be measured.');
+            const body = getComputedStyle(document.body);
+            const top = parseFloat(body.paddingTop) || 0;
+            const bottom = parseFloat(body.paddingBottom) || 0;
+            const heightPx = receipt.getBoundingClientRect().height + top + bottom + (5 * 96 / 25.4);
+            return Math.max(2, Math.ceil((heightPx / 96) * 100) / 100);
+        })()`);
+        const pdf = await printWindow.webContents.printToPDF({
+            printBackground: true,
+            landscape: false,
+            pageSize: { width: 80 / 25.4, height: pageHeightInches },
+            margins: { top: 0, right: 0, bottom: 0, left: 0 },
+            preferCSSPageSize: false,
+            scale: 1
+        });
+        await fs.writeFile(destination.filePath, pdf);
+        return { success: true, filePath: destination.filePath };
+    } catch (error) {
+        technicalLogger.error("PRINTER", "Bill PDF generation failed", error, { documentType: "BILL_PDF" });
+        return { success: false, error: error.message || "The PDF could not be saved." };
+    } finally {
+        if (printWindow && !printWindow.isDestroyed()) printWindow.close();
+    }
 }
 
 function createCreditNoteWindow() {
@@ -959,9 +915,31 @@ const DEVICE_SETTINGS_PREVIEW_FILES = Object.freeze({
     "stock-outward-a4": "stock-outward-a4.html"
 });
 
-async function printLayoutPreview(previewType) {
+
+function normalizeDevicePreviewSettings(source = {}) {
+    const font = String(source.font || "arial");
+    if (!Object.prototype.hasOwnProperty.call(DEVICE_PREVIEW_FONT_FAMILIES, font)) {
+        throw new Error("Unsupported print preview font.");
+    }
+    const size = Number(source.size);
+    if (!Number.isFinite(size) || size < 9 || size > 18) {
+        throw new Error("Print sample text size must be between 9 and 18 pixels.");
+    }
+    const margins = {};
+    for (const side of ["top", "right", "bottom", "left"]) {
+        const margin = Number(source.margins?.[side]);
+        if (!Number.isFinite(margin) || margin < 0 || margin > 12) {
+            throw new Error("Print sample margins must be between 0 and 12 millimetres.");
+        }
+        margins[side] = margin;
+    }
+    return { font, size, margins };
+}
+
+async function printLayoutPreview(previewType, previewSettings) {
     const fileName = DEVICE_SETTINGS_PREVIEW_FILES[String(previewType || "")];
     if (!fileName) throw new Error("Unsupported print preview type.");
+    const preference = normalizeDevicePreviewSettings(previewSettings);
 
     const settings = await getSettings();
     const isInwardA4 = previewType === "stock-inward-a4";
@@ -989,6 +967,7 @@ async function printLayoutPreview(previewType) {
             ? path.join(__dirname, "../renderer", fileName)
             : path.join(__dirname, "../renderer/devicePrintPreviews", fileName);
         await printWindow.loadFile(previewPath);
+        await applyPrintCss(printWindow, previewPrintCss(preference), "klbs-device-print-sample-tuning");
         await new Promise(resolve => setTimeout(resolve, 150));
         await new Promise((resolve, reject) => printWindow.webContents.print({
             silent: true,

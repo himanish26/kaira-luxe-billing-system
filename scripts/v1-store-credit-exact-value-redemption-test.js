@@ -20,15 +20,26 @@ function close(db) {
     return new Promise((resolve, reject) => db.close(error => error ? reject(error) : resolve()));
 }
 
+const productMrpBucketIds = new Map();
+
 async function insertProduct(db, barcode, mrp) {
     await run(db, `INSERT INTO products
         (barcode, sku, brand, product_name, mrp, discount, selling_price, gst_rate, opening_stock, active)
         VALUES (?, ?, 'ROUNDING', ?, ?, 0, ?, 12, 50, 1)`,
     [barcode, barcode, barcode, mrp, mrp]);
+    const product = await get(db, "SELECT id FROM products WHERE barcode=?", [barcode]);
+    const bucket = await run(db, `INSERT INTO product_mrp_buckets
+        (product_id,mrp_paise,status,source,created_by,created_at)
+        VALUES(?,?,'ACTIVE','LEGACY_VERIFIED','TEST',datetime('now'))`,
+    [product.id, Math.round((Number(mrp) + Number.EPSILON) * 100)]);
     await run(db, `INSERT INTO inventory_transactions
-        (product_id, barcode, transaction_type, quantity, reference_type, reference_id, remarks, created_by, created_at)
-        SELECT id, barcode, 'OPENING', 50, 'ROUNDING_TEST', ?, 'Disposable rounding test', 'TEST', datetime('now')
-        FROM products WHERE barcode = ?`, [barcode, barcode]);
+        (product_id,barcode,transaction_type,quantity,reference_type,reference_id,remarks,created_by,created_at,mrp_bucket_id)
+        VALUES(?,?,'OPENING',50,'ROUNDING_TEST',?,'Disposable rounding test','TEST',datetime('now'),?)`,
+    [product.id, barcode, barcode, bucket.lastID]);
+    await run(db, `INSERT INTO stock_receipt_layers
+        (bucket_id,quantity_received,unit_cost_paise,cost_basis_status,cost_source,received_at,created_by)
+        VALUES(?,50,NULL,'UNKNOWN',NULL,datetime('now'),'TEST')`, [bucket.lastID]);
+    productMrpBucketIds.set(barcode, bucket.lastID);
 }
 
 async function insertStoreCredit(db, storeCreditNo, mobile, amount, options = {}) {
@@ -69,6 +80,7 @@ function payload(billNo, barcode, mobile, payment = {}) {
         store_credit: payment.storeCredit || null,
         items: [{
             barcode,
+            mrp_bucket_id: productMrpBucketIds.get(barcode),
             product_name: "Renderer values are not authoritative",
             qty: 1,
             mrp: 1,

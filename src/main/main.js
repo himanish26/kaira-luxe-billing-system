@@ -2980,12 +2980,12 @@ ipcMain.handle(
 
 );
 
-ipcMain.handle("printer:print-layout-preview", async (event, previewType) => {
+ipcMain.handle("printer:print-layout-preview", async (event, previewType, previewSettings) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) {
         throw new Error("Unauthorized renderer for print preview.");
     }
     try {
-        return await printLayoutPreview(previewType);
+        return await printLayoutPreview(previewType, previewSettings);
     } catch (error) {
         return { success: false, error: error.message || "The sample could not be printed." };
     }
@@ -2997,11 +2997,7 @@ ipcMain.handle(
 
         try{
 
-            await saveBillPdf(billData);
-
-            return{
-                success:true
-            };
+            return await saveBillPdf(billData, mainWindow);
 
         }
 

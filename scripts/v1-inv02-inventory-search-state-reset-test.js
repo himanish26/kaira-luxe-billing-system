@@ -91,7 +91,8 @@ async function run() {
             }
         },
         document: {
-            getElementById
+            getElementById,
+            querySelector: () => createElement("master-stats")
         },
         setSettingsPageBackToSettings: () => {},
         globalThis: null

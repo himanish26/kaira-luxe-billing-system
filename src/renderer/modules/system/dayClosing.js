@@ -554,6 +554,12 @@ function ensureDayClosingLifecycleOverlay() {
                 <div class="dc-lifecycle-kicker">DAY CLOSING</div>
                 <h1 id="dcLifecycleTitle">Closing Business Day</h1>
                 <p id="dcLifecycleSubtitle">Please keep KLBS open while the mandatory closing work completes.</p>
+                <div class="dc-lifecycle-progress" aria-label="Day Closing progress">
+                    <div class="dc-lifecycle-progress-track" role="progressbar" aria-labelledby="dcLifecycleStep" aria-valuemin="0" aria-valuemax="${DAY_CLOSING_STAGE_ORDER.length}" aria-valuenow="0">
+                        <span id="dcLifecycleProgressFill" class="dc-lifecycle-progress-fill"></span>
+                    </div>
+                    <span id="dcLifecycleStep" class="dc-lifecycle-step">Step 1 of ${DAY_CLOSING_STAGE_ORDER.length}</span>
+                </div>
                 <div id="dcLifecycleStages" class="dc-lifecycle-stages">
                     ${DAY_CLOSING_STAGE_ORDER.map((stage, index) => `
                         <div class="dc-lifecycle-stage is-pending" data-stage="${stage}" aria-label="${stage}">
@@ -664,6 +670,17 @@ function renderDayClosingLifecycleState(state) {
         : state.outcome === "pending" ? "is-warning"
             : state.outcome === "failure" || state.outcome === "attention" ? "is-error" : "";
     document.getElementById("dcLifecycleSubtitle").textContent = state.subtitle;
+    const stageCount = state.stages.length;
+    const activeIndex = state.stages.findIndex(stage => stage.status === "active");
+    const resolvedCount = state.stages.filter(stage => ["complete", "warning", "error"].includes(stage.status)).length;
+    const currentStep = state.outcome === "running"
+        ? (activeIndex >= 0 ? activeIndex + 1 : Math.min(resolvedCount + 1, stageCount))
+        : stageCount;
+    const progressBar = overlay.querySelector(".dc-lifecycle-progress-track");
+    progressBar.setAttribute("aria-valuemax", String(stageCount));
+    progressBar.setAttribute("aria-valuenow", String(state.outcome === "running" ? Math.max(resolvedCount, currentStep - 1) : stageCount));
+    document.getElementById("dcLifecycleProgressFill").style.width = `${state.outcome === "running" ? Math.max(resolvedCount, currentStep - 1) / stageCount * 100 : 100}%`;
+    document.getElementById("dcLifecycleStep").textContent = `Step ${currentStep} of ${stageCount}`;
     const notice = document.getElementById("dcLifecycleNotice");
     notice.hidden = !state.notice;
     notice.className = `dc-lifecycle-notice${state.noticeType ? ` is-${state.noticeType}` : ""}`;
