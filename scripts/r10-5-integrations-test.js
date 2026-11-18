@@ -89,6 +89,16 @@ async function main() {
     assert.strictEqual(environmentService.getPublicConfig().dsr.source, "ENVIRONMENT");
     assert.strictEqual(environmentService.resolveEmailRuntime().password, "environment-mail-value");
     assert.strictEqual(environmentService.resolveDsrRuntime().secret, "environment-dsr-value");
+    const portableEnvironmentProfile = environmentService.exportPortableProfile();
+    assert.strictEqual(portableEnvironmentProfile.integrations.email.password, "environment-mail-value");
+    assert.strictEqual(portableEnvironmentProfile.integrations.dsr.secret, "environment-dsr-value");
+    const importedEnvironmentService = createIntegrationConfigService({
+        safeStorage, storagePath: path.join(temporary, "imported-environment.json"), environment: {}
+    });
+    assert.strictEqual(importedEnvironmentService.validatePortableProfile(portableEnvironmentProfile).valid, true);
+    importedEnvironmentService.importPortableProfile(portableEnvironmentProfile);
+    assert.strictEqual(importedEnvironmentService.resolveEmailRuntime().password, "environment-mail-value");
+    assert.strictEqual(importedEnvironmentService.resolveDsrRuntime().secret, "environment-dsr-value");
     environmentService.saveDsr({
         sheetUrlOrId: "1AbCdEfGhIjKlMnOpQrStUvWxYz_1234567890", tabName: "KLBS_Daily_Data",
         webAppUrl: "https://script.google.com/macros/s/stored/exec",

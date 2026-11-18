@@ -153,6 +153,8 @@ const { createRemoteDashboardService, IDENTITY: REMOTE_DASHBOARD_IDENTITY } = re
 const { readClosedDsrPayload } = require("../database/dayClosingDsrService");
 const { getBackupFolder } = require("../services/backupService");
 const { createIntegrationConfigService } = require("../services/integrationConfigService");
+const { createBackupEncryptionService } = require("../services/backupEncryptionService");
+const { createRestoreHistoryService } = require("../services/restoreHistoryService");
 const { REPORTING_MODES, resolveReportingMode } = require("../services/reportingMode");
 const {
     recordIntegrationActivity, emailSettingsEvent, dsrSettingsEvent,
@@ -222,6 +224,14 @@ const integrationConfig = createIntegrationConfigService({
     storagePath: path.join(app.getPath("userData"), "integration-config.json")
 });
 setIntegrationConfigService(integrationConfig);
+const backupEncryption = createBackupEncryptionService({
+    safeStorage,
+    storagePath: path.join(app.getPath("userData"), "backup-encryption.json")
+});
+const restoreHistory = createRestoreHistoryService(path.join(app.getPath("userData"), "restore-history.json"));
+const { setBackupEncryptionService, setBackupIntegrationConfigService } = require("../services/backupService");
+setBackupEncryptionService(backupEncryption);
+setBackupIntegrationConfigService(integrationConfig);
 const { createCustomerCrmSyncService } = require("../services/customerCrmSyncService");
 const customerCrmSync = createCustomerCrmSyncService({ database, configProvider: () => integrationConfig.resolveCustomerCrmRuntime() });
 
@@ -412,6 +422,7 @@ const {
     logApplicationClosed,
 
     logRestoreCompleted,
+    logRestoreFailed,
 
     logActivityArchived,
 
@@ -931,14 +942,17 @@ app.whenReady().then(async () => {
                     process.argv[restoreIndex + 1]
                 )
                 : null;
+        const restoreModeIndex = process.argv.indexOf("--restore-mode");
+        const restoreMode = restoreModeIndex !== -1 && process.argv[restoreModeIndex + 1]
+            ? process.argv[restoreModeIndex + 1]
+            : "FULL";
 
         if (restoreFileName) {
 
             try {
 
-                await logRestoreCompleted(
-                    restoreFileName
-                );
+                await restoreHistory.record({ fileName: restoreFileName, mode: restoreMode, status: "SUCCESS" });
+                await logRestoreCompleted(restoreFileName, restoreMode);
 
             }
             catch (error) {
@@ -1491,11 +1505,11 @@ ipcMain.handle("customers:update-management-profile", async (event, customerId, 
     return customerProfileService.updateCustomerProfile(customerId, data || {});
 });
 ipcMain.handle("customers:purchase-history", async (event, customerId) => {
-    requireCustomersWorkspace(event);
+    requireCustomerProfileRenderer(event);
     return customerProfileService.getCustomerPurchaseHistory(customerId);
 });
 ipcMain.handle("customers:purchase-history-page", async (event, customerId, options) => {
-    requireCustomersWorkspace(event);
+    requireCustomerProfileRenderer(event);
     return customerProfileService.getCustomerPurchaseHistoryPage(customerId, options || {});
 });
 ipcMain.handle("customers:list-directory", async (event, search) => {
@@ -3988,6 +4002,20 @@ ipcMain.handle(
 
 );
 
+ipcMain.handle("backup-encryption:get-status", event => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return null;
+    return backupEncryption.getStatus();
+});
+
+ipcMain.handle("backup-encryption:configure", async (event, grant, password, confirmation) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Backup encryption settings request rejected.");
+    requireSecurityGrant(grant, "BACKUP_ENCRYPTION_SETTINGS");
+    if (String(password || "") !== String(confirmation || "")) throw new Error("The recovery password entries do not match.");
+    const result = backupEncryption.configureRecoveryPassword(password);
+    await logAdministratorAction("BACKUP", "BACKUP_ENCRYPTION_CONFIGURED", "BACKUP_ENCRYPTION", "AES-256 ZIP backup protection enabled");
+    return result;
+});
+
 ipcMain.handle(
 
     "backup:getHistory",
@@ -4045,9 +4073,9 @@ ipcMain.handle(
 
     "backup:validate",
 
-    async (event, zipPath) => {
+    async (event, zipPath, password) => {
 
-        return await validateBackup(zipPath);
+        return await validateBackup(zipPath, password);
 
     }
 
@@ -4062,22 +4090,51 @@ ipcMain.handle(
         event,
 
         zipPath,
-        grant
+        grant,
+        password,
+        mode = "FULL"
 
     ) => {
 
         requireSecurityGrant(grant, "RESTORE");
 
-        const result = await restoreBackup(
-            zipPath
-        );
+        const normalizedMode = ["FULL", "DATABASE_ONLY", "INTEGRATIONS_ONLY"].includes(mode) ? mode : "FULL";
+        let result;
+        try {
+            result = await restoreBackup(zipPath, password, normalizedMode);
+        } catch (error) {
+            try { await restoreHistory.record({ fileName: zipPath, mode: normalizedMode, status: "FAILED" }); } catch (_) {}
+            try { await logRestoreFailed(error.message); } catch (_) {}
+            throw error;
+        }
+
+        if (!result?.success) {
+            try { await restoreHistory.record({ fileName: zipPath, mode: normalizedMode, status: "FAILED" }); } catch (_) {}
+        }
+
+        if (result?.success && normalizedMode === "INTEGRATIONS_ONLY") {
+            await restoreHistory.record({ fileName: zipPath, mode: normalizedMode, status: "SUCCESS" });
+            await logRestoreCompleted(path.basename(zipPath), normalizedMode);
+            return result;
+        }
 
         if (result && result.success === true) {
-            const relaunchArgs = [
-                ...process.argv.slice(1),
+            const existingArgs = process.argv.slice(1);
+            const relaunchArgs = [];
+            for (let index = 0; index < existingArgs.length; index += 1) {
+                const argument = existingArgs[index];
+                if (argument === "--restore-completed" || argument === "--restore-mode") {
+                    index += 1;
+                    continue;
+                }
+                relaunchArgs.push(argument);
+            }
+            relaunchArgs.push(
                 "--restore-completed",
-                path.basename(zipPath)
-            ];
+                path.basename(zipPath),
+                "--restore-mode",
+                normalizedMode
+            );
 
             technicalLogger.info(
                 "RESTORE",
@@ -4103,6 +4160,8 @@ ipcMain.handle(
 ipcMain.handle("restore:getLastCompleted", async (event) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return null;
     try {
+        const portableHistory = restoreHistory.getLastCompleted();
+        if (portableHistory) return portableHistory;
         await databaseReady;
         return await new Promise((resolve, reject) => {
             database.get(

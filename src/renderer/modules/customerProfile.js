@@ -42,6 +42,9 @@
     let expandedBillRow = null;
     let expandedPurchaseRow = null;
     let expandedBillRequest = 0;
+    let drawerMobileLookupRequest = 0;
+    let drawerMobileLookupTimer = null;
+    let drawerMobileMatches = [];
 
     function digitsOnly(value, maximum) { return String(value || "").replace(/\D/g, "").slice(0, maximum); }
     function formatDdMmInput(value) {
@@ -124,9 +127,35 @@
         const mobile = normalizeMobile(mobileInput.value);
         const month = new Date().getMonth() + 1;
         const profile = selectedProfile;
-        const event = Boolean(profile && (validMonth(profile.birthday_ddmm) === month || validMonth(profile.marriage_anniversary_ddmm) === month));
+        const monthNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+        const customerEvents = [
+            { label: "Birthday", mobileLabel: "🎂", date: profile?.birthday_ddmm },
+            { label: "Marriage anniversary", mobileLabel: "💍", date: profile?.marriage_anniversary_ddmm }
+        ].filter(event => validMonth(event.date) === month);
+        const eventDates = byId("customerEventDates");
+        eventDates.replaceChildren();
+        for (const event of customerEvents) {
+            const [day, eventMonth] = event.date.split("/").map(Number);
+            const item = document.createElement("span");
+            item.className = "customer-event-item";
+            item.setAttribute("aria-label", `${event.label} ${day} ${monthNames[eventMonth - 1]}`);
+            const emoji = document.createElement("span");
+            emoji.className = "customer-event-emoji";
+            emoji.setAttribute("aria-hidden", "true");
+            emoji.textContent = event.mobileLabel;
+            const date = document.createElement("span");
+            date.className = "customer-event-date";
+            date.textContent = `${String(day).padStart(2, "0")} ${monthNames[eventMonth - 1]}`;
+            item.append(emoji, date);
+            eventDates.append(item);
+        }
+        eventDates.hidden = customerEvents.length === 0;
+        eventDates.setAttribute("aria-label", customerEvents.map(event => {
+            const [day, eventMonth] = event.date.split("/").map(Number);
+            return `${event.label} ${day} ${monthNames[eventMonth - 1]}`;
+        }).join("; "));
         const credit = Boolean(mobile && mobile === storeCreditMobile && availableStoreCredit && availableStoreCredit.status === "ISSUED" && Number(availableStoreCredit.remaining_balance) > 0);
-        const attention = event || credit;
+        const attention = credit;
         const key = profile ? `${profile.id}:${mobile || ""}` : `mobile:${mobile || ""}`;
         const burst = attention && (!attentionActive || attentionResolutionKey !== key);
         customerButton.classList.toggle("is-customer-resolved", Boolean(profile) || credit);
@@ -255,7 +284,11 @@
         byId("profileEmail").value = profile?.email || "";
         byId("profileNotes").value = profile?.notes || "";
         byId("customerProfileValidation").textContent = "";
+        byId("customerProfileValidation").classList.remove("is-duplicate-mobile");
         detailsSetProfileId(profile?.id);
+        drawer.dataset.duplicateCustomerId = "";
+        drawerMobileMatches = [];
+        byId("customerProfileSave").disabled = false;
         setDrawerView("form");
         const currentName = String(profile?.name || nameInput.value || "").trim();
         const currentMobile = String(profile?.mobile || mobileInput.value || "").trim();
@@ -280,15 +313,20 @@
         byId("profileEmail").value = profile?.email || "";
         byId("profileNotes").value = profile?.notes || "";
         byId("customerProfileValidation").textContent = "";
+        byId("customerProfileValidation").classList.remove("is-duplicate-mobile");
         detailsSetProfileId(profile?.id);
+        drawer.dataset.duplicateCustomerId = "";
+        drawerMobileMatches = [];
+        byId("customerProfileSave").disabled = false;
         let focus = byId("profileName");
         if (profile?.name && normalizeMobile(profile.mobile)) focus = byId("profileBirthday");
         else if (profile?.name) focus = byId("profileMobile");
         openDrawer("form", byId("customerProfileTitle").textContent, focus);
     }
 
-    function showChooser(matches) {
-        pendingMobile = normalizeMobile(mobileInput.value) || pendingMobile;
+    function showChooser(matches, mobile = normalizeMobile(mobileInput.value), allowNew = true) {
+        pendingMobile = normalizeMobile(mobile) || pendingMobile;
+        byId("customerDrawerNewChoice").hidden = !allowNew;
         const list = byId("customerDrawerChoices");
         list.replaceChildren();
         for (const profile of matches) {
@@ -477,8 +515,12 @@
         byId("drawerPurchasePagination").hidden = true;
         setDrawerView("profile"); setDrawerTitle("CUSTOMER PROFILE");
         try {
+            const canReadManagementData = drawerContext === "management" ||
+                await window.electronAPI.administratorSecurity.hasProtectedWorkspace("customers");
             const [profile, history] = await Promise.all([
-                window.electronAPI.getCustomerManagementProfile(id),
+                canReadManagementData
+                    ? window.electronAPI.getCustomerManagementProfile(id)
+                    : window.electronAPI.getCustomerProfile(id),
                 window.electronAPI.getCustomerPurchaseHistoryPage(id, { page: preservePage ? purchaseHistoryPage : 1, pageSize: 100 })
             ]);
             if (request !== drawerProfileRequest || historyRequest !== purchaseHistoryRequest || id !== Number(selectedId.value)) return;
@@ -491,10 +533,10 @@
             byId("drawerAnniversary").textContent = displayDdMm(profile.marriage_anniversary_ddmm);
             byId("drawerEmail").textContent = profile.email || "—";
             byId("drawerNotes").textContent = profile.notes || "—";
-            byId("drawerBillCount").textContent = String(profile.total_bills || 0);
-            byId("drawerSpend").textContent = money(profile.total_spend);
-            byId("drawerLastVisit").textContent = profile.last_visit ? displayDate(profile.last_visit) : "Never";
-            byId("drawerAverage").textContent = money(profile.average_bill);
+            byId("drawerBillCount").textContent = profile.total_bills == null ? "—" : String(profile.total_bills);
+            byId("drawerSpend").textContent = profile.total_spend == null ? "—" : money(profile.total_spend);
+            byId("drawerLastVisit").textContent = profile.last_visit === undefined ? "—" : profile.last_visit ? displayDate(profile.last_visit) : "Never";
+            byId("drawerAverage").textContent = profile.average_bill == null ? "—" : money(profile.average_bill);
             const month = new Date().getMonth() + 1;
             const birthdayThisMonth = validMonth(profile.birthday_ddmm) === month;
             const anniversaryThisMonth = validMonth(profile.marriage_anniversary_ddmm) === month;
@@ -506,12 +548,56 @@
             byId("drawerCustomerEvents").hidden = events.length === 0;
             byId("drawerCustomerEventText").textContent = events.join(" · ");
             drawerError.textContent = "";
-            renderHistory(history); renderDrawerCredit();
+            renderHistory(history);
+            renderDrawerCredit();
         } catch (error) { if (request === drawerProfileRequest) drawerError.textContent = error.message || "Customer profile could not be loaded."; }
     }
 
     bindDigitInput(mobileInput, 10);
-    bindDigitInput(byId("profileMobile"), 10);
+    const profileMobileInput = byId("profileMobile");
+    bindDigitInput(profileMobileInput, 10);
+    profileMobileInput.addEventListener("input", () => {
+        const request = ++drawerMobileLookupRequest;
+        drawerMobileMatches = [];
+        drawer.dataset.duplicateCustomerId = "";
+        clearTimeout(drawerMobileLookupTimer);
+        byId("customerProfileSave").disabled = false;
+        byId("customerProfileValidation").textContent = "";
+        byId("customerProfileValidation").classList.remove("is-duplicate-mobile");
+        if (drawerEditing) byId("customerProfileSave").textContent = "SAVE CHANGES";
+        else byId("customerProfileSave").textContent = drawerContext === "management" ? "SAVE" : "SAVE CUSTOMER";
+        const mobile = normalizeMobile(profileMobileInput.value);
+        if (!mobile) return;
+        drawerMobileLookupTimer = setTimeout(async () => {
+            try {
+                const matches = await window.electronAPI.findCustomersByMobile(mobile);
+                if (request !== drawerMobileLookupRequest || normalizeMobile(profileMobileInput.value) !== mobile) return;
+                const editingId = Number(drawer.dataset.profileId);
+                drawerMobileMatches = matches.filter(profile => Number(profile.id) !== editingId);
+                if (drawerMobileMatches.length === 1) {
+                    const match = await window.electronAPI.getCustomerProfile(drawerMobileMatches[0].id);
+                    if (request !== drawerMobileLookupRequest || normalizeMobile(profileMobileInput.value) !== mobile) return;
+                    if (match) {
+                        drawer.dataset.duplicateCustomerId = String(match.id);
+                        byId("profileName").value = match.name || "";
+                        byId("profileBirthday").value = match.birthday_ddmm || "";
+                        byId("profileAnniversary").value = match.marriage_anniversary_ddmm || "";
+                        byId("profileEmail").value = match.email || "";
+                        byId("profileNotes").value = match.notes || "";
+                        byId("customerProfileTitle").textContent = "EXISTING CUSTOMER FOUND";
+                        byId("customerDrawerHelper").textContent = `${match.name} · ${match.customer_code || "Customer ID unavailable"}`;
+                        byId("customerProfileSave").textContent = "OPEN EXISTING PROFILE";
+                        byId("customerProfileValidation").textContent = "This mobile number is already registered.";
+                        byId("customerProfileValidation").classList.add("is-duplicate-mobile");
+                    }
+                } else if (drawerMobileMatches.length > 1) {
+                    showChooser(drawerMobileMatches, mobile, false);
+                }
+            } catch (error) {
+                if (request === drawerMobileLookupRequest) console.error("Customer drawer mobile lookup failed:", error.message);
+            }
+        }, 180);
+    });
     bindDigitInput(byId("profileBirthday"), 4, true);
     bindDigitInput(byId("profileAnniversary"), 4, true);
     byId("profileBirthday").addEventListener("input", () => updateValidation());
@@ -598,7 +684,30 @@
         }
     });
     byId("customerProfileSave").addEventListener("click", async () => {
+        const duplicateCustomerId = Number(drawer.dataset.duplicateCustomerId);
+        if (duplicateCustomerId) {
+            drawer.dataset.profileId = String(duplicateCustomerId);
+            drawerMobileMatches = [];
+            byId("customerProfileSave").disabled = false;
+            if (drawerContext === "management") {
+                const profile = await window.electronAPI.getCustomerManagementProfile(duplicateCustomerId);
+                if (profile) showManagementModal(profile);
+            } else {
+                setSelected({ id: duplicateCustomerId });
+                drawerEditing = false;
+                await loadDrawerProfile(duplicateCustomerId);
+            }
+            return;
+        }
+        if (drawerMobileMatches.length > 1) return;
         const validation = byId("customerProfileValidation");
+        const mobileValue = String(byId("profileMobile").value || "").trim();
+        if (mobileValue && !normalizeMobile(mobileValue)) {
+            validation.textContent = "Mobile number must be 10 digits.";
+            validation.classList.remove("is-duplicate-mobile");
+            byId("profileMobile").focus();
+            return;
+        }
         updateValidation(true);
         for (const id of ["profileBirthday", "profileAnniversary"]) {
             const input = byId(id); if (input.value && !isValidDdMm(input.value)) { input.focus(); return; }

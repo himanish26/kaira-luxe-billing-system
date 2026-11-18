@@ -62,6 +62,7 @@ async function showBackupPage() {
         await window.electronAPI.getSettings();
 
     const automaticBackupSummary = formatAutomaticBackupCard(settings);
+    const encryptionStatus = await window.electronAPI.getBackupEncryptionStatus();
 
     renderSettingsPage({
 
@@ -147,6 +148,12 @@ async function showBackupPage() {
 
     </div>
 
+    <div class="settings-card" id="backupEncryptionCard">
+        <div class="settings-icon">🔐</div>
+        <h2>Backup Encryption</h2>
+        <p>${encryptionStatus.configured ? "AES-256 ZIP protection is enabled" : "Set a recovery password to protect backups"}</p>
+    </div>
+
 </div>
 
 `
@@ -165,7 +172,8 @@ async function showBackupPage() {
 
                     alert(
                         "Backup created successfully.\n\n" +
-                        result.backupFilePath
+                        result.backupFilePath +
+                        (result.integrationProfileWarning ? "\n\nINTEGRATION PROFILE NOT INCLUDED\n" + result.integrationProfileWarning : "")
                     );
 
                 }
@@ -189,6 +197,12 @@ async function showBackupPage() {
         "click",
         showRestorePage
     );
+
+    document.getElementById("backupEncryptionCard").addEventListener("click", () => {
+        requireAdminAuthorization("BACKUP_ENCRYPTION_SETTINGS", grant => {
+            if (grant) void showBackupEncryptionPage(grant);
+        });
+    });
 
         document
 
@@ -322,6 +336,59 @@ alert(
     showAutomaticBackupPage();
 
 });
+
+async function showBackupEncryptionPage(authorizationGrant) {
+    const status = await window.electronAPI.getBackupEncryptionStatus();
+    const alreadyConfigured = Boolean(status?.configured);
+    if (alreadyConfigured && authorizationGrant) {
+        await window.electronAPI.administratorSecurity.discardGrant(
+            authorizationGrant,
+            "BACKUP_ENCRYPTION_SETTINGS"
+        );
+    }
+    renderSettingsPage({
+        title: "BACKUP ENCRYPTION",
+        icon: "🔐",
+        subtitle: "Protect backup ZIP files with AES-256 encryption.",
+        backText: "← Backup",
+        backAction: showBackupPage,
+        content: `
+<div class="backup-encryption-form">
+    <section class="backup-encryption-panel">
+        <div class="backup-encryption-status ${alreadyConfigured ? "is-enabled" : "is-pending"}" role="status">
+            <span class="backup-encryption-status-icon" aria-hidden="true">${alreadyConfigured ? "✓" : "🔒"}</span>
+            <div>
+                <strong>${alreadyConfigured ? "AES-256 protection is enabled" : "Set up backup protection"}</strong>
+                <p>${alreadyConfigured ? "New backups are protected with your recovery password." : "Choose a recovery password before creating encrypted backups."}</p>
+            </div>
+        </div>
+        <h2>RECOVERY PASSWORD</h2>
+        <p class="backup-encryption-note">KLBS keeps the password in this computer’s secure storage. Keep a separate copy: another computer needs the same password to restore a backup. KLBS cannot recover a forgotten password.</p>
+        ${alreadyConfigured ? `<div class="backup-encryption-reminder">The recovery password is already set on this computer. Existing backups stay protected with the password used when each backup was created.</div>` : `
+        <label for="backupRecoveryPassword">Recovery password <span>At least 12 characters</span><input id="backupRecoveryPassword" type="password" autocomplete="new-password" minlength="12" /></label>
+        <label for="backupRecoveryPasswordConfirm">Confirm recovery password<input id="backupRecoveryPasswordConfirm" type="password" autocomplete="new-password" minlength="12" /></label>
+        <div class="backup-encryption-actions"><button class="integration-button integration-button-primary" id="saveBackupEncryption">ENABLE AES-256 PROTECTION</button></div>
+        <p id="backupEncryptionMessage" class="backup-encryption-message" role="status" aria-live="polite"></p>`}
+    </section>
+</div>`
+    });
+    if (alreadyConfigured) return;
+    document.getElementById("saveBackupEncryption")?.addEventListener("click", async () => {
+            const password = document.getElementById("backupRecoveryPassword")?.value || "";
+            const confirmation = document.getElementById("backupRecoveryPasswordConfirm")?.value || "";
+            const message = document.getElementById("backupEncryptionMessage");
+            try {
+                const configured = await window.electronAPI.configureBackupEncryption(authorizationGrant, password, confirmation);
+                if (message) message.textContent = configured?.configured ? "AES-256 backup protection is enabled." : "Could not enable backup protection.";
+                if (configured?.configured) setTimeout(showBackupPage, 900);
+            } catch (error) {
+                const detail = String(error?.message || "");
+                if (message) message.textContent = /authorization.*expired|authorization.*invalid/i.test(detail)
+                    ? "Administrator access expired. Close this page and open Backup Encryption again to authorize it."
+                    : detail.replace(/^Error invoking remote method '[^']+': Error:\s*/i, "") || "Could not enable backup protection.";
+            }
+    });
+}
 
 async function showAutomaticBackupPage() {
 

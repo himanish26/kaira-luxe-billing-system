@@ -25,10 +25,13 @@ async function checkBackupSchedule() {
         const settings = await getSettings();
         const now = new Date();
         if (!isScheduledBackupDue(settings, now)) return;
-        await createScheduledAutomaticBackup(normalizeFrequency(settings.auto_backup_frequency));
+        const result = await createScheduledAutomaticBackup(normalizeFrequency(settings.auto_backup_frequency));
         lastBackupDate = getBusinessDate(now);
         console.log("Automatic Backup Completed.");
         technicalLogger.info("BACKUP_SCHEDULER", "Scheduled backup completed");
+        if (result?.integrationProfileWarning) {
+            console.warn("Automatic backup completed without the integration profile: secure credential access was unavailable.");
+        }
     }
     catch (error) {
         technicalLogger.error("BACKUP_SCHEDULER", "Scheduled backup attempt failed", error);

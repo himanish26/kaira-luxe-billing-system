@@ -87,6 +87,14 @@ END), 0)`;
 async function createCustomerProfileWithCode(data, options = {}) {
     const name = requiredName(data && data.name);
     const mobile = normalizeOptionalMobile(data && data.mobile);
+    if (mobile) {
+        const rows = await all("SELECT id, customer_code, name, mobile FROM customers WHERE active = 1 AND mobile IS NOT NULL ORDER BY id");
+        const existing = rows.filter(row => normalizeIndianMobile(row.mobile) === mobile);
+        if (existing.length) {
+            const matches = existing.map(row => `${row.name} (${row.customer_code || "Customer ID unavailable"})`).join(", ");
+            throw new Error(`This mobile number is already registered to ${matches}. Open the existing customer profile instead.`);
+        }
+    }
     const email = normalizeOptionalEmail(data.email);
     const birthday = normalizeDdMm(data.birthday_ddmm);
     const anniversary = normalizeDdMm(data.marriage_anniversary_ddmm);
@@ -221,7 +229,7 @@ async function listCustomerDirectory(options = {}) {
         LEFT JOIN bills b ON b.customer_id = c.id
         ${where}
         GROUP BY c.id
-        ORDER BY c.name COLLATE NOCASE, c.id
+        ORDER BY c.customer_code COLLATE NOCASE ASC, c.id ASC
         LIMIT ? OFFSET ?
     `, [...params, pageSize, offset]);
     return { rows, totalCount, page, pageSize, totalPages };

@@ -5,6 +5,7 @@ const Module = require("module");
 const os = require("os");
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
+const { createBackupEncryptionService } = require("../src/services/backupEncryptionService");
 
 const hashFile = filePath => crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 const run = (database, sql, params = []) => new Promise((resolve, reject) =>
@@ -52,7 +53,7 @@ async function main() {
 
         let maxSnapshots = 0;
         Module._load = function(request, parent, isMain) {
-            if (parent && parent.filename.endsWith("backupService.js")) {
+            if (parent && ["backupService.js", "restoreSafety.js", "databasePath.js"].some(name => parent.filename.endsWith(name))) {
                 if (request === "electron") return { app: {
                     getPath(name) {
                         if (name === "temp") return tempFolder;
@@ -80,8 +81,20 @@ async function main() {
         let createBackup;
         let getBackupHistory;
         let validateBackup;
+        let setBackupEncryptionService;
+        const safeStorage = {
+            isEncryptionAvailable: () => true,
+            encryptString: value => Buffer.from(value, "utf8"),
+            decryptString: value => Buffer.from(value).toString("utf8")
+        };
+        const encryption = createBackupEncryptionService({
+            safeStorage,
+            storagePath: path.join(userDataFolder, "backup-encryption.json")
+        });
+        encryption.configureRecoveryPassword("regression-test-recovery-password");
         try {
-            ({ createBackup, getBackupHistory, validateBackup } = require("../src/services/backupService"));
+            ({ createBackup, getBackupHistory, validateBackup, setBackupEncryptionService } = require("../src/services/backupService"));
+            setBackupEncryptionService(encryption);
         }
         finally {
             Module._load = originalLoad;
@@ -106,6 +119,7 @@ async function main() {
         assert(maxSnapshots <= 1, `backup snapshots overlapped: ${maxSnapshots}`);
         for (const result of allResults) {
             assert.strictEqual(result.success, true);
+            assert.strictEqual(result.encrypted, true);
             assert(fs.existsSync(result.backupFilePath));
             assert(/^KL_Backup_[a-f0-9]{6}\.zip$/.test(result.backupFileName));
             assert.strictEqual((await validateBackup(result.backupFilePath)).success, true);

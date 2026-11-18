@@ -532,6 +532,10 @@ createBackup: () =>
         "backup:create"
     ),
 
+getBackupEncryptionStatus: () => ipcRenderer.invoke("backup-encryption:get-status"),
+configureBackupEncryption: (grant, password, confirmation) =>
+    ipcRenderer.invoke("backup-encryption:configure", grant, password, confirmation),
+
 getBackupHistory: () =>
     ipcRenderer.invoke(
         "backup:getHistory"
@@ -560,10 +564,11 @@ selectBackupFolder: () =>
         "backup:selectFolder"
     ),
 
-validateBackup: (zipPath) =>
+validateBackup: (zipPath, password) =>
     ipcRenderer.invoke(
         "backup:validate",
-        zipPath
+        zipPath,
+        password
     ),
 
 resetInventory: (grant) =>
@@ -635,14 +640,18 @@ selectRestoreFile: () =>
 restoreBackup: (
 
     zipPath,
-    grant
+    grant,
+    password,
+    mode
 
 ) => ipcRenderer.invoke(
 
     "backup:restore",
 
     zipPath,
-    grant
+    grant,
+    password,
+    mode
 
 ),
 

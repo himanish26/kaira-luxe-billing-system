@@ -223,8 +223,8 @@ const logAutomaticBackupFailed = reason => write(
 const logBackupFailed = reason => write(
     "BACKUP", "BACKUP_FAILED", safeError(reason), "SYSTEM", "ERROR"
 );
-const logRestoreCompleted = fileName => write(
-    "RESTORE", "RESTORE_COMPLETED", safeFileName(fileName), "ADMINISTRATOR", "SUCCESS",
+const logRestoreCompleted = (fileName, mode = "FULL") => write(
+    "RESTORE", "RESTORE_COMPLETED", `Restore type: ${String(mode || "FULL").replace(/_/g, " ")} | File: ${safeFileName(fileName)}`, "ADMINISTRATOR", "SUCCESS",
     { entity_type: "BACKUP", reference_no: safeFileName(fileName) }
 );
 const logRestoreFailed = reason => write(

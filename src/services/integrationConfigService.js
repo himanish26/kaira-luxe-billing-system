@@ -397,11 +397,114 @@ function createIntegrationConfigService(options) {
         }
         return { migrated: true };
     }
+    function exportPortableProfile() {
+        const details = getConfigurationDetails();
+        const email = resolveEmailRuntime();
+        const dsr = resolveDsrRuntime();
+        const remote = resolveRemoteDashboardRuntime();
+        const crm = resolveCustomerCrmRuntime();
+        return {
+            format: "KLBS_INTEGRATION_PROFILE",
+            version: 1,
+            exportedAt: now().toISOString(),
+            integrations: {
+                email: details.email.configured && email.password ? {
+                    host: email.host, port: email.port, secure: email.secure, requireTLS: email.requireTLS,
+                    user: email.user || "", password: email.password, from: email.from || "",
+                    recipients: email.recipients || []
+                } : null,
+                dsr: details.dsr.configured && dsr.endpoint && dsr.secret ? {
+                    endpoint: dsr.endpoint, secret: dsr.secret,
+                    sheetId: details.dsr.sheetId || "", tabName: details.dsr.tabName || "KLBS_Daily_Data"
+                } : null,
+                remoteDashboard: remote.secret && remote.webAppBase && remote.gatewayBase ? {
+                    webAppBase: remote.webAppBase, gatewayBase: remote.gatewayBase,
+                    secret: remote.secret, enabled: remote.enabled !== false
+                } : null,
+                customerCrm: crm && crm.endpoint && crm.secret ? {
+                    endpoint: crm.endpoint, spreadsheetId: crm.spreadsheetId,
+                    secret: crm.secret, enabled: crm.enabled !== false
+                } : null
+            }
+        };
+    }
+    function importPortableProfile(profile, options = {}) {
+        if (!profile || profile.format !== "KLBS_INTEGRATION_PROFILE" || profile.version !== 1 ||
+            !profile.integrations || typeof profile.integrations !== "object" || Array.isArray(profile.integrations)) {
+            throw new Error("This KLBS integration profile is invalid or unsupported.");
+        }
+        const source = profile.integrations;
+        const next = { version: 1, diagnostics: {} };
+        if (source.email) {
+            const email = source.email;
+            const port = Number(email.port);
+            const recipients = [...new Set((Array.isArray(email.recipients) ? email.recipients : [])
+                .map(value => String(value || "").trim().toLowerCase()).filter(Boolean))];
+            if (!String(email.host || "").trim() || !Number.isInteger(port) || port < 1 || port > 65535 ||
+                typeof email.secure !== "boolean" || typeof email.requireTLS !== "boolean" ||
+                !String(email.user || "").trim() || !String(email.password || "") || !recipients.length ||
+                recipients.some(value => !EMAIL_PATTERN.test(value))) {
+                throw new Error("The email integration profile is incomplete or invalid.");
+            }
+            next.email = {
+                accountName: "", senderEmail: String(email.from || "").trim(), smtpHost: String(email.host).trim(),
+                smtpPort: port, securityMode: email.secure ? "SSL_TLS" : "STARTTLS",
+                smtpUsername: String(email.user).trim(), recipients, automaticEmailBackup: true,
+                secret: encrypt(email.password), lastTestAt: null, lastTestResult: "NEVER_TESTED",
+                updatedAt: now().toISOString()
+            };
+        }
+        if (source.dsr) {
+            const dsr = source.dsr;
+            if (!String(dsr.endpoint || "").trim() || !String(dsr.secret || "")) {
+                throw new Error("The DSR integration profile is incomplete or invalid.");
+            }
+            next.dsr = {
+                sheetId: String(dsr.sheetId || "").trim() ? extractSheetId(dsr.sheetId) : "",
+                tabName: String(dsr.tabName || "KLBS_Daily_Data").trim().slice(0, 100),
+                webAppUrl: validateWebAppUrl(dsr.endpoint),
+                automaticSync: true, secret: encrypt(dsr.secret), lastTestAt: null,
+                lastTestResult: "NEVER_TESTED", updatedAt: now().toISOString()
+            };
+        }
+        if (source.remoteDashboard) {
+            const remote = source.remoteDashboard;
+            if (typeof remote.enabled !== "boolean" || !String(remote.secret || "")) {
+                throw new Error("The Remote Dashboard integration profile is incomplete or invalid.");
+            }
+            next.remoteDashboard = {
+                webAppBase: validateRemoteDashboardBaseUrl(remote.webAppBase, "Apps Script Web App base URL"),
+                gatewayBase: validateRemoteDashboardBaseUrl(remote.gatewayBase, "Remote Dashboard Gateway base URL"),
+                enabled: remote.enabled, secret: encrypt(remote.secret), lastTestAt: null,
+                lastTestResult: "NEVER_TESTED", updatedAt: now().toISOString()
+            };
+        }
+        if (source.customerCrm) {
+            const crm = source.customerCrm;
+            if (typeof crm.enabled !== "boolean" || !String(crm.secret || "")) {
+                throw new Error("The Customer CRM integration profile is incomplete or invalid.");
+            }
+            next.customerCrm = {
+                endpoint: validateCustomerCrmWebAppUrl(crm.endpoint),
+                spreadsheetId: extractSheetId(crm.spreadsheetId), worksheet: "Customer_Master",
+                enabled: crm.enabled, secret: encrypt(crm.secret), lastTestAt: null,
+                lastTestResult: "NEVER_TESTED", destinationPendingApproval: true,
+                updatedAt: now().toISOString()
+            };
+        }
+        const integrations = Object.keys(source).filter(key => source[key]);
+        if (options.validateOnly) return { valid: true, integrations };
+        writeStore(next);
+        return { imported: true, integrations };
+    }
+    function validatePortableProfile(profile) {
+        return importPortableProfile(profile, { validateOnly: true });
+    }
     return {
         getPublicConfig, getConfigurationDetails, getRemoteDashboardConfiguration, saveEmail, saveDsr, saveRemoteDashboard,
         clearRemoteDashboard, saveCustomerCrm, resolveCustomerCrmRuntime, recordCustomerCrmTest, resolveEmailRuntime, resolveDsrRuntime,
         resolveRemoteDashboardRuntime,
-        recordTest, migrateLegacyEmail
+        recordTest, migrateLegacyEmail, exportPortableProfile, validatePortableProfile, importPortableProfile
     };
 }
 

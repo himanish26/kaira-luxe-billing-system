@@ -54,6 +54,7 @@
   "type": "commonjs",
   "dependencies": {
     "@google-cloud/local-auth": "^3.0.1",
+    "@zip.js/zip.js": "^2.24.0",
     "adm-zip": "^0.6.0",
     "archiver": "^5.3.2",
     "axios": "^1.19.0",

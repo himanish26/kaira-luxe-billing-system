@@ -267,6 +267,28 @@ margin-bottom:50px;
 .crm-sync-actions { margin-top:16px; }
 .customer-crm-form>h2:first-child { margin-top:0; }
 .remote-dashboard-form .integration-advanced { margin-top:18px; }
+.settings-layout:has(.backup-encryption-form) { padding-top:12px; }
+.settings-layout:has(.backup-encryption-form) .settings-header { max-width:900px; margin:0 auto 22px; padding:0 8px; text-align:center; }
+.settings-layout:has(.backup-encryption-form) .settings-header h1 { margin:0 0 8px; color:var(--primary); font-size:clamp(26px,3vw,38px); font-weight:800; line-height:1.2; text-align:center; }
+.settings-layout:has(.backup-encryption-form) .settings-header .page-subtitle { max-width:760px; margin:0 auto; color:var(--text-light); font-size:16px; line-height:1.5; text-align:center; }
+#settingsPage:has(.backup-encryption-form) > .bill-top-bar { margin-bottom:12px; padding:34px 40px 0; box-sizing:border-box; }
+.backup-encryption-form { width:min(100%,900px); max-width:900px; box-sizing:border-box; margin:20px auto; }
+.backup-encryption-panel { padding:26px; border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--card); box-shadow:var(--shadow); }
+.backup-encryption-panel h2 { margin:24px 0 12px; color:var(--primary); font-size:18px; letter-spacing:.08em; }
+.backup-encryption-status { display:flex; align-items:center; gap:14px; padding:16px 18px; border:1px solid #eadde2; border-left:5px solid var(--primary); border-radius:12px; background:#f8f1f4; color:#302a2d; }
+.backup-encryption-status.is-enabled { border-left-color:var(--success); background:#f1f8f3; }
+.backup-encryption-status-icon { display:grid; flex:0 0 40px; width:40px; height:40px; place-items:center; border-radius:50%; background:#fff; color:var(--success); font-size:23px; font-weight:800; }
+.backup-encryption-status strong { display:block; font-size:17px; }
+.backup-encryption-status p { margin:4px 0 0; color:var(--text-light); font-size:14px; line-height:1.45; }
+.backup-encryption-note { margin:0 0 20px; color:#5b5558; font-size:14px; line-height:1.55; }
+.backup-encryption-panel label { display:block; min-width:0; margin:0 0 16px; font-size:16px; font-weight:650; }
+.backup-encryption-panel label span { color:var(--text-light); font-size:13px; font-weight:500; }
+.backup-encryption-panel input { display:block; width:100%; min-height:48px; box-sizing:border-box; margin-top:7px; padding:11px 13px; border:1px solid #cdbac0; border-radius:var(--radius-sm); background:#fff; font:inherit; }
+.backup-encryption-panel input:focus { outline:3px solid rgba(122,0,60,.14); border-color:var(--primary); }
+.backup-encryption-actions { display:flex; justify-content:flex-end; margin-top:22px; }
+.backup-encryption-actions button { min-width:220px; min-height:46px; }
+.backup-encryption-reminder { padding:14px 16px; border:1px solid var(--border); border-radius:9px; background:#faf8f9; color:#51474c; font-size:14px; line-height:1.5; }
+.backup-encryption-message { min-height:1.4em; margin:12px 0 0; color:#5b5558; font-size:14px; }
 @media (max-width:900px) { .integration-summary-grid,.integration-form-grid,.integration-outbox-summary { grid-template-columns:1fr; } .integration-outbox-date { grid-template-columns:1fr; gap:8px; } .integration-outbox .integration-outbox-header { flex-direction:column; } }
 @media (max-width:700px) {
     #settingsPage:has(.integration-form) > .bill-top-bar { margin-bottom:18px; padding:34px 14px 0; box-sizing:border-box; }
@@ -277,6 +299,12 @@ margin-bottom:50px;
     .integration-identity-grid { grid-template-columns:1fr; }
     .integration-actions,.crm-sync-actions { gap:9px; }
     .integration-actions>button,.crm-sync-actions>button { flex:1 1 145px; min-width:0; }
+    #settingsPage:has(.backup-encryption-form) > .bill-top-bar { margin-bottom:18px; padding:34px 14px 0; box-sizing:border-box; }
+    #settingsPage:has(.backup-encryption-form) > .bill-top-bar .back-btn { max-width:100%; min-height:44px; padding:10px 16px; font-size:16px; }
+    #settingsPage:has(.backup-encryption-form) #settingsPageContent { width:100%; max-width:100%; padding:18px 14px 28px; box-sizing:border-box; }
+    .settings-layout:has(.backup-encryption-form) .settings-header { margin-bottom:18px; }
+    .backup-encryption-panel { padding:18px; }
+    .backup-encryption-actions button { width:100%; }
 }
 
 .dashboard-btn{

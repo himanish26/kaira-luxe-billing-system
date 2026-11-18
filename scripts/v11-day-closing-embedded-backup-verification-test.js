@@ -5,13 +5,14 @@ const os = require("os");
 const path = require("path");
 const AdmZip = require("adm-zip");
 const sqlite3 = require("sqlite3").verbose();
+const { createBackupEncryptionService } = require("../src/services/backupEncryptionService");
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "klbs-v11-day-close-backup-"));
 fs.mkdirSync(path.join(tempRoot, "temp"), { recursive: true });
 fs.mkdirSync(path.join(tempRoot, "userData"), { recursive: true });
 const originalLoad = Module._load;
 Module._load = function(request, parent, isMain) {
-    if (parent && parent.filename.endsWith("backupService.js")) {
+    if (request === "electron" || (parent && parent.filename.endsWith("backupService.js"))) {
         if (request === "electron") return { app: {
             getPath: name => path.join(tempRoot, name),
             relaunch() {},
@@ -36,7 +37,17 @@ Module._load = function(request, parent, isMain) {
     }
     return originalLoad.call(this, request, parent, isMain);
 };
-const { validateDayClosingBackup } = require("../src/services/backupService");
+const { validateDayClosingBackup, setBackupEncryptionService } = require("../src/services/backupService");
+const encryption = createBackupEncryptionService({
+    safeStorage: {
+        isEncryptionAvailable: () => true,
+        encryptString: value => Buffer.from(value, "utf8"),
+        decryptString: value => Buffer.from(value).toString("utf8")
+    },
+    storagePath: path.join(tempRoot, "userData", "backup-encryption.json")
+});
+encryption.configureRecoveryPassword("regression-test-recovery-password");
+setBackupEncryptionService(encryption);
 Module._load = originalLoad;
 
 const run = (db, sql, params = []) => new Promise((resolve, reject) =>
@@ -98,6 +109,11 @@ function makeZip(databasePath, zipPath) {
     const good = await validateDayClosingBackup(goodZip, expected);
     assert.strictEqual(good.success, true);
     assert.strictEqual(good.dayClosingVerified, true);
+    const encryptedGoodZip = path.join(tempRoot, "good-encrypted.zip");
+    await encryption.encryptZipFile(goodZip, encryptedGoodZip);
+    const encryptedGood = await validateDayClosingBackup(encryptedGoodZip, expected);
+    assert.strictEqual(encryptedGood.success, true);
+    assert.strictEqual(encryptedGood.dayClosingVerified, true);
 
     const badDb = path.join(tempRoot, "bad.db");
     const badZip = path.join(tempRoot, "bad.zip");

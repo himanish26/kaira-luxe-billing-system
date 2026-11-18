@@ -761,12 +761,11 @@ maxlength="4">
                 ← Dashboard
             </button>
 
-            <div class="bill-number">
-
-                Bill No :
-
-                <span id="currentBillNo"></span>
-
+            <div class="bill-header-meta">
+                <div class="bill-number">
+                    Bill No :
+                    <span id="currentBillNo"></span>
+                </div>
             </div>
 
         </div>
@@ -825,6 +824,7 @@ maxlength="4">
             >
 
             <button id="customerProfileOpen" class="customer-profile-open" type="button" aria-label="Customer details">+</button>
+            <div id="customerEventDates" class="customer-event-dates" role="status" hidden aria-live="polite"></div>
             <input type="hidden" id="selectedCustomerProfileId" value="">
 
         </div>

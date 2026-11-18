@@ -39,6 +39,18 @@ const DEFAULT_BACKUP_FOLDER = path.join(
     "Backups"
 );
 const PRE_UPGRADE_BACKUP_FOLDER_NAME = "PreUpgrade";
+let backupEncryption = null;
+let integrationConfigProvider = null;
+
+function setBackupEncryptionService(service) { backupEncryption = service; }
+function setBackupIntegrationConfigService(service) { integrationConfigProvider = service; }
+
+async function withReadableZip(filePath, password, callback) {
+    if (!backupEncryption || !backupEncryption.isEncryptedBackup(filePath)) {
+        return callback(filePath, { encrypted: false });
+    }
+    return backupEncryption.withDecryptedBackup(filePath, password, callback);
+}
 
 const {
     getSettings,
@@ -422,7 +434,7 @@ function removeOwnArtifact(filePath) {
     }
 }
 
-function writeBackupArchive(snapshotPath, inProgressPath, metadataOverrides = {}) {
+function writeBackupArchiveLegacy(snapshotPath, inProgressPath, metadataOverrides = {}) {
     return new Promise((resolve, reject) => {
         const output = fs.createWriteStream(inProgressPath, { flags: "wx" });
         const archive = archiver("zip", { zlib: { level: 9 } });
@@ -478,6 +490,64 @@ function writeBackupArchive(snapshotPath, inProgressPath, metadataOverrides = {}
     });
 }
 
+function collectBackupLogFiles(folderPath, prefix = "Logs") {
+    if (!fs.existsSync(folderPath)) return [];
+    const files = [];
+    for (const entry of fs.readdirSync(folderPath, { withFileTypes: true })) {
+        const sourcePath = path.join(folderPath, entry.name);
+        if (entry.isDirectory()) files.push(...collectBackupLogFiles(sourcePath, `${prefix}/${entry.name}`));
+        else if (entry.isFile() && !/^KLBS\.log(?:\.|$)/i.test(entry.name)) {
+            files.push({ path: sourcePath, name: `${prefix}/${entry.name}` });
+        }
+    }
+    return files;
+}
+
+async function writeBackupArchive(snapshotPath, inProgressPath, metadataOverrides = {}) {
+    if (!backupEncryption || typeof backupEncryption.createEncryptedArchive !== "function") {
+        throw new Error("Backup encryption is unavailable in this KLBS installation.");
+    }
+    const backupInfo = {
+        application: packageJson.productName || "KAIRA LUXE Billing System",
+        backupSchema: 1,
+        appVersion: packageJson.version,
+        createdOn: new Date().toISOString(),
+        createdBy: "Administrator",
+        database: "billing.db",
+        includesSettings: true,
+        platform: process.platform,
+        electron: process.versions.electron,
+        node: process.versions.node,
+        ...metadataOverrides
+    };
+    const files = [{ path: snapshotPath, name: "Database/billing.db" }];
+    files.push(...collectBackupLogFiles(path.join(app.getPath("userData"), "logs")));
+    const textEntries = [];
+    let integrationProfileWarning = null;
+    if (integrationConfigProvider && typeof integrationConfigProvider.exportPortableProfile === "function") {
+        try {
+            textEntries.push({
+                name: "Settings/integration-profile.json",
+                text: JSON.stringify(integrationConfigProvider.exportPortableProfile())
+            });
+        } catch (_) {
+            integrationProfileWarning = "KLBS could not unlock one or more saved integration credentials. The database and other backup contents were saved, but the integration profile was left out. Allow KLBS to access its saved credentials, then create another backup to include them.";
+            backupInfo.integrationProfileIncluded = false;
+            textEntries.push({ name: "Settings/integration-profile-warning.txt", text: integrationProfileWarning });
+            technicalLogger.warn("BACKUP", "Integration profile omitted because a saved credential could not be unlocked", {
+                operation: "EXPORT_INTEGRATION_PROFILE",
+                reason: "SECURE_CREDENTIAL_UNAVAILABLE"
+            });
+        }
+    }
+    if (backupInfo.integrationProfileIncluded === undefined) {
+        backupInfo.integrationProfileIncluded = textEntries.some(entry => entry.name === "Settings/integration-profile.json");
+    }
+    textEntries.unshift({ name: "backup-info.json", text: JSON.stringify(backupInfo, null, 4) });
+    await backupEncryption.createEncryptedArchive(inProgressPath, files, textEntries);
+    return { size: fs.statSync(inProgressPath).size, integrationProfileWarning };
+}
+
 async function createBackupInternal(options = {}) {
 
     const configuredBackupFolder = options.backupFolder || await getBackupFolder();
@@ -513,7 +583,7 @@ async function createBackupInternal(options = {}) {
         }
         await createSQLiteSnapshot(snapshotPath);
         await validateSQLiteDatabase(snapshotPath);
-        const size = await writeBackupArchive(snapshotPath, inProgressPath, {
+        const archiveResult = await writeBackupArchive(snapshotPath, inProgressPath, {
             purpose: options.purpose || "BACKUP",
             ...(schemaVersion === null ? {} : { schemaVersion })
         });
@@ -548,7 +618,10 @@ async function createBackupInternal(options = {}) {
             success: true,
             backupFileName,
             backupFilePath,
-            size
+            size: archiveResult.size,
+            encrypted: true,
+            encryption: "WinZip AES-256",
+            integrationProfileWarning: archiveResult.integrationProfileWarning
         };
     }
     catch (error) {
@@ -606,7 +679,18 @@ async function createPreUpgradeBackup() {
     return operation;
 }
 
-function readBackupMetadata(filePath) {
+async function readBackupMetadata(filePath) {
+    if (backupEncryption && backupEncryption.isEncryptedBackup(filePath)) {
+        try {
+            return await backupEncryption.withDecryptedBackup(
+                filePath,
+                undefined,
+                readablePath => readBackupMetadata(readablePath)
+            );
+        } catch (_) {
+            return null;
+        }
+    }
     try {
         const zip = new AdmZip(filePath);
         const entry = zip.getEntries().find(item => item.entryName === "backup-info.json");
@@ -632,7 +716,7 @@ async function retainScheduledAutomaticBackups(now = new Date()) {
         const filePath = path.join(backupFolder, file);
         if (!fs.statSync(filePath).isFile()) continue;
 
-        const metadata = readBackupMetadata(filePath);
+        const metadata = await readBackupMetadata(filePath);
         if (!isPositivelyIdentifiedScheduledAutomatic(metadata)) {
             continue;
         }
@@ -746,9 +830,18 @@ function getBackupHistory() {
 
 }
 
-async function validateBackup(zipPath) {
+async function validateBackup(zipPath, password) {
 
     try {
+
+        if (backupEncryption && backupEncryption.isEncryptedBackup(zipPath)) {
+            const result = await backupEncryption.withDecryptedBackup(
+                zipPath,
+                password,
+                readablePath => validateBackup(readablePath)
+            );
+            return { ...result, encrypted: true };
+        }
 
         const zip = new AdmZip(zipPath);
 
@@ -871,13 +964,21 @@ const settingsExists = entries.some(
 
     logsExists,
 
-    settingsExists
+    settingsExists,
+
+    encrypted: false,
+
+    integrationProfileExists: entries.some(entry => entry.entryName === "Settings/integration-profile.json")
 
 };
 
     }
 
     catch (error) {
+
+        if (error.code === "BACKUP_PASSWORD_REQUIRED" || error.code === "BACKUP_PASSWORD_INVALID") {
+            return { success: false, needsPassword: true, encrypted: true, message: error.message };
+        }
 
         return {
 
@@ -893,6 +994,13 @@ const settingsExists = entries.some(
 
 
 async function validateDayClosingBackup(zipPath, expected = {}) {
+    if (backupEncryption && backupEncryption.isEncryptedBackup(zipPath)) {
+        return backupEncryption.withDecryptedBackup(
+            zipPath,
+            undefined,
+            readablePath => validateDayClosingBackup(readablePath, expected)
+        );
+    }
     const generic = await validateBackup(zipPath);
     if (!generic || generic.success !== true) return generic;
 
@@ -969,7 +1077,17 @@ async function validateDayClosingBackup(zipPath, expected = {}) {
     }
 }
 
-async function restoreBackupInternal(zipPath) {
+async function restoreBackupInternal(zipPath, password, mode = "FULL") {
+    if (!["FULL", "DATABASE_ONLY", "INTEGRATIONS_ONLY"].includes(mode)) {
+        return { success: false, message: "Choose a supported restore option." };
+    }
+    if (backupEncryption && backupEncryption.isEncryptedBackup(zipPath)) {
+        return backupEncryption.withDecryptedBackup(
+            zipPath,
+            password,
+            readablePath => restoreBackupInternal(readablePath, undefined, mode)
+        );
+    }
     let liveDatabase = null;
     let recoveryDatabase = null;
     let state = null;
@@ -980,6 +1098,19 @@ async function restoreBackupInternal(zipPath) {
         const backupValidation = await validateBackup(zipPath);
         if (!backupValidation.success) return backupValidation;
         const zip = new AdmZip(zipPath);
+        const integrationEntry = zip.getEntries().find(entry => entry.entryName === "Settings/integration-profile.json");
+        if (mode === "INTEGRATIONS_ONLY") {
+            if (!integrationEntry || !integrationConfigProvider?.importPortableProfile) {
+                return { success: false, message: "This backup does not contain a restorable integration profile." };
+            }
+            const imported = integrationConfigProvider.importPortableProfile(JSON.parse(integrationEntry.getData().toString("utf8")));
+            return { success: true, message: "Integration profile restored. Review integration destinations before use.", importedIntegrations: imported.integrations };
+        }
+        let portableProfile = null;
+        if (mode === "FULL" && integrationEntry && integrationConfigProvider?.validatePortableProfile) {
+            portableProfile = JSON.parse(integrationEntry.getData().toString("utf8"));
+            integrationConfigProvider.validatePortableProfile(portableProfile);
+        }
         const databaseEntry = zip.getEntries().find(entry => entry.entryName === "Database/billing.db");
         if (!databaseEntry) throw new Error("billing.db not found inside backup.");
 
@@ -1031,6 +1162,9 @@ async function restoreBackupInternal(zipPath) {
         await validateWritableSQLiteDatabase(liveDatabase);
         state.phase = "VERIFIED";
         atomicWriteJson(safetyPaths.statePath, state);
+        if (portableProfile && integrationConfigProvider?.importPortableProfile) {
+            integrationConfigProvider.importPortableProfile(portableProfile);
+        }
         const oldMovedPath = `${liveDatabase}.${restoreId}.old`;
         if (fs.existsSync(oldMovedPath)) fs.unlinkSync(oldMovedPath);
         // The durable PreRestoreSafety copy remains. The transient recovery
@@ -1039,7 +1173,7 @@ async function restoreBackupInternal(zipPath) {
         fs.unlinkSync(safetyPaths.statePath);
         technicalLogger.info("RESTORE", "Restore complete; authoritative database verified", { operationId: restoreId });
 
-        const logsExist = zip.getEntries().some(entry => entry.entryName.startsWith("Logs/"));
+        const logsExist = mode === "FULL" && zip.getEntries().some(entry => entry.entryName.startsWith("Logs/"));
         if (logsExist) {
             const logsFolder = path.join(app.getPath("userData"), "logs");
             ensureDirectory(logsFolder);
@@ -1079,8 +1213,8 @@ async function restoreBackupInternal(zipPath) {
 
 // Restore shares the existing backup queue so scheduled/manual snapshots
 // cannot overlap the close-and-replace window.
-async function restoreBackup(zipPath) {
-    const operation = backupQueueTail.then(() => restoreBackupInternal(zipPath));
+async function restoreBackup(zipPath, password, mode = "FULL") {
+    const operation = backupQueueTail.then(() => restoreBackupInternal(zipPath, password, mode));
     backupQueueTail = operation.catch(() => undefined);
     return operation;
 }
@@ -1088,6 +1222,10 @@ async function restoreBackup(zipPath) {
 module.exports = {
 
     DEFAULT_BACKUP_FOLDER,
+
+    setBackupEncryptionService,
+
+    setBackupIntegrationConfigService,
 
     ensureDirectory,
 
