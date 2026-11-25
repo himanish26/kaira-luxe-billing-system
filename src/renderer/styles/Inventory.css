@@ -715,7 +715,8 @@ box-shadow:0 2px 8px rgba(0,0,0,.08);
 .inventory-style-body.klbs-drawer-body { overflow-x:hidden; padding:13px 20px 20px; }
 
 .inventory-style-search-label,
-.inventory-style-colour-label {
+.inventory-style-colour-label,
+.inventory-style-size-label {
     display: block;
     margin: 0 0 5px;
     color: #493d3e;
@@ -797,11 +798,13 @@ box-shadow:0 2px 8px rgba(0,0,0,.08);
 
 .inventory-style-filters {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 9px;
     margin: 8px 0 7px;
 }
-.inventory-style-colour-label { margin: 0; white-space: nowrap; }
+.inventory-style-colour-label,
+.inventory-style-size-label { margin: 0; white-space: nowrap; }
 .inventory-style-filters select {
     min-width: 135px;
     max-width: 200px;

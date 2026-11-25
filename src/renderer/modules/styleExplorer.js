@@ -33,6 +33,7 @@
         byId("styleExplorerCandidates").replaceChildren();
         byId("styleExplorerVariantRows").replaceChildren();
         byId("styleExplorerColour").replaceChildren(new Option("All colours", ""));
+        byId("styleExplorerSize").replaceChildren(new Option("All sizes", ""));
         byId("styleExplorerInStock").checked = true;
         byId("styleExplorerNoStock").hidden = true;
         byId("styleExplorerScanned").replaceChildren();
@@ -66,9 +67,11 @@
     function filteredVariants() {
         const variants = activeResult?.family?.variants || activeResult?.variants || [];
         const colour = byId("styleExplorerColour").value;
+        const size = byId("styleExplorerSize").value;
         const inStockOnly = byId("styleExplorerInStock").checked;
         return variants.filter(item =>
             (!colour || normalized(item.colour) === colour) &&
+            (!size || normalized(item.size) === size) &&
             (!inStockOnly || Number(item.currentStock) > 0 ||
                 (scannedBarcode && String(item.barcode).trim() === scannedBarcode))
         );
@@ -94,6 +97,7 @@
         const colourSelect = byId("styleExplorerColour");
         colourSelect.replaceChildren(new Option("All colours", ""));
         for (const [key, label] of colorValues) colourSelect.add(new Option(label, key));
+        renderSizeOptions(variants);
 
         const scanned = result?.exactProduct;
         if (scanned) {
@@ -115,6 +119,25 @@
         }
 
         renderRows();
+    }
+
+    function renderSizeOptions(variants) {
+        const selectedColour = byId("styleExplorerColour").value;
+        const sizeValues = new Map();
+        for (const item of variants) {
+            if (selectedColour && normalized(item.colour) !== selectedColour) continue;
+            const label = String(item.size || "Unspecified").trim() || "Unspecified";
+            const key = normalized(label);
+            if (!sizeValues.has(key)) sizeValues.set(key, label);
+        }
+        const sizeSelect = byId("styleExplorerSize");
+        const previousSize = sizeSelect.value;
+        sizeSelect.replaceChildren(new Option("All sizes", ""));
+        const collator = new Intl.Collator("en-IN", { numeric: true, sensitivity: "base" });
+        for (const [key, label] of [...sizeValues].sort((left, right) => collator.compare(left[1], right[1]))) {
+            sizeSelect.add(new Option(label, key));
+        }
+        if (previousSize && sizeValues.has(previousSize)) sizeSelect.value = previousSize;
     }
 
     function renderRows() {
@@ -183,7 +206,8 @@
 
         const available = visible.filter(item => Number(item.currentStock) > 0).length;
         const totalStock = visible.reduce((sum, item) => sum + Number(item.currentStock || 0), 0);
-        setText("styleExplorerSummary", `${visible.length} VARIANTS　 ${available} AVAILABLE　 TOTAL STOCK ${totalStock}`);
+        const variantLabel = visible.length === 1 ? "VARIANT" : "VARIANTS";
+        setText("styleExplorerSummary", `${visible.length} ${variantLabel}　 ${available} AVAILABLE　 TOTAL STOCK ${totalStock}`);
         const noStockMessage = byId("styleExplorerNoStock");
         const isFamily = Boolean(activeResult?.family);
         const availableCount = isFamily
@@ -288,7 +312,12 @@
                 search(byId("styleExplorerInput").value);
             }
         });
-        byId("styleExplorerColour").addEventListener("change", renderRows);
+        byId("styleExplorerColour").addEventListener("change", () => {
+            const variants = activeResult?.family?.variants || activeResult?.variants || [];
+            renderSizeOptions(variants);
+            renderRows();
+        });
+        byId("styleExplorerSize").addEventListener("change", renderRows);
         byId("styleExplorerInStock").addEventListener("change", renderRows);
     }
 

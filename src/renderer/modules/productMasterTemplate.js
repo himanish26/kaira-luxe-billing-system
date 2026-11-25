@@ -146,6 +146,8 @@ window.productMasterTemplate = `
                 <div class="inventory-style-filters">
                     <label class="inventory-style-colour-label" for="styleExplorerColour">COLOUR</label>
                     <select id="styleExplorerColour"><option value="">All colours</option></select>
+                    <label class="inventory-style-size-label" for="styleExplorerSize">SIZE</label>
+                    <select id="styleExplorerSize"><option value="">All sizes</option></select>
                     <label class="inventory-style-stock-filter" for="styleExplorerInStock"><input id="styleExplorerInStock" type="checkbox"> IN STOCK ONLY</label>
                 </div>
                 <div id="styleExplorerVariantRows" class="inventory-style-colour-groups" aria-live="polite"></div>
